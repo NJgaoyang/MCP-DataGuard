@@ -8,11 +8,6 @@ spring:
     url: ${FLOWABLE_JDBC_URL:jdbc:postgresql://127.0.0.1:55432/dataguard?currentSchema=flowable}
     username: ${PG_FLOWABLE_USER:dg_flowable}
     password: ${PG_FLOWABLE_PASSWORD:}
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: ${OIDC_ISSUER}
 flowable:
   database-schema: flowable
   database-schema-update: ${FLOWABLE_SCHEMA_UPDATE:false}
