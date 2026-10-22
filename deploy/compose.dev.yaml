@@ -10,6 +10,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    env_file:
+      - path: .env.target
+        required: false
     environment:
       GATEWAY_BIND_ADDRESS: 0.0.0.0
       GATEWAY_PORT: 8080

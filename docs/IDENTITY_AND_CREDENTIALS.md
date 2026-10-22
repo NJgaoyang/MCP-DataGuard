@@ -33,6 +33,8 @@ DG_TARGET_REPORTING_READ_PASSWORD=<database-readonly-password>
 DG_CONNECT_TEST_ALLOW_HOSTS=reporting.internal.example
 ```
 
+在 Docker Compose 部署中，以上两项放在本地 `deploy/.env.target`，它仅作为 gateway 的可选私有 env_file 装载；不要把凭据写入 `deploy/.env.dev` 后提交。可从 `deploy/.env.target.example` 复制并设置文件权限为 600。调整 env_file 后应重建/重启 gateway 容器以注入新环境值。
+
 两项实际密码值不得进入 Web 表单、SQL migration、Git、审计日志或普通日志。
 
 只有数据源处于 DISABLED 时允许配置/更换 READ 凭据引用。目标主机必须在运维白名单中；测试函数仅支持 MySQL 和 PostgreSQL，强制 SSL 主机身份校验，并设置连接和查询超时。SQL 探测固定为 SELECT 1。网关返回简洁状态，不向调用方暴露 JDBC 异常细节或密码。
