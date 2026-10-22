@@ -1,30 +1,32 @@
-# MCP DataGuard 当前实施状态
+# MCP DataGuard 实施状态（2026-10-22）
 
-开发分支：`dev20261022` · v0.5 · 非生产版。
+分支：`dev20261022` · 开源 v0.5 开发版 · **非生产就绪**。
 
-## 已完成并纳入持续构建
+## 已完成
 
-- Java/Spring Boot/Flowable 基础服务与 OIDC JWT 资源服务器。
-- PostgreSQL 17 单库双 Schema 的 44 张表 V1 迁移，PostgreSQL 实例 CI 验证。
-- 用户和 Agent 可信 OIDC 身份映射；有效状态与组织隔离。
-- REST 个人信息、Agent 与数据源只读列表，以及 Agent/数据源新增、编辑、撤销/停用。全部按可信用户组织和显式角色权限校验；变更成功后追加 dg_system_event 操作记录。
-- MCP 工具 `list_datasources` 具有真实平台库查询与 Agent 授权过滤；不返回连接密钥或主机。
-- MCP 其余五工具仍为受控拒绝。
-- SQL 词法预检查只用于拒绝，不会授予 SELECT 执行权限。
-- Vue3 管理台 OIDC 登录、真实列表、Agent/数据源新增、编辑、撤销/停用表单，Node CI 构建。
-- GitHub Actions 后端、前端、真实 PG SQL 初始化、MCP JSON 契约检查。
+- PostgreSQL 17 `platform`（44 业务表）和 `flowable` Schema；Flyway V1/V2/V3。
+- Java 21 / Spring Boot 4 统一网关，Spring AI MCP Server 注册 6 个工具。
+- Vue3 / Ant Design Vue 管理台；Caddy 公网 HTTPS。
+- **内置认证取代 Keycloak/OIDC**：用户密码 BCrypt、随机不透明会话 token 的服务端摘要、登出撤销。
+- 首次登录强制复杂密码修改；后端禁止改密前访问业务接口。
+- 连续失败账号锁定、用户/组织状态校验、RBAC 权限验证。
+- Agent 独立不透明 Token 签发与撤销；权限在 DataGuard 内管理。
+- Agent 与数据源管理、数据源连接测试与环境凭据引用、基础审计事件。
+- MySQL/PostgreSQL SQL 方言解析、严格受限的单表 SELECT 结构预检与字段授权检查；**仅用于拒绝，不允许直接执行 SQL**。
+- CI 后端、前端、PG 迁移、Compose 与接口契约检查。
 
-## 最新进展（2026-10-22）
+## 当前待验收问题
 
-已提交 OIDC 用户登记及受限角色委派、Agent 机器身份与客户端校验、Agent 数据源发现授权、只读 ENV 凭据引用和严格 TLS 连接测试接口；Vue3 新增相关页面入口。相关 API 经过 Maven/TypeScript 构建，仍需要登录态及真实目标数据库端到端测试。SQL 查询和写入执行仍禁用。
+- 用户曾报告首次改密 `POST /api/v1/auth/password` 返回 401。最新分支已包含区分当前密码错误与无效会话的修复，但仍须核对服务器网关镜像和完成真实端到端验证。
+- 测试机历史上使用源码文件同步方式部署，Git HEAD 与实际文件可能不一致。
+- 多次截图包含测试凭据，所有已曝光密码须更换。
+- 旧 Keycloak 运行资产的最终清理需待备份和新认证验收完成后进行。
 
-## 未完成或尚未通过验证
+## 仍未完成
 
-- Agent OIDC 机器身份登记、权限授予与启用，数据源连接认证与启用、统一 RBAC 用户管理。已提供离线首次管理员初始化 CLI。
-- MySQL/PG 目标数据库连接器与真实安全 SELECT、元数据枚举。
-- ShardingSphere AST 安全认证、策略匹配与敏感字段脱敏。
-- Flowable 审批单与任务业务接口、审批人授权回避。
-- 安全写执行器、非幂等重试保护与 UNKNOWN 对账。
-- 真实 SQL 审计、告警、性能压测、备份恢复与生产安全测试。
+- 完整安全登录审计、外部限流、成熟账户恢复机制。
+- 浏览器 HttpOnly Cookie 与 CSRF 防御（当前前端令牌仅保存在内存）。
+- 物理只读 SQL 执行器、字段脱敏、限时限量、结果审计、真实数据库端到端测试。
+- Flowable 审批业务闭环、写入执行器、UNKNOWN 对账和安全监控。
 
-**禁止将 SQL 词法结构检查作为允许执行的依据。业务 SQL 执行未开放。**
+**SQL 真实执行开关必须继续保持关闭。**

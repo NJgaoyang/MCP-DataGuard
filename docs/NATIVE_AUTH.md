@@ -73,7 +73,9 @@ SQL execution is still disabled independently from token authentication.
 ## Deployment precautions
 
 Apply Flyway V3 before provisioning accounts.
-Retain a rollback backup of the PostgreSQL platform schema.\nIn an upgrade, verify native login and forced password change before deleting\nlegacy identity-provider data volumes.
+Retain a rollback backup of the PostgreSQL platform schema.
+In an upgrade, verify native login and forced password change before deleting
+legacy identity-provider data volumes.
 
 **Security follow-ups:** implement rate limiting outside PostgreSQL row locks,
 audit login failures without revealing secrets, restrict token creation to
