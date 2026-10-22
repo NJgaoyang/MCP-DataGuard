@@ -1,0 +1,277 @@
+openapi: 3.1.0
+info:
+  title: MCP DataGuard Administration API
+  version: 1.0.0-draft
+  description: >-
+    Unified admin REST contract. Every handler must enforce identity, tenant ownership,
+    roles and resource permissions. This is a design contract; unimplemented endpoints must return 501/404,
+    never fabricate success. MCP tools are defined separately under contracts/mcp/.
+servers:
+  - url: https://dataguard.example.com/api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Organizations
+  - name: Agents
+  - name: Datasources
+  - name: Policies
+  - name: Workflows
+  - name: Approvals
+  - name: Audit
+  - name: Monitoring
+  - name: Integrations
+paths:
+  /organizations:
+    get:
+      tags: [Organizations]
+      summary: Get organizations in authorized scope
+      operationId: listOrganizations
+      responses:
+        '200': {description: Organization list, content: {application/json: {schema: {$ref: '#/components/schemas/ListResponse'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      tags: [Organizations]
+      summary: Create organization (platform-admin only)
+      operationId: createOrganization
+      requestBody: {$ref: '#/components/requestBodies/ResourceWrite'}
+      responses:
+        '201': {$ref: '#/components/responses/ResourceCreated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /users:
+    get:
+      tags: [Organizations]
+      operationId: listUsers
+      summary: List organization users
+      responses: {'200': {$ref: '#/components/responses/ResourceList'}}
+    post:
+      tags: [Organizations]
+      operationId: createUser
+      summary: Register user and explicit role assignment
+      requestBody: {$ref: '#/components/requestBodies/ResourceWrite'}
+      responses: {'201': {$ref: '#/components/responses/ResourceCreated'}}
+  /roles:
+    get:
+      tags: [Organizations]
+      operationId: listRoles
+      summary: List role assignments and permissions
+      responses: {'200': {$ref: '#/components/responses/ResourceList'}}
+    post:
+      tags: [Organizations]
+      operationId: createRole
+      summary: Create role with explicit grants
+      requestBody: {$ref: '#/components/requestBodies/ResourceWrite'}
+      responses: {'201': {$ref: '#/components/responses/ResourceCreated'}}
+  /agents:
+    get:
+      tags: [Agents]
+      operationId: listAgents
+      summary: Paginated and tenant-filtered agents
+      parameters: [{$ref: '#/components/parameters/Cursor'}, {$ref: '#/components/parameters/Limit'}]
+      responses: {'200': {$ref: '#/components/responses/ResourceList'}}
+    post:
+      tags: [Agents]
+      operationId: createAgent
+      summary: Register agent asset (NOT a database login)
+      requestBody: {$ref: '#/components/requestBodies/ResourceWrite'}
+      responses: {'201': {$ref: '#/components/responses/ResourceCreated'}}
+  /agents/{id}/revoke:
+    post:
+      tags: [Agents]
+      operationId: revokeAgent
+      summary: Disable identity; invalidate new API calls
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      responses: {'204': {description: Revoked}, '404': {$ref: '#/components/responses/NotFound'}}
+  /agents/{id}/permissions:
+    get:
+      tags: [Agents]
+      operationId: getAgentPermissions
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      responses: {'200': {$ref: '#/components/responses/ResourceList'}}
+    put:
+      tags: [Agents]
+      operationId: setAgentPermissions
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      requestBody: {$ref: '#/components/requestBodies/ResourceWrite'}
+      responses: {'200': {$ref: '#/components/responses/ResourceCreated'}}
+  /datasources:
+    get:
+      tags: [Datasources]
+      operationId: listDatasources
+      summary: Data source listing (NO secrets)
+      responses: {'200': {$ref: '#/components/responses/ResourceList'}}
+    post:
+      tags: [Datasources]
+      operationId: createDatasource
+      summary: Register outbound target from safe validated fields
+      requestBody: {$ref: '#/components/requestBodies/ResourceWrite'}
+      responses: {'201': {$ref: '#/components/responses/ResourceCreated'}}
+  /datasources/{id}/test:
+    post:
+      tags: [Datasources]
+      operationId: testDatasource
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      summary: Test connectivity and physically granted permissions
+      responses: {'200': {$ref: '#/components/responses/ResourceCreated'}}
+  /datasources/{id}/capabilities:
+    get:
+      tags: [Datasources]
+      operationId: getDatasourceCapabilities
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      responses: {'200': {$ref: '#/components/responses/ResourceList'}}
+  /policies:
+    get:
+      tags: [Policies]
+      operationId: listPolicies
+      responses: {'200': {$ref: '#/components/responses/ResourceList'}}
+    post:
+      tags: [Policies]
+      operationId: createPolicyDraft
+      requestBody: {$ref: '#/components/requestBodies/ResourceWrite'}
+      responses: {'201': {$ref: '#/components/responses/ResourceCreated'}}
+  /policies/{id}/simulate:
+    post:
+      tags: [Policies]
+      operationId: simulatePolicy
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      requestBody: {$ref: '#/components/requestBodies/ResourceWrite'}
+      responses: {'200': {$ref: '#/components/responses/ResourceCreated'}}
+  /policies/{id}/publish:
+    post:
+      tags: [Policies]
+      operationId: publishPolicy
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      responses: {'200': {$ref: '#/components/responses/ResourceCreated'}}
+  /workflows:
+    get:
+      tags: [Workflows]
+      operationId: listWorkflows
+      responses: {'200': {$ref: '#/components/responses/ResourceList'}}
+    post:
+      tags: [Workflows]
+      operationId: createWorkflowDraft
+      requestBody: {$ref: '#/components/requestBodies/ResourceWrite'}
+      responses: {'201': {$ref: '#/components/responses/ResourceCreated'}}
+  /workflows/{id}/publish:
+    post:
+      tags: [Workflows]
+      operationId: publishValidatedWorkflow
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      summary: Validate BPMN user-task-only allowlist, disallow auto-approval and scripts
+      responses: {'200': {$ref: '#/components/responses/ResourceCreated'}}
+  /approvals:
+    get:
+      tags: [Approvals]
+      operationId: listApprovals
+      parameters: [{$ref: '#/components/parameters/Cursor'}, {$ref: '#/components/parameters/Limit'}]
+      responses: {'200': {$ref: '#/components/responses/ResourceList'}}
+  /approvals/{id}:
+    get:
+      tags: [Approvals]
+      operationId: getApproval
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      responses: {'200': {$ref: '#/components/responses/ResourceCreated'}}
+  /approvals/{id}/actions:
+    post:
+      tags: [Approvals]
+      operationId: actionApproval
+      summary: Human user only; verify Flowable task candidate, no self-approval
+      parameters: [{$ref: '#/components/parameters/Id'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ApprovalAction'}
+      responses:
+        '200': {$ref: '#/components/responses/ResourceCreated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /audit/sql:
+    get:
+      tags: [Audit]
+      operationId: listSqlAudit
+      parameters: [{$ref: '#/components/parameters/Cursor'}, {$ref: '#/components/parameters/Limit'}]
+      summary: Masked by default, audit plaintext viewing separately
+      responses: {'200': {$ref: '#/components/responses/ResourceList'}}
+  /audit/sql/export:
+    post:
+      tags: [Audit]
+      operationId: exportSqlAudit
+      requestBody: {$ref: '#/components/requestBodies/ResourceWrite'}
+      responses: {'202': {$ref: '#/components/responses/ResourceCreated'}}
+  /metrics/summary:
+    get:
+      tags: [Monitoring]
+      operationId: metricsSummary
+      responses: {'200': {$ref: '#/components/responses/ResourceCreated'}}
+  /alerts:
+    get:
+      tags: [Monitoring]
+      operationId: listAlerts
+      responses: {'200': {$ref: '#/components/responses/ResourceList'}}
+  /webhooks:
+    get:
+      tags: [Integrations]
+      operationId: listWebhooks
+      responses: {'200': {$ref: '#/components/responses/ResourceList'}}
+    post:
+      tags: [Integrations]
+      operationId: createWebhook
+      requestBody: {$ref: '#/components/requestBodies/ResourceWrite'}
+      responses: {'201': {$ref: '#/components/responses/ResourceCreated'}}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: OAuth2/OIDC access token with resource audience and tenant/role constraints
+  parameters:
+    Id: {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    Cursor: {name: cursor, in: query, schema: {type: string, maxLength: 512}}
+    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 8, maxLength: 160}}
+  requestBodies:
+    ResourceWrite:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ResourceDraft'}
+  responses:
+    ResourceList: {description: Scoped list, content: {application/json: {schema: {$ref: '#/components/schemas/ListResponse'}}}}
+    ResourceCreated: {description: Saved or accepted resource, content: {application/json: {schema: {$ref: '#/components/schemas/ResourceResponse'}}}}
+    Unauthorized: {description: Authentication required, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Forbidden: {description: Insufficient privilege, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    NotFound: {description: Resource not found or not visible to caller, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Conflict: {description: Idempotency or optimistic concurrency conflict, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+  schemas:
+    ResourceDraft:
+      type: object
+      description: Shared documentation placeholder; replace with strict endpoint DTOs during P1 implementation.
+      additionalProperties: true
+    ResourceResponse:
+      type: object
+      required: [requestId, data]
+      properties: {requestId: {type: string}, data: {type: object, additionalProperties: true}}
+    ListResponse:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {type: object, additionalProperties: true}}
+        nextCursor: {type: [string, 'null']}
+    Error:
+      type: object
+      required: [code, message, requestId]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        requestId: {type: string}
+        retryable: {type: boolean}
+    ApprovalAction:
+      type: object
+      required: [taskId, decision]
+      additionalProperties: false
+      properties:
+        taskId: {type: string, maxLength: 256}
+        decision: {type: string, enum: [APPROVE, REJECT, RETURN, DELEGATE, COMMENT]}
+        comment: {type: string, maxLength: 2000}
+        delegateToUserId: {type: string, format: uuid}

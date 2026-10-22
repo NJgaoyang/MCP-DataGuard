@@ -1,0 +1,543 @@
+{
+  "contractVersion": "1.0.0-draft",
+  "protocol": "MCP Streamable HTTP JSON-RPC 2.0",
+  "transportPath": "/mcp",
+  "identityRule": "Identity from server-validated access token ONLY; never accept orgId/agentId in tool args",
+  "securityRequirements": [
+    "JWT iss/aud/exp/signature verify",
+    "organization and tool ACL before any DB operations",
+    "SQL AST fail-close",
+    "READ physical DB account",
+    "separate privileged WRITE process after approval"
+  ],
+  "tools": [
+    {
+      "name": "list_datasources",
+      "description": "List ONLY datasource names and declared safe capabilities visible to caller",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "environment": {
+            "type": "string",
+            "enum": [
+              "DEV",
+              "TEST",
+              "STAGING",
+              "PROD"
+            ]
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Opaque continuation token"
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "page size"
+          }
+        }
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "datasourceId",
+                "name",
+                "dbType",
+                "capabilities"
+              ],
+              "properties": {
+                "datasourceId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "dbType": {
+                  "type": "string"
+                },
+                "capabilities": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "authorization": {
+        "scope": "sql:read",
+        "resourceBinding": "validate caller tenant/agent/source/objects"
+      }
+    },
+    {
+      "name": "get_schema",
+      "description": "Inspect permitted metadata (never connection secrets)",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "datasourceId"
+        ],
+        "properties": {
+          "datasourceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Platform source ID, not JDBC connection string"
+          },
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Schema or database name"
+          },
+          "table": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Optional table"
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Opaque continuation token"
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "page size"
+          }
+        }
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "datasourceId",
+          "objects"
+        ],
+        "properties": {
+          "datasourceId": {
+            "type": "string"
+          },
+          "objects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "authorization": {
+        "scope": "sql:read",
+        "resourceBinding": "validate caller tenant/agent/source/objects"
+      }
+    },
+    {
+      "name": "execute_readonly",
+      "description": "Execute fully certified, side-effect-free read SQL under physical read-only credentials",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "datasourceId",
+          "database",
+          "sql"
+        ],
+        "properties": {
+          "datasourceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Platform source ID, not JDBC connection string"
+          },
+          "database": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Database/schema authorized name"
+          },
+          "sql": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536,
+            "description": "Exactly one SQL statement"
+          },
+          "parameters": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
+            },
+            "description": "Positional parameters only; prepared-statement binding, never interpolate"
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "description": "maximum rows"
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Client correlation ID; never identity"
+          }
+        }
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "requestId",
+          "columns",
+          "rows",
+          "truncated",
+          "durationMs"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "type"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "durationMs": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "authorization": {
+        "scope": "sql:read",
+        "resourceBinding": "validate caller tenant/agent/source/objects"
+      }
+    },
+    {
+      "name": "check_sql",
+      "description": "Analyze SQL without executing",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "datasourceId",
+          "database",
+          "sql"
+        ],
+        "properties": {
+          "datasourceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Platform source ID, not JDBC connection string"
+          },
+          "database": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Database/schema authorized name"
+          },
+          "sql": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536,
+            "description": "Exactly one SQL statement"
+          },
+          "parameters": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
+            },
+            "description": "Positional parameters only; prepared-statement binding, never interpolate"
+          }
+        }
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "requestId",
+          "operation",
+          "riskLevel",
+          "decision",
+          "fullyAnalyzed"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "riskLevel": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "CRITICAL",
+              "UNKNOWN"
+            ]
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "ALLOW",
+              "REQUIRE_APPROVAL",
+              "DENY"
+            ]
+          },
+          "fullyAnalyzed": {
+            "type": "boolean"
+          },
+          "matchedRuleIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "authorization": {
+        "scope": "sql:analyze",
+        "resourceBinding": "validate caller tenant/agent/source/objects"
+      }
+    },
+    {
+      "name": "submit_change",
+      "description": "Request approval for eligible DML; NEVER executes immediately",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "datasourceId",
+          "database",
+          "sql",
+          "reason",
+          "idempotencyKey"
+        ],
+        "properties": {
+          "datasourceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Platform source ID, not JDBC connection string"
+          },
+          "database": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Database/schema authorized name"
+          },
+          "sql": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536,
+            "description": "Exactly one SQL statement"
+          },
+          "parameters": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
+            },
+            "description": "Positional parameters only; prepared-statement binding, never interpolate"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Business justification"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "requestId",
+          "approvalId",
+          "approvalStatus",
+          "executionStatus"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "approvalId": {
+            "type": "string"
+          },
+          "approvalStatus": {
+            "const": "PENDING"
+          },
+          "executionStatus": {
+            "const": "NOT_SCHEDULED"
+          }
+        }
+      },
+      "authorization": {
+        "scope": "sql:change:submit",
+        "resourceBinding": "validate caller tenant/agent/source/objects"
+      }
+    },
+    {
+      "name": "get_change_status",
+      "description": "View own or authorized approval and execution statuses",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "approvalId"
+        ],
+        "properties": {
+          "approvalId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": [
+          "requestId",
+          "approvalId",
+          "approvalStatus",
+          "executionStatus"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "approvalId": {
+            "type": "string"
+          },
+          "approvalStatus": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "REJECTED",
+              "CANCELLED",
+              "EXPIRED"
+            ]
+          },
+          "executionStatus": {
+            "type": "string",
+            "enum": [
+              "NOT_SCHEDULED",
+              "QUEUED",
+              "CLAIMED",
+              "EXECUTING",
+              "SUCCEEDED",
+              "FAILED",
+              "UNKNOWN",
+              "CANCELLED"
+            ]
+          },
+          "affectedRows": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "authorization": {
+        "scope": "sql:change:read",
+        "resourceBinding": "validate caller tenant/agent/source/objects"
+      }
+    }
+  ]
+}
