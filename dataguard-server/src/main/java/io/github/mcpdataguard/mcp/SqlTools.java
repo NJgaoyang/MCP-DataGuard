@@ -10,6 +10,9 @@ import org.springframework.ai.mcp.annotation.McpToolParam;
  * authenticated Agent ACL, dialect certification and isolated executors exist. */
 @Component
 public final class SqlTools {
+ private final AuthorizedDatasourceService datasources;
+ public SqlTools(AuthorizedDatasourceService datasources){this.datasources=datasources;}
+
  private static Map<String,Object> deny(String code) {
   return Map.of("code",code,"decision","DENY","retryable",false,
    "message","MCP DataGuard initialization: access denied until safety controls are certified");
@@ -19,7 +22,7 @@ public final class SqlTools {
   @McpToolParam(description="Environment",required=false) String environment,
   @McpToolParam(description="Cursor",required=false) String cursor,
   @McpToolParam(description="Page size",required=false) Integer pageSize){
-  return deny("AGENT_DIRECTORY_NOT_READY");
+  return datasources.list(environment,cursor,pageSize);
  }
  @McpTool(name="get_schema",description="Inspect caller-authorized schema (not enabled)")
  public Map<String,Object> getSchema(
