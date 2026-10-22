@@ -21,15 +21,6 @@ public final class StrictReadOnlySql {
      sql.contains(";") || sql.contains("--") || sql.contains("/*") ||
      sql.contains("*/") || sql.contains("#") || sql.indexOf('\0')>=0)
    throw new IllegalArgumentException("UNSUPPORTED_SQL_SHAPE");
-  // SQL syntax is validated by ShardingSphere's dialect parser before
-  // applying the extremely restricted single-table query grammar.
-  // This parser is NOT by itself a safety certificate or an execution grant.
-  try {
-   SQLParserEngine parser=new SQLParserEngine("PostgreSQL",new CacheOption(128,1024L));
-   parser.parse(sql,false);
-  }catch(RuntimeException e){
-   throw new IllegalArgumentException("INVALID_SQL_AST",e);
-  }
   Matcher m=SIMPLE.matcher(sql.strip());
   if(!m.matches()) throw new IllegalArgumentException("UNSUPPORTED_SQL_SHAPE");
   return m;
@@ -39,6 +30,12 @@ public final class StrictReadOnlySql {
    return SqlVerdict.deny("DIALECT_NOT_CERTIFIED");
   if(maxRows<1||maxRows>1000||parameterCount<0) return SqlVerdict.deny("INVALID_INPUT");
   try {
+   // Run the parser for the datasource's *actual* dialect. The existing
+   // strict grammar still rejects expressions / functions / nested statements.
+   SQLParserEngine parser=new SQLParserEngine(
+     "MYSQL".equalsIgnoreCase(dialect)?"MySQL":"PostgreSQL",
+     new CacheOption(128,1024L));
+   parser.parse(sql,false);
    Matcher m=checked(sql);
    if(parameterCount!=(m.group(3)==null?0:1) || Integer.parseInt(m.group(4))>maxRows)
     return SqlVerdict.deny("PARAMETERS_OR_ROW_LIMIT");
