@@ -11,7 +11,10 @@ import org.springframework.ai.mcp.annotation.McpToolParam;
 @Component
 public final class SqlTools {
  private final AuthorizedDatasourceService datasources;
- public SqlTools(AuthorizedDatasourceService datasources){this.datasources=datasources;}
+ private final SqlPreflightService preflight;
+ public SqlTools(AuthorizedDatasourceService datasources,SqlPreflightService preflight){
+  this.datasources=datasources;this.preflight=preflight;
+ }
 
  private static Map<String,Object> deny(String code) {
   return Map.of("code",code,"decision","DENY","retryable",false,
@@ -49,8 +52,7 @@ public final class SqlTools {
   @McpToolParam(description="Database name",required=true) String database,
   @McpToolParam(description="SQL text",required=true) String sql,
   @McpToolParam(description="Bind parameters",required=false) List<Object> parameters){
-  // No dialect may be inferred from untrusted input until datasource lookup is authorized.
-  return deny("DIALECT_AND_POLICY_NOT_CERTIFIED");
+  return preflight.check(datasourceId,database,sql,parameters);
  }
  @McpTool(name="submit_change",description="Submit a SQL change for human approval (disabled)")
  public Map<String,Object> submitChange(
