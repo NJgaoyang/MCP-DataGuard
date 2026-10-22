@@ -8,7 +8,6 @@ services:
         condition: service_started
     environment:
       DG_PUBLIC_HOST: ${DG_PUBLIC_HOST:?set_public_domain}
-      ACME_EMAIL: ${ACME_EMAIL:?set_acme_email}
     ports:
       - "80:80"
       - "443:443"
