@@ -21,6 +21,8 @@ public final class AuthorizedDatasourceService {
   this.jdbc=jdbc;this.identity=identity;
  }
  public Map<String,Object> list(String environment,String cursor,Integer pageSize) {
+  // Authenticate before validating user-controlled query parameters.
+  AgentPrincipal actor=identity.requireActiveAgent();
   int offset=0;
   if(cursor!=null&&!cursor.isBlank()) {
    if(!cursor.matches("[1-9][0-9]{0,5}"))
@@ -36,7 +38,6 @@ public final class AuthorizedDatasourceService {
   int limit=pageSize==null?50:pageSize;
   if(limit<1||limit>100)
    return Map.of("code","INVALID_PAGE_SIZE","decision","DENY","retryable",false);
-  AgentPrincipal actor=identity.requireActiveAgent();
   String sql="""
    SELECT DISTINCT d.id, d.code, d.name, d.db_type, d.environment, d.database_name
      FROM dg_datasource d
