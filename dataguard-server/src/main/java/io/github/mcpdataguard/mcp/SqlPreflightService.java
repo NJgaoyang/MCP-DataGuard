@@ -52,16 +52,27 @@ public final class SqlPreflightService {
       parameters==null?0:parameters.size(),100);
   if(!"SELECT".equals(verdict.operation()))return denied(verdict.reason());
   String table=StrictReadOnlySql.table(sql);
-  boolean objectGrant=Boolean.TRUE.equals(jdbc.queryForObject("""
-    SELECT EXISTS (SELECT 1 FROM dg_object_grant g
-     WHERE g.org_id=? AND g.agent_id=? AND g.datasource_id=?
-       AND g.schema_pattern='*' AND g.table_pattern=?
-       AND g.column_pattern='*' AND 'SELECT'=ANY(g.operations) AND g.decision='ALLOW'
-       AND NOT EXISTS (SELECT 1 FROM dg_object_grant x
-          WHERE x.org_id=g.org_id AND x.agent_id=g.agent_id AND x.datasource_id=g.datasource_id
-            AND x.decision='DENY' AND (x.table_pattern='*' OR x.table_pattern=?)))
-    """,Boolean.class,agent.orgId(),agent.agentId(),id,table,table));
-  if(!objectGrant)return denied("OBJECT_GRANT_NOT_AVAILABLE");
+  // Exact column grants are mandatory; wildcard grants must not silently
+  // authorize a newly introduced sensitive column. Predicates also consume
+  // field-level authorization even if their values are not in the projection.
+  java.util.Set<String> required=new java.util.HashSet<>(
+    java.util.Arrays.asList(StrictReadOnlySql.columns(sql)));
+  String predicate=StrictReadOnlySql.predicateColumn(sql);
+  if(predicate!=null)required.add(predicate);
+  List<ColumnGrantPolicy.Grant> grants=jdbc.query("""
+    SELECT g.table_pattern,g.column_pattern,g.decision,g.schema_pattern,g.operations
+    FROM dg_object_grant g
+    WHERE g.org_id=? AND g.agent_id=? AND g.datasource_id=?
+      AND (g.table_pattern=? OR g.table_pattern='*')
+      AND (g.column_pattern='*' OR g.column_pattern=ANY(?))
+    """,(rs,i)->new ColumnGrantPolicy.Grant(
+       rs.getString("schema_pattern"),rs.getString("table_pattern"),
+       rs.getString("column_pattern"),rs.getString("decision"),
+       java.util.Set.of((String[])rs.getArray("operations").getArray())),
+       agent.orgId(),agent.agentId(),id,table,
+       required.toArray(String[]::new));
+  if(!ColumnGrantPolicy.allows(table,required,grants))
+    return denied("COLUMN_GRANT_NOT_AVAILABLE_OR_DENIED");
   // Deliberately deny even if an ACL record exists: syntax regex is not an AST.
   return Map.of("code","AST_AND_EXECUTOR_NOT_CERTIFIED","decision","DENY",
    "retryable",false,"operation","SELECT","object",table,
