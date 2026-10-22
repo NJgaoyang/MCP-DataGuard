@@ -225,7 +225,15 @@ async function updatePassword(){
  saving.value=true;error.value='';
  try{
   if(changeForm.newPassword.length<12)throw new Error('新密码至少12位且须包含大小写字母、数字和特殊字符');
-  await requestWrite('/api/v1/auth/password','POST',changeForm);
+  const response=await fetch('/api/v1/auth/password',{
+   method:'POST',credentials:'omit',
+   headers:{Authorization:'Bearer '+token.value,'Content-Type':'application/json'},
+   body:JSON.stringify(changeForm)
+  });
+  if(response.status===400)throw new Error('当前密码错误，或者新密码不符合安全要求。');
+  if(response.status===401)throw new Error('登录会话失效，请退出后重新登录。');
+  if(response.status===403)throw new Error('登录会话未获得改密权限，请重新登录。');
+  if(!response.ok)throw new Error('修改密码失败：HTTP '+response.status);
   changeForm.currentPassword='';changeForm.newPassword='';
   await logout();message.success('密码已修改，原会话已失效，请使用新密码重新登录');
  }catch(e){error.value=(e as Error).message;}

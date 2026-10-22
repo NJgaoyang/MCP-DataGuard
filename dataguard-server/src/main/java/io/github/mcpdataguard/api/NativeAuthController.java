@@ -77,7 +77,8 @@ public class NativeAuthController {
   List<String> hashes=jdbc.query("SELECT password_hash FROM dg_user WHERE org_id=? AND id=? FOR UPDATE",
      (rs,i)->rs.getString(1),p.orgId(),p.id());
   if(hashes.size()!=1||hashes.get(0)==null||
-     !NativeTokens.passwords().matches(input.currentPassword(),hashes.get(0)))throw invalid();
+     !NativeTokens.passwords().matches(input.currentPassword(),hashes.get(0)))
+   throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"CURRENT_PASSWORD_INCORRECT");
   if(NativeTokens.passwords().matches(input.newPassword(),hashes.get(0)))
    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"New password must differ");
   jdbc.update("""
