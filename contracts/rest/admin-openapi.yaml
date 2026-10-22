@@ -331,12 +331,17 @@ components:
         maxRows: {type: integer, minimum: 1, maximum: 100000}
         maxExecutionMs: {type: integer, minimum: 100, maximum: 3600000}
     AgentUpdate:
-      allOf:
-        - {$ref: '#/components/schemas/AgentCreate'}
-        - type: object
-          required: [expectedVersion]
-          properties: {expectedVersion: {type: integer, minimum: 0}}
-      description: Agent code is immutable; body code, if present, is ignored.
+      type: object
+      additionalProperties: false
+      required: [name, rateLimitPerMinute, concurrencyLimit, maxRows, maxExecutionMs, expectedVersion]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        description: {type: [string, 'null'], maxLength: 2000}
+        rateLimitPerMinute: {type: integer, minimum: 1, maximum: 100000}
+        concurrencyLimit: {type: integer, minimum: 1, maximum: 1000}
+        maxRows: {type: integer, minimum: 1, maximum: 100000}
+        maxExecutionMs: {type: integer, minimum: 100, maximum: 3600000}
+        expectedVersion: {type: integer, minimum: 0}
     DatasourceCreate:
       type: object
       additionalProperties: false
