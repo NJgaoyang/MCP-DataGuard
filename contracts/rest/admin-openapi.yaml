@@ -3,7 +3,7 @@ info:
   title: MCP DataGuard Administration API
   version: 1.0.0-draft
   description: >-
-    Unified admin REST contract. Every handler must enforce identity, tenant ownership,
+    Unified admin REST contract. Agent/datasource CRUD endpoints are implemented in dev20261022; other paths remain design-only. Every handler must enforce identity, tenant ownership,
     roles and resource permissions. This is a design contract; unimplemented endpoints must return 501/404,
     never fabricate success. MCP tools are defined separately under contracts/mcp/.
 servers:
@@ -71,16 +71,31 @@ paths:
     post:
       tags: [Agents]
       operationId: createAgent
-      summary: Register agent asset (NOT a database login)
-      requestBody: {$ref: '#/components/requestBodies/ResourceWrite'}
-      responses: {'201': {$ref: '#/components/responses/ResourceCreated'}}
+      summary: Register DISABLED agent configuration; no machine identity is enrolled
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AgentCreate'}}}}
+      responses: {'201': {description: Saved resource, content: {application/json: {schema: {$ref: '#/components/schemas/MutationResult'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /agents/{id}:
+    put:
+      tags: [Agents]
+      operationId: updateAgent
+      summary: Change nonsecurity Agent metadata with optimistic version check
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AgentUpdate'}}}}
+      responses: {'200': {description: Saved resource, content: {application/json: {schema: {$ref: '#/components/schemas/MutationResult'}}}}, '409': {$ref: '#/components/responses/Conflict'}}
+  /agents/{id}/edit:
+    get:
+      tags: [Agents]
+      operationId: getAgentEdit
+      summary: Fetch Agent metadata for writers, requires agent:write
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      responses: {'200': {description: Writable Agent view without secrets}}
   /agents/{id}/revoke:
     post:
       tags: [Agents]
       operationId: revokeAgent
       summary: Disable identity; invalidate new API calls
       parameters: [{$ref: '#/components/parameters/Id'}]
-      responses: {'204': {description: Revoked}, '404': {$ref: '#/components/responses/NotFound'}}
+      responses: {'200': {description: Saved resource, content: {application/json: {schema: {$ref: '#/components/schemas/MutationResult'}}}}, '404': {$ref: '#/components/responses/NotFound'}, '409': {$ref: '#/components/responses/Conflict'}}
   /agents/{id}/permissions:
     get:
       tags: [Agents]
@@ -102,9 +117,31 @@ paths:
     post:
       tags: [Datasources]
       operationId: createDatasource
-      summary: Register outbound target from safe validated fields
-      requestBody: {$ref: '#/components/requestBodies/ResourceWrite'}
-      responses: {'201': {$ref: '#/components/responses/ResourceCreated'}}
+      summary: Register a DISABLED datasource; does not connect to target or accept credentials
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DatasourceCreate'}}}}
+      responses: {'201': {description: Saved resource, content: {application/json: {schema: {$ref: '#/components/schemas/MutationResult'}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /datasources/{id}:
+    put:
+      tags: [Datasources]
+      operationId: updateDatasource
+      summary: Edit a DISABLED datasource configuration, requires datasource:write
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DatasourceUpdate'}}}}
+      responses: {'200': {description: Saved resource, content: {application/json: {schema: {$ref: '#/components/schemas/MutationResult'}}}}, '409': {$ref: '#/components/responses/Conflict'}}
+  /datasources/{id}/edit:
+    get:
+      tags: [Datasources]
+      operationId: getDatasourceEdit
+      summary: Fetch connection metadata for writers; no database secrets
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      responses: {'200': {description: Editable datasource view; requires datasource:write}}
+  /datasources/{id}/disable:
+    post:
+      tags: [Datasources]
+      operationId: disableDatasource
+      summary: Stop use of target datasource
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      responses: {'200': {description: Saved resource, content: {application/json: {schema: {$ref: '#/components/schemas/MutationResult'}}}}}
   /datasources/{id}/test:
     post:
       tags: [Datasources]
@@ -244,6 +281,113 @@ components:
     NotFound: {description: Resource not found or not visible to caller, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     Conflict: {description: Idempotency or optimistic concurrency conflict, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
   schemas:
+    MutationResult:
+      type: object
+      required: [id, status, version]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        status: {type: string, enum: [DISABLED, REVOKED]}
+        version: {type: integer, format: int64, minimum: 0}
+    AgentCreate:
+      type: object
+      additionalProperties: false
+      required: [code, name, rateLimitPerMinute, concurrencyLimit, maxRows, maxExecutionMs]
+      properties:
+        code: {type: string, pattern: '^[a-z][a-z0-9_-]{2,79}      type: object
+      description: Shared documentation placeholder; replace with strict endpoint DTOs during P1 implementation.
+      additionalProperties: true
+    ResourceResponse:
+      type: object
+      required: [requestId, data]
+      properties: {requestId: {type: string}, data: {type: object, additionalProperties: true}}
+    ListResponse:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {type: object, additionalProperties: true}}
+        nextCursor: {type: [string, 'null']}
+    Error:
+      type: object
+      required: [code, message, requestId]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        requestId: {type: string}
+        retryable: {type: boolean}
+    ApprovalAction:
+      type: object
+      required: [taskId, decision]
+      additionalProperties: false
+      properties:
+        taskId: {type: string, maxLength: 256}
+        decision: {type: string, enum: [APPROVE, REJECT, RETURN, DELEGATE, COMMENT]}
+        comment: {type: string, maxLength: 2000}
+        delegateToUserId: {type: string, format: uuid}}
+        name: {type: string, minLength: 1, maxLength: 200}
+        description: {type: [string, 'null'], maxLength: 2000}
+        rateLimitPerMinute: {type: integer, minimum: 1, maximum: 100000}
+        concurrencyLimit: {type: integer, minimum: 1, maximum: 1000}
+        maxRows: {type: integer, minimum: 1, maximum: 100000}
+        maxExecutionMs: {type: integer, minimum: 100, maximum: 3600000}
+    AgentUpdate:
+      allOf:
+        - {$ref: '#/components/schemas/AgentCreate'}
+        - type: object
+          required: [expectedVersion]
+          properties: {expectedVersion: {type: integer, minimum: 0}}
+      description: Agent code is immutable; body code, if present, is ignored.
+    DatasourceCreate:
+      type: object
+      additionalProperties: false
+      required: [code, name, dbType, environment, host, port]
+      properties:
+        code: {type: string, pattern: '^[a-z][a-z0-9_-]{2,79}      type: object
+      description: Shared documentation placeholder; replace with strict endpoint DTOs during P1 implementation.
+      additionalProperties: true
+    ResourceResponse:
+      type: object
+      required: [requestId, data]
+      properties: {requestId: {type: string}, data: {type: object, additionalProperties: true}}
+    ListResponse:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {type: object, additionalProperties: true}}
+        nextCursor: {type: [string, 'null']}
+    Error:
+      type: object
+      required: [code, message, requestId]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        requestId: {type: string}
+        retryable: {type: boolean}
+    ApprovalAction:
+      type: object
+      required: [taskId, decision]
+      additionalProperties: false
+      properties:
+        taskId: {type: string, maxLength: 256}
+        decision: {type: string, enum: [APPROVE, REJECT, RETURN, DELEGATE, COMMENT]}
+        comment: {type: string, maxLength: 2000}
+        delegateToUserId: {type: string, format: uuid}}
+        name: {type: string, minLength: 1, maxLength: 200}
+        dbType: {type: string, enum: [MYSQL, POSTGRESQL]}
+        environment: {type: string, enum: [DEV, TEST, STAGING, PROD]}
+        host: {type: string, minLength: 3, maxLength: 512}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        databaseName: {type: [string, 'null'], maxLength: 255}
+    DatasourceUpdate:
+      type: object
+      additionalProperties: false
+      required: [name, host, port, expectedVersion]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        host: {type: string, minLength: 3, maxLength: 512}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        databaseName: {type: [string, 'null'], maxLength: 255}
+        expectedVersion: {type: integer, minimum: 0}
     ResourceDraft:
       type: object
       description: Shared documentation placeholder; replace with strict endpoint DTOs during P1 implementation.
