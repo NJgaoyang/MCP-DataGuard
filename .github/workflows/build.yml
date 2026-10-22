@@ -73,3 +73,17 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Verify Vue TypeScript and build
         run: npm run build
+
+
+  deployment-spec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify development Compose configuration
+        run: docker compose --env-file deploy/.env.dev.example -f deploy/compose.yaml -f deploy/compose.dev.yaml config --quiet
+      - name: Validate shell syntax
+        run: bash -n bin/check-dev-deploy.sh bin/start-dev-deploy.sh deploy/postgres/init/01-init.sh
+      - name: Protect secrets from Docker build context
+        run: |
+          grep -q '**/.env.*' .dockerignore
+          grep -q '**/*.pem' .dockerignore
