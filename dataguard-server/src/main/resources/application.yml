@@ -26,7 +26,9 @@ spring:
           mcp-endpoint: /mcp
 dataguard:
   security:
-    mode: native
+    issuer: ${OIDC_ISSUER}
+    audience: ${OIDC_AUDIENCE:mcp-dataguard}
+    jwk-set-uri: ${OIDC_JWKS_URI:}
   connection-test:
     allowed-hosts: ${DG_CONNECT_TEST_ALLOW_HOSTS:}
   sql:

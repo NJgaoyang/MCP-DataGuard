@@ -1,10 +1,13 @@
 package io.github.mcpdataguard.api;
 
+import io.github.mcpdataguard.security.OidcIdentityHash;
 import io.github.mcpdataguard.security.UserPrincipalResolver;
 import io.github.mcpdataguard.security.UserPrincipalResolver.UserPrincipal;
 import java.time.Instant;
 import java.sql.Timestamp;
 import java.util.*;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,12 +23,54 @@ import org.springframework.web.server.ResponseStatusException;
 public class AgentEnrollmentController {
  private final JdbcTemplate jdbc;
  private final UserPrincipalResolver users;
- public AgentEnrollmentController(JdbcTemplate jdbc,UserPrincipalResolver users){
-  this.jdbc=jdbc;this.users=users;
+ private final String issuer,audience;
+ public AgentEnrollmentController(JdbcTemplate jdbc,UserPrincipalResolver users,
+    @Value("${dataguard.security.issuer}") String issuer,
+    @Value("${dataguard.security.audience}") String audience) {
+  this.jdbc=jdbc;this.users=users;this.issuer=issuer;this.audience=audience;
  }
+ public record IdentityInput(String issuer,String subject,String audience,String clientId){}
  public record PermissionInput(UUID datasourceId,String action,Instant expiresAt){}
  private UserPrincipal actor(Jwt jwt,String permission){
   UserPrincipal u=users.requireUser(jwt);users.requirePermission(u,permission);return u;
+ }
+ @PostMapping("/{agentId}/enroll")
+ @Transactional
+ public Map<String,String> enroll(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID agentId,
+                                  @RequestBody IdentityInput input){
+  UserPrincipal u=actor(jwt,"agent:identity:write");
+  if(input==null || !issuer.equals(input.issuer()) || !audience.equals(input.audience()) ||
+    input.subject()==null || input.subject().isBlank() || input.subject().length()>512 ||
+    input.clientId()==null || input.clientId().isBlank() || input.clientId().length()>255)
+   throw bad("OIDC identity invalid");
+  List<String> states=jdbc.query("""
+   SELECT status FROM dg_agent WHERE org_id=? AND id=? FOR UPDATE
+   """,(rs,i)->rs.getString(1),u.orgId(),agentId);
+  if(states.size()!=1 || !"DISABLED".equals(states.get(0)))throw conflict();
+  Integer bound=jdbc.queryForObject("""
+   SELECT count(*) FROM dg_agent_identity WHERE org_id=? AND agent_id=?
+   """,Integer.class,u.orgId(),agentId);
+  if(bound==null || bound!=0)throw conflict();
+  String identityHash=OidcIdentityHash.compute(issuer,input.subject());
+  // No user principal may also serve as an Agent.
+  Boolean person=jdbc.queryForObject("""
+    SELECT EXISTS(SELECT 1 FROM dg_user WHERE oidc_identity_sha256=?)
+  """,Boolean.class,identityHash);
+  if(Boolean.TRUE.equals(person))throw conflict();
+  try{
+   jdbc.update("""
+    INSERT INTO dg_agent_identity(id,org_id,agent_id,issuer,subject,audience,
+      identity_sha256,client_id,status)
+    VALUES (?,?,?,?,?,?,?,?,'ACTIVE')
+    """,UUID.randomUUID(),u.orgId(),agentId,issuer,input.subject(),
+      audience,identityHash,input.clientId());
+  }catch(DataIntegrityViolationException e){throw conflict();}
+  jdbc.update("""
+    UPDATE dg_agent SET status='ACTIVE',version=version+1,updated_at=now()
+    WHERE org_id=? AND id=? AND status='DISABLED'
+    """,u.orgId(),agentId);
+  audit(u,"AGENT_ENROLLED",agentId);
+  return Map.of("status","ACTIVE");
  }
  @PostMapping("/{agentId}/datasource-permissions")
  @Transactional

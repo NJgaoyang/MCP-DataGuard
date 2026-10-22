@@ -12,7 +12,7 @@ docker info >/dev/null 2>&1 || { echo "Docker daemon unavailable or user lacks p
 config=deploy/.env.dev
 [[ -f "$config" ]] || { echo "Missing $config: copy deploy/.env.dev.example and edit." >&2; exit 1; }
 if grep -Eiq 'REPLACE_WITH|example[.]invalid' "$config"; then
-  echo "Placeholder password in $config; edit before deploying." >&2
+  echo "Placeholder password/OIDC value in $config; edit before deploying." >&2
   exit 1
 fi
 docker compose --env-file "$config" -f deploy/compose.yaml -f deploy/compose.dev.yaml config --quiet
