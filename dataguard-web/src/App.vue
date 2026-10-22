@@ -258,7 +258,7 @@ async function changePassword(){
     <section v-if="!profile" class="panel login-panel">
      <h3>内置账号登录</h3>
      <p>无需 Keycloak 或外部身份服务。使用已创建的组织、用户名和密码登录。</p>
-     <a-form layout="vertical" @finish="login">
+     <a-form :model="loginForm" layout="vertical" @finish="login">
       <a-form-item label="组织编码" name="organization" :rules="[{required:true,message:'请输入组织编码'}]">
        <a-input v-model:value="loginForm.organization" autocomplete="organization" placeholder="dataguard"/>
       </a-form-item>
