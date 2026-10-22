@@ -22,3 +22,36 @@ jobs:
       - uses: actions/checkout@v4
       - run: python3 -m json.tool contracts/mcp/mcp-tools-v1.json >/dev/null
       - run: python3 -c "import re,pathlib; s=pathlib.Path('database/postgresql/V1__platform_baseline.sql').read_text(); assert len(re.findall(r'^CREATE TABLE ',s,re.M)) == 44"
+
+
+  postgres-ddl:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: dataguard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d dataguard"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Execute all 44 tables on PostgreSQL 17
+        run: |
+          docker run --rm --network host -v "$PWD":/work -w /work postgres:17 sh -ec '
+            export PGPASSWORD=ci_only_password
+            psql -h 127.0.0.1 -U postgres -d dataguard -v ON_ERROR_STOP=1 \
+              -c "CREATE ROLE dg_platform LOGIN PASSWORD '\''platform_ci_password'\''; CREATE SCHEMA platform AUTHORIZATION dg_platform;"
+            PGPASSWORD=platform_ci_password psql -h 127.0.0.1 -U dg_platform -d dataguard \
+              -v ON_ERROR_STOP=1 -f database/postgresql/V1__platform_baseline.sql
+            total=$(psql -h 127.0.0.1 -U postgres -d dataguard -At \
+              -c "SELECT count(*) FROM pg_tables WHERE schemaname='\''platform'\'' AND tablename LIKE '\''dg_%'\''")
+            echo "Platform tables: $total"
+            test "$total" = 44
+          '
