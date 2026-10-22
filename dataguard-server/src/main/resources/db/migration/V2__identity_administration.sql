@@ -1,6 +1,5 @@
 -- Explicit administration rights for trusted organization bootstrap administrators.
 -- Never authorizes SQL execution and never activates external database credentials.
-SET search_path TO platform;
 UPDATE dg_role
 SET permissions = permissions || '["identity:admin","agent:identity:write","agent:permission:write","datasource:secret:write","datasource:test"]'::jsonb,
     updated_at=now(), version=version+1
