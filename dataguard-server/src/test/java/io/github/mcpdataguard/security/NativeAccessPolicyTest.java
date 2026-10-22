@@ -8,5 +8,10 @@ class NativeAccessPolicyTest {
   for(String path:new String[]{"/api/v1/me","/api/v1/admin/users","/api/v1/agents","/api/v1/datasources","/api/v1/auth/password/extra"})
    assertFalse(NativeAccessPolicy.permitted(true,path),path);
   assertTrue(NativeAccessPolicy.permitted(false,"/api/v1/me"));
+  // Must receive the servlet path (without a deployment context path).
+  assertFalse(NativeAccessPolicy.permitted(true,"/gateway/api/v1/auth/password"));
+  assertFalse(NativeAccessPolicy.permitted(true,"/api/v1/auth/login"));
+  assertFalse(NativeAccessPolicy.permitted(true,"/api/v1/auth/password/"));
+  assertTrue(NativeAccessPolicy.permitted(false,"/api/v1/admin/users"));
  }
 }
