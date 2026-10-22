@@ -26,7 +26,7 @@ public final class AgentPrincipalResolver {
    throw new AccessDeniedException("Incomplete Agent identity");
   String digest=OidcIdentityHash.compute(issuer,subject);
   String sql="""
-   SELECT i.org_id, i.agent_id, i.issuer, i.subject, i.audience
+   SELECT i.org_id, i.agent_id, i.issuer, i.subject, i.audience, i.client_id
    FROM dg_agent_identity i
    JOIN dg_agent a ON a.org_id=i.org_id AND a.id=i.agent_id
    JOIN dg_organization o ON o.id=i.org_id
@@ -35,13 +35,14 @@ public final class AgentPrincipalResolver {
    """;
   List<AgentIdentityRow> matches=jdbc.query(sql,(rs,row)->new AgentIdentityRow(
    rs.getObject("org_id",UUID.class),rs.getObject("agent_id",UUID.class),
-   rs.getString("issuer"),rs.getString("subject"),rs.getString("audience")),digest);
+   rs.getString("issuer"),rs.getString("subject"),rs.getString("audience"),rs.getString("client_id")),digest);
   if(matches.size()!=1) throw new AccessDeniedException("Agent not registered or disabled");
   AgentIdentityRow row=matches.get(0);
   if(!issuer.equals(row.issuer()) || !subject.equals(row.subject())
-      || !jwt.getAudience().contains(row.audience()))
+      || !jwt.getAudience().contains(row.audience()) || row.clientId()==null
+      || !row.clientId().equals(jwt.getClaimAsString("azp")))
    throw new AccessDeniedException("Agent identity mismatch");
   return new AgentPrincipal(row.orgId(),row.agentId());
  }
- private record AgentIdentityRow(UUID orgId,UUID agentId,String issuer,String subject,String audience) {}
+ private record AgentIdentityRow(UUID orgId,UUID agentId,String issuer,String subject,String audience,String clientId) {}
 }
