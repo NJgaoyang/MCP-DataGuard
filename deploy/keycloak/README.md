@@ -12,7 +12,7 @@ Compose volume on the test identity service:
 
 ```yaml
 volumes:
-  - ../deploy/keycloak/themes/dataguard:/opt/keycloak/themes/dataguard:ro
+  - ./keycloak/themes/dataguard:/opt/keycloak/themes/dataguard:ro
 ```
 
 After recreating the Keycloak container, select `loginTheme=dataguard` for

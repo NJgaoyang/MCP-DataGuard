@@ -14,6 +14,7 @@ services:
       JAVA_OPTS_APPEND: -Xms128m -Xmx640m
     volumes:
       - dg_identity_data:/opt/keycloak/data
+      - ./keycloak/themes/dataguard:/opt/keycloak/themes/dataguard:ro
     ports:
       - "127.0.0.1:18081:8080"
 volumes:
