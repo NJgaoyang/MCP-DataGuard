@@ -20,6 +20,7 @@ services:
       OIDC_AUDIENCE: ${OIDC_AUDIENCE:?set_oidc_audience}
       OIDC_JWKS_URI: ${OIDC_JWKS_URI:-}
       DG_ENABLE_READ_EXECUTION: "false"
+      DG_CONNECT_TEST_ALLOW_HOSTS: ${DG_CONNECT_TEST_ALLOW_HOSTS:-}
     expose:
       - "8080"
   workflow:
