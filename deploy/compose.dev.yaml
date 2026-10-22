@@ -17,7 +17,8 @@ services:
       PG_PLATFORM_USER: ${PG_PLATFORM_USER:?set_platform_user}
       PG_PLATFORM_PASSWORD: ${PG_PLATFORM_PASSWORD:?set_platform_password}
       OIDC_ISSUER: ${OIDC_ISSUER:?set_oidc_issuer}
-      OIDC_AUDIENCE: ${OIDC_AUDIENCE:?set_oidc_audience}\n      OIDC_JWKS_URI: ${OIDC_JWKS_URI:-}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:?set_oidc_audience}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI:-}
       DG_ENABLE_READ_EXECUTION: "false"
     expose:
       - "8080"

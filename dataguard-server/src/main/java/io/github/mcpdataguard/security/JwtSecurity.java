@@ -17,8 +17,11 @@ import org.springframework.security.oauth2.core.OAuth2Error;
 @Configuration
 public class JwtSecurity {
  @Bean JwtDecoder jwtDecoder(@Value("${dataguard.security.issuer}") String issuer,
-                             @Value("${dataguard.security.audience}") String audience,\n                             @Value("${dataguard.security.jwk-set-uri:}") String jwkSetUri) {
-  NimbusJwtDecoder decoder = jwkSetUri.isBlank()\n   ? NimbusJwtDecoder.withIssuerLocation(issuer).build()\n   : NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
+                             @Value("${dataguard.security.audience}") String audience,
+                             @Value("${dataguard.security.jwk-set-uri:}") String jwkSetUri) {
+  NimbusJwtDecoder decoder = jwkSetUri.isBlank()
+   ? NimbusJwtDecoder.withIssuerLocation(issuer).build()
+   : NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
   OAuth2TokenValidator<Jwt> aud = jwt -> jwt.getAudience().contains(audience)
     ? OAuth2TokenValidatorResult.success()
     : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token", "Invalid audience", null));
