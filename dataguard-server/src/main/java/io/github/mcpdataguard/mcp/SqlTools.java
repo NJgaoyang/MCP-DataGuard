@@ -1,5 +1,6 @@
 package io.github.mcpdataguard.mcp;
 
+import io.github.mcpdataguard.security.AgentPrincipalResolver;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
@@ -12,8 +13,10 @@ import org.springframework.ai.mcp.annotation.McpToolParam;
 public final class SqlTools {
  private final AuthorizedDatasourceService datasources;
  private final SqlPreflightService preflight;
- public SqlTools(AuthorizedDatasourceService datasources,SqlPreflightService preflight){
-  this.datasources=datasources;this.preflight=preflight;
+ private final AgentPrincipalResolver agents;
+ public SqlTools(AuthorizedDatasourceService datasources,SqlPreflightService preflight,
+                 AgentPrincipalResolver agents){
+  this.datasources=datasources;this.preflight=preflight;this.agents=agents;
  }
 
  private static Map<String,Object> deny(String code) {
@@ -34,6 +37,7 @@ public final class SqlTools {
   @McpToolParam(description="Table",required=false) String table,
   @McpToolParam(description="Cursor",required=false) String cursor,
   @McpToolParam(description="Page size",required=false) Integer pageSize){
+  agents.requireActiveAgent();
   return deny("METADATA_AUTHORIZATION_NOT_READY");
  }
  @McpTool(name="execute_readonly",description="Execute a verified safe query (disabled)")
@@ -44,6 +48,7 @@ public final class SqlTools {
   @McpToolParam(description="Bind parameters",required=false) List<Object> parameters,
   @McpToolParam(description="Maximum rows",required=false) Integer pageSize,
   @McpToolParam(description="Request reference",required=false) String requestId){
+  agents.requireActiveAgent();
   return deny("READ_EXECUTOR_NOT_CERTIFIED");
  }
  @McpTool(name="check_sql",description="Check a SQL statement without execution (not enabled)")
@@ -62,11 +67,13 @@ public final class SqlTools {
   @McpToolParam(description="Bind parameters",required=false) List<Object> parameters,
   @McpToolParam(description="Reason",required=true) String reason,
   @McpToolParam(description="Idempotency UUID",required=true) String idempotencyKey){
+  agents.requireActiveAgent();
   return deny("APPROVAL_NOT_IMPLEMENTED");
  }
  @McpTool(name="get_change_status",description="Get status of an authorized change (disabled)")
  public Map<String,Object> getChangeStatus(
   @McpToolParam(description="Approval ID",required=true) String approvalId){
+  agents.requireActiveAgent();
   return deny("APPROVAL_AUTHORIZATION_NOT_IMPLEMENTED");
  }
 }
