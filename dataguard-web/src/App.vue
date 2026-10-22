@@ -62,16 +62,19 @@ function newAgent(){
 async function editAgent(record:Record<string,unknown>){
  try{
   const dto=await getData<typeof agentForm & {version:number}>('/api/v1/agents/'+record.id+'/edit');
-  Object.assign(agentForm,{...dto,expectedVersion:dto.version,description:dto.description||''});
+  Object.assign(agentForm,{id:dto.id,code:dto.code,name:dto.name,
+   description:dto.description||'',rateLimitPerMinute:dto.rateLimitPerMinute,
+   concurrencyLimit:dto.concurrencyLimit,maxRows:dto.maxRows,
+   maxExecutionMs:dto.maxExecutionMs,expectedVersion:dto.version});
   agentDialog.value=true;
  }catch(e){error.value=(e as Error).message;}
 }
 async function saveAgent(){
  saving.value=true;error.value='';
  try{
-  const {id,...values}=agentForm;
-  if(id)await requestWrite('/api/v1/agents/'+id,'PUT',values);
-  else await requestWrite('/api/v1/agents','POST',values);
+  const {id,code,expectedVersion,...values}=agentForm;
+  if(id)await requestWrite('/api/v1/agents/'+id,'PUT',{...values,expectedVersion});
+  else await requestWrite('/api/v1/agents','POST',{...values,code});
   agentDialog.value=false;message.success('Agent 已保存，默认禁用，需单独注册可信身份与授权。');
   await reload();
  }catch(e){error.value=(e as Error).message;}
@@ -91,17 +94,19 @@ function newDatasource(){
 async function editDatasource(record:Record<string,unknown>){
  try{
   const dto=await getData<typeof sourceForm & {version:number}>('/api/v1/datasources/'+record.id+'/edit');
-  Object.assign(sourceForm,{...dto,expectedVersion:dto.version,databaseName:dto.databaseName||''});
+  Object.assign(sourceForm,{id:dto.id,code:dto.code,name:dto.name,
+   dbType:dto.dbType,environment:dto.environment,host:dto.host,port:dto.port,
+   databaseName:dto.databaseName||'',expectedVersion:dto.version});
   sourceDialog.value=true;
  }catch(e){error.value=(e as Error).message;}
 }
 async function saveDatasource(){
  saving.value=true;error.value='';
  try{
-  const {id,...values}=sourceForm;
+  const {id,code,dbType,environment,expectedVersion,...values}=sourceForm;
   const payload={...values,databaseName:values.databaseName.trim()||null};
-  if(id)await requestWrite('/api/v1/datasources/'+id,'PUT',payload);
-  else await requestWrite('/api/v1/datasources','POST',payload);
+  if(id)await requestWrite('/api/v1/datasources/'+id,'PUT',{...payload,expectedVersion});
+  else await requestWrite('/api/v1/datasources','POST',{...payload,code,dbType,environment});
   sourceDialog.value=false;message.success('数据源配置已保存，连接默认禁用。');
   await reload();
  }catch(e){error.value=(e as Error).message;}
