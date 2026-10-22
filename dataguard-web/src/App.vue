@@ -11,6 +11,15 @@ const selected=ref('dashboard');
 const token=ref('');
 const profile=ref<{orgId:string;userId:string;username:string;displayName:string}|null>(null);
 const agents=ref<Record<string,unknown>[]>([]);
+const usersList=ref<Record<string,unknown>[]>([]);
+const rolesList=ref<{id:string;code:string;name:string;permissions:string;systemRole:boolean}[]>([]);
+const userDialog=ref(false),roleDialog=ref(false),enrollDialog=ref(false),credentialDialog=ref(false);
+const userForm=reactive({issuer:import.meta.env.VITE_OIDC_AUTHORITY||'',subject:'',username:'',displayName:''});
+const roleForm=reactive({code:'',name:'',permissions:['agent:read','datasource:read'] as string[]});
+const enrollForm=reactive({agentId:'',issuer:import.meta.env.VITE_OIDC_AUTHORITY||'',
+  subject:'',audience:'mcp-dataguard',clientId:''});
+const credentialForm=reactive({datasourceId:'',secretRef:''});
+const assignment=reactive({userId:'',roleId:''});
 const datasources=ref<Record<string,unknown>[]>([]);
 const busy=ref(false),error=ref('');
 const title=computed(()=>pages.find(p=>p[0]===selected.value)?.[1]||'总览仪表盘');
@@ -118,7 +127,81 @@ async function disableDatasource(record:Record<string,unknown>){
   message.success('数据源已停用。');await reload();
  }catch(e){error.value=(e as Error).message;}
 }
+
+async function loadAdmin(){
+ if(!token.value)return;
+ try{
+  const result=await Promise.all([
+   getData<Record<string,unknown>[]>('/api/v1/admin/users'),
+   getData<typeof rolesList.value>('/api/v1/admin/roles')
+  ]);
+  usersList.value=result[0];rolesList.value=result[1];
+ }catch(e){error.value='身份管理需要 identity:admin 权限：'+(e as Error).message;}
+}
+async function saveUser(){
+ saving.value=true;error.value='';
+ try{
+  await requestWrite('/api/v1/admin/users','POST',{...userForm});
+  userDialog.value=false;message.success('OIDC 用户登记成功；角色需另行分配。');
+  await loadAdmin();
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
+}
+async function saveRole(){
+ saving.value=true;error.value='';
+ try{
+  await requestWrite('/api/v1/admin/roles','POST',{...roleForm});
+  roleDialog.value=false;message.success('角色创建成功。');
+  await loadAdmin();
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
+}
+async function assignRole(){
+ saving.value=true;error.value='';
+ try{
+  await requestWrite('/api/v1/admin/users/'+assignment.userId+'/roles/'+assignment.roleId,'POST');
+  message.success('组织内角色已分配。');await loadAdmin();
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
+}
+function openEnroll(record:Record<string,unknown>){
+ Object.assign(enrollForm,{agentId:String(record.id),subject:'',clientId:'',audience:'mcp-dataguard'});
+ enrollDialog.value=true;
+}
+async function saveEnroll(){
+ saving.value=true;error.value='';
+ try{
+  const {agentId,...payload}=enrollForm;
+  await requestWrite('/api/v1/agents/'+agentId+'/enroll','POST',payload);
+  enrollDialog.value=false;message.success('Agent OIDC 身份已绑定，仍需授权可访问的数据源。');
+  await reload();
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
+}
+function openCredentials(record:Record<string,unknown>){
+ Object.assign(credentialForm,{datasourceId:String(record.id),secretRef:''});
+ credentialDialog.value=true;
+}
+async function saveCredentials(){
+ saving.value=true;error.value='';
+ try{
+  await requestWrite('/api/v1/datasources/'+credentialForm.datasourceId+'/read-secret','PUT',
+   {secretRef:credentialForm.secretRef});
+  credentialDialog.value=false;message.success('只读凭据引用已保存，密码未经过浏览器。');
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
+}
+async function testDatasource(record:Record<string,unknown>){
+ saving.value=true;error.value='';
+ try{
+  const res=await requestWrite('/api/v1/datasources/'+record.id+'/connection-test','POST');
+  if((res as unknown as {connected?:boolean}).connected)message.success('TLS 数据源连接测试通过');
+  else error.value='未通过连接验证';
+ }catch(e){error.value='连接测试未通过，可能缺少目标白名单、服务器端凭据或有效 TLS：'+(e as Error).message;}
+ finally{saving.value=false;}
+}
 async function login(){if(auth)await auth.signinRedirect();}
+
 
 async function logout(){if(auth)await auth.removeUser();token.value='';profile.value=null;agents.value=[];datasources.value=[];}
 onMounted(async()=>{
@@ -126,7 +209,7 @@ onMounted(async()=>{
  try{
   if(location.pathname==='/auth/callback'){await auth.signinRedirectCallback();history.replaceState(null,'','/');}
   const user=await auth.getUser();
-  if(user&&!user.expired){token.value=user.access_token;await reload();}
+  if(user&&!user.expired){token.value=user.access_token;await reload();await loadAdmin();}
  }catch(e){error.value=(e as Error).message;}
 });
 </script>
@@ -135,7 +218,7 @@ onMounted(async()=>{
   <aside class="sidebar">
    <div class="brand"><span class="symbol">◆</span><div>MCP DataGuard<small>AI DATABASE SECURITY</small></div></div>
    <span class="section">工作台</span>
-   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="selected=page[0]">{{page[1]}}</button>
+   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="selected=page[0];if(page[0]==='users')loadAdmin()">{{page[1]}}</button>
    <div class="foot">● 开源研发版 · v0.5</div>
   </aside>
   <main class="main">
@@ -164,6 +247,7 @@ onMounted(async()=>{
        <template #bodyCell="{column,record}">
         <template v-if="column.key==='actions'">
          <a-button size="small" type="link" @click="editAgent(record)">编辑</a-button>
+         <a-button v-if="record.status==='DISABLED'" size="small" type="link" @click="openEnroll(record)">绑定身份</a-button>
          <a-popconfirm v-if="record.status!=='REVOKED'" title="确认永久撤销这个 Agent？" ok-text="撤销" cancel-text="取消" @confirm="revokeAgent(record)">
           <a-button size="small" type="link" danger>撤销</a-button>
          </a-popconfirm>
@@ -177,6 +261,8 @@ onMounted(async()=>{
        <template #bodyCell="{column,record}">
         <template v-if="column.key==='actions'">
          <a-button size="small" type="link" @click="editDatasource(record)">编辑</a-button>
+         <a-button size="small" type="link" @click="openCredentials(record)">凭据引用</a-button>
+         <a-button size="small" type="link" @click="testDatasource(record)">测试连接</a-button>
          <a-popconfirm v-if="record.status!=='DISABLED'" title="确认停用数据源？" ok-text="停用" cancel-text="取消" @confirm="disableDatasource(record)">
           <a-button size="small" type="link" danger>停用</a-button>
          </a-popconfirm>
@@ -184,12 +270,83 @@ onMounted(async()=>{
        </template>
       </a-table>
      </section>
+
+     <section v-else-if="selected==='users'" class="panel">
+      <div class="panel-heading">
+       <h3>用户与组织角色</h3>
+       <div class="actions"><a-button size="small" @click="loadAdmin">刷新</a-button>
+        <a-button size="small" @click="userDialog=true">登记 OIDC 用户</a-button>
+        <a-button size="small" type="primary" @click="roleDialog=true">创建角色</a-button>
+       </div>
+      </div>
+      <a-alert type="info" show-icon message="只允许委派基础管理权限；不能通过此页面授予 SQL 执行权限。"/>
+      <h4 style="margin-top:24px">组织用户</h4>
+      <a-table :data-source="usersList" row-key="id" size="small"
+       :columns="[{title:'用户名',dataIndex:'username'},{title:'显示名称',dataIndex:'displayName'},{title:'状态',dataIndex:'status'}]"/>
+      <h4>基础角色</h4>
+      <a-table :data-source="rolesList" row-key="id" size="small"
+       :columns="[{title:'编码',dataIndex:'code'},{title:'名称',dataIndex:'name'},{title:'权限(JSON)',dataIndex:'permissions'}]"/>
+      <h4>分配角色（不包括系统角色）</h4>
+      <div class="assignment">
+       <a-select v-model:value="assignment.userId" placeholder="选择用户" style="min-width:170px">
+        <a-select-option v-for="u in usersList" :key="String(u.id)" :value="String(u.id)">{{u.username}}</a-select-option>
+       </a-select>
+       <a-select v-model:value="assignment.roleId" placeholder="选择非系统角色" style="min-width:170px">
+        <a-select-option v-for="r in rolesList.filter(x=>!x.systemRole)" :key="r.id" :value="r.id">{{r.name}}</a-select-option>
+       </a-select>
+       <a-button type="primary" :disabled="!assignment.userId||!assignment.roleId" @click="assignRole">分配</a-button>
+      </div>
+     </section>
      <div v-else class="panel placeholder"><h2>{{title}}</h2><p>开发中，暂未提供真实业务功能。</p></div>
     </template>
     <p class="disclaimer">必须使用有效 OIDC JWT、后端权限校验和隔离的数据库只读账户。当前版本不得连接生产数据库执行 SQL。</p>
 
    </div>
   </main>
+
+  <a-modal v-model:open="userDialog" title="登记 OIDC 用户" ok-text="保存"
+   :confirm-loading="saving" @ok="saveUser">
+   <a-form layout="vertical">
+    <a-form-item label="OIDC Issuer"><a-input v-model:value="userForm.issuer"/></a-form-item>
+    <a-form-item label="OIDC Subject (sub)"><a-input v-model:value="userForm.subject"/></a-form-item>
+    <a-form-item label="用户名"><a-input v-model:value="userForm.username"/></a-form-item>
+    <a-form-item label="显示名称"><a-input v-model:value="userForm.displayName"/></a-form-item>
+    <a-alert type="info" show-icon message="OIDC 用户必须已经存在于身份提供方；本操作不创建密码。"/>
+   </a-form>
+  </a-modal>
+  <a-modal v-model:open="roleDialog" title="创建组织角色" ok-text="保存"
+   :confirm-loading="saving" @ok="saveRole">
+   <a-form layout="vertical">
+    <a-form-item label="角色编码"><a-input v-model:value="roleForm.code" placeholder="operator_read"/></a-form-item>
+    <a-form-item label="角色名称"><a-input v-model:value="roleForm.name"/></a-form-item>
+    <a-form-item label="基础管理权限">
+     <a-checkbox-group v-model:value="roleForm.permissions">
+      <a-checkbox value="agent:read">查看 Agent</a-checkbox>
+      <a-checkbox value="agent:write">编辑 Agent</a-checkbox>
+      <a-checkbox value="datasource:read">查看数据源</a-checkbox>
+      <a-checkbox value="datasource:write">编辑数据源</a-checkbox>
+     </a-checkbox-group>
+    </a-form-item>
+   </a-form>
+  </a-modal>
+  <a-modal v-model:open="enrollDialog" title="绑定 Agent 的 OIDC 机器身份" ok-text="绑定"
+   :confirm-loading="saving" @ok="saveEnroll">
+   <a-form layout="vertical">
+    <a-form-item label="签发者 Issuer"><a-input v-model:value="enrollForm.issuer"/></a-form-item>
+    <a-form-item label="机器账户 Subject"><a-input v-model:value="enrollForm.subject"/></a-form-item>
+    <a-form-item label="Audience"><a-input v-model:value="enrollForm.audience"/></a-form-item>
+    <a-form-item label="OIDC Client ID"><a-input v-model:value="enrollForm.clientId"/></a-form-item>
+    <a-alert type="warning" show-icon message="只绑定在 IdP 已登记的独立机器身份；不可使用人员账号。"/>
+   </a-form>
+  </a-modal>
+  <a-modal v-model:open="credentialDialog" title="配置服务端只读凭据引用" ok-text="保存"
+   :confirm-loading="saving" @ok="saveCredentials">
+   <a-form layout="vertical">
+    <a-form-item label="环境变量前缀"><a-input v-model:value="credentialForm.secretRef"
+      placeholder="DG_TARGET_REPORTING_READ"/></a-form-item>
+    <a-alert type="info" show-icon message="服务端需配置前缀_USER / 前缀_PASSWORD；不要把密码写在此处。"/>
+   </a-form>
+  </a-modal>
   <a-modal v-model:open="agentDialog" :title="agentForm.id?'编辑 Agent':'新增 Agent'"
    :confirm-loading="saving" ok-text="保存" @ok="saveAgent">
    <a-form layout="vertical">
@@ -241,7 +398,7 @@ onMounted(async()=>{
 .section{font-size:11px;color:#9baac0;margin:4px 13px 12px}.nav{border:0;display:block;text-align:left;border-radius:8px;background:transparent;color:#596d8a;padding:12px;margin:1px 0;cursor:pointer;font-size:13px}.nav:hover{background:#f7faff}.nav.active{background:#eaf3ff;color:#2570d0;font-weight:600}
 .foot{margin-top:auto;border-top:1px solid #edf0f6;padding:17px 10px;color:#869bb5;font-size:12px}.main{min-width:0;flex:1}.bar{height:65px;background:white;border-bottom:1px solid #e5ebf2;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:13px;color:#8fa0b6}.bar strong{color:#354e6c;margin-left:8px}.actions{display:flex;gap:8px}
 .content{padding:30px;max-width:1300px;margin:0 auto}.heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;gap:16px}.heading h1{font-size:23px;margin:0 0 8px}.heading p{font-size:13px;color:#8595a9;margin:0}.status{font-size:12px;color:#ad7833;background:#fff5e4;border:1px solid #ffdfa9;border-radius:18px;padding:7px 12px;white-space:nowrap}
-.alert{margin:12px 0}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}.cards article{background:#fff;border:1px solid #e6edf5;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:10px}.cards small,.cards span{color:#97a7ba}.cards strong{font-size:31px}.cards strong.person{font-size:22px}.panel{background:#fff;border:1px solid #e6edf5;border-radius:12px;padding:23px;margin-bottom:18px}.panel h3{font-size:16px;margin:0 0 17px}.panel-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.panel-heading h3{margin:0}.form-pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}.form-pair :deep(.ant-form-item){min-width:0}.form-pair :deep(.ant-input-number),.form-pair :deep(.ant-select){width:100%}.panel p{font-size:13px;line-height:1.8;color:#7d8ba0}.placeholder{text-align:center;padding:65px 30px}.disclaimer{font-size:11px;color:#a1aec0;margin-top:30px}
+.alert{margin:12px 0}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}.cards article{background:#fff;border:1px solid #e6edf5;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:10px}.cards small,.cards span{color:#97a7ba}.cards strong{font-size:31px}.cards strong.person{font-size:22px}.panel{background:#fff;border:1px solid #e6edf5;border-radius:12px;padding:23px;margin-bottom:18px}.panel h3{font-size:16px;margin:0 0 17px}.assignment{display:flex;gap:10px;flex-wrap:wrap;margin:15px 0}.panel-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.panel-heading h3{margin:0}.form-pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}.form-pair :deep(.ant-form-item){min-width:0}.form-pair :deep(.ant-input-number),.form-pair :deep(.ant-select){width:100%}.panel p{font-size:13px;line-height:1.8;color:#7d8ba0}.placeholder{text-align:center;padding:65px 30px}.disclaimer{font-size:11px;color:#a1aec0;margin-top:30px}
 @media(max-width:850px){.sidebar{width:180px}.content{padding:18px}.cards{grid-template-columns:1fr}.bar{padding:0 16px}}
 @media(max-width:570px){.sidebar{width:62px;padding:20px 7px}.brand div,.section,.nav{font-size:0}.brand{padding:0 5px 25px}.nav:after{content:"•";font-size:17px}.foot{display:none}}
 </style>
