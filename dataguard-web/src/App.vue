@@ -42,7 +42,7 @@ async function getData<T>(path:string):Promise<T>{
  return await res.json() as T;
 }
 async function reload(){
- if(!token.value)return;busy.value=true;error.value='';
+ if(!token.value||mustChange.value)return;busy.value=true;error.value='';
  try{
   profile.value=await getData<typeof profile.value>('/api/v1/me');
   const results=await Promise.allSettled([
@@ -131,7 +131,7 @@ async function disableDatasource(record:Record<string,unknown>){
 }
 
 async function loadAdmin(){
- if(!token.value)return;
+ if(!token.value||mustChange.value)return;
  try{
   const result=await Promise.all([
    getData<Record<string,unknown>[]>('/api/v1/admin/users'),
@@ -210,6 +210,7 @@ async function login(){
   if(!response.ok)throw new Error(response.status===401?'用户名或密码不正确（连续错误会暂时锁定账号）':'登录失败 HTTP '+response.status);
   const result=await response.json() as {token:string;mustChangePassword:boolean};
   token.value=result.token;mustChange.value=result.mustChangePassword;
+  error.value='';profile.value=null;
   loginForm.password='';
   if(!mustChange.value){await reload();await loadAdmin();}
  }catch(e){error.value=(e as Error).message;}
@@ -237,12 +238,12 @@ async function updatePassword(){
   <aside class="sidebar">
    <div class="brand"><span class="symbol">◆</span><div>MCP DataGuard<small>AI DATABASE SECURITY</small></div></div>
    <span class="section">工作台</span>
-   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="selected=page[0];if(page[0]==='users')loadAdmin()">{{page[1]}}</button>
+   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin()}">{{page[1]}}</button>
    <div class="foot">● 开源研发版 · v0.5</div>
   </aside>
   <main class="main">
    <header class="bar"><div>工作台 / <strong>{{title}}</strong></div>
-    <div class="actions"><a-button size="small" :disabled="!token" :loading="busy" @click="reload">刷新</a-button>
+    <div class="actions"><a-button size="small" :disabled="!token||mustChange" :loading="busy" @click="reload">刷新</a-button>
      <a-button v-if="token&&!mustChange" size="small" @click="mustChange=true">修改密码</a-button>
      <a-button v-else size="small" @click="logout">退出</a-button>
     </div></header>
