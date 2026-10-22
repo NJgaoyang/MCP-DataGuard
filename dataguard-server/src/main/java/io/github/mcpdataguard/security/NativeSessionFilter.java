@@ -37,8 +37,7 @@ public class NativeSessionFilter extends OncePerRequestFilter {
     if(users.size()==1){
      Identity user=users.get(0);
      // Enforced on the backend. No business access until password rotation.
-     if(!user.mustChange() || req.getRequestURI().equals("/api/v1/auth/password") ||
-        req.getRequestURI().equals("/api/v1/auth/logout"))
+     if(NativeAccessPolicy.permitted(user.mustChange(),req.getRequestURI()))
       establish(raw,"local-user:"+user.id(),"native-web",user);
     }else{
      List<Identity> agents=jdbc.query("""
