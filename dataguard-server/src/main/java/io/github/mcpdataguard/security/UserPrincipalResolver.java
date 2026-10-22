@@ -33,7 +33,7 @@ public class UserPrincipalResolver {
   return principal;
  }
  public void requirePermission(UserPrincipal actor,String permission){
-  if(!List.of("datasource:read","agent:read","datasource:write","agent:write").contains(permission))
+  if(!List.of("datasource:read","agent:read","datasource:write","agent:write","identity:admin","agent:identity:write","agent:permission:write","datasource:secret:write","datasource:test").contains(permission))
    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Unsupported permission");
   String rule="[" + '"' + permission + '"' + "]";
   List<Integer> rows=jdbc.query("""
