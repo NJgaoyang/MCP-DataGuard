@@ -1,8 +1,8 @@
 package io.github.mcpdataguard.sql;
 
 import java.util.Locale;
-import org.apache.shardingsphere.sql.parser.api.SQLParserEngine;
-import org.apache.shardingsphere.infra.util.cache.CacheOption;
+import org.apache.shardingsphere.sql.parser.engine.api.SQLParserEngine;
+import org.apache.shardingsphere.sql.parser.engine.api.CacheOption;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
