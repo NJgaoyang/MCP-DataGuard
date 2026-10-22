@@ -40,6 +40,7 @@ services:
       PG_FLOWABLE_USER: ${PG_FLOWABLE_USER:?set_flowable_user}
       PG_FLOWABLE_PASSWORD: ${PG_FLOWABLE_PASSWORD:?set_flowable_password}
       OIDC_ISSUER: ${OIDC_ISSUER:?set_oidc_issuer}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${OIDC_JWKS_URI:-}
       FLOWABLE_SCHEMA_UPDATE: ${FLOWABLE_SCHEMA_UPDATE:-true}
     expose:
       - "8083"
