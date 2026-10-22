@@ -2,7 +2,7 @@ FROM maven:3.9.11-eclipse-temurin-21 AS build
 WORKDIR /src
 COPY . .
 ARG SERVICE=dataguard-server
-RUN mvn -B -ntp -pl "${SERVICE}" -am -DskipTests package && \
+RUN mvn -B -ntp -pl "${SERVICE}" -am -DskipTests install && \
     mvn -B -ntp -pl "${SERVICE}" spring-boot:repackage
 FROM eclipse-temurin:21-jre
 WORKDIR /app
