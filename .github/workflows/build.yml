@@ -14,6 +14,8 @@ jobs:
           java-version: '21'
           cache: maven
       - run: mvn -B -ntp verify
+      - name: Flyway migration must match reviewed baseline
+        run: cmp -s database/postgresql/V1__platform_baseline.sql dataguard-server/src/main/resources/db/migration/V1__platform_baseline.sql
   assets:
     runs-on: ubuntu-latest
     steps:
