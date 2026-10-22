@@ -1,0 +1,1 @@
+Vue3 管理台首版采用 OIDC 授权码 + PKCE、sessionStorage 存储 OIDC 会话，使用 Vite 同源 API 代理读取已授权人员的 Agent、数据源清单。请在 dataguard-web 中执行 cp .env.example .env.local，编辑 IdP 配置，然后 npm install、npm run dev。正式部署必须使用 TLS、企业 OIDC 注册、严格 CSP、可靠 Token 续期与后端权限校验。审批/SQL规则/审计等界面目前为开发中占位，不是已实现的生产功能。

@@ -1,0 +1,99 @@
+<script setup lang="ts">
+import {ref,onMounted,computed} from 'vue';
+import {auth,configured} from './auth';
+const pages=[
+ ['dashboard','总览仪表盘'],['agents','Agent 管理'],['datasources','数据源管理'],
+ ['rules','SQL 安全规则'],['flowable','Flowable 审批'],['audit','SQL 审计与监控'],
+ ['users','用户与权限']
+];
+const selected=ref('dashboard');
+const token=ref('');
+const profile=ref<{orgId:string;userId:string;username:string;displayName:string}|null>(null);
+const agents=ref<Record<string,unknown>[]>([]);
+const datasources=ref<Record<string,unknown>[]>([]);
+const busy=ref(false),error=ref('');
+const title=computed(()=>pages.find(p=>p[0]===selected.value)?.[1]||'总览仪表盘');
+const columnsAgents=[{title:'Agent 名称',dataIndex:'name'},{title:'标识',dataIndex:'code'},{title:'状态',dataIndex:'status'},{title:'每分钟请求数',dataIndex:'rateLimitPerMinute'}];
+const columnsSources=[{title:'数据源',dataIndex:'name'},{title:'数据库类型',dataIndex:'databaseType'},{title:'环境',dataIndex:'environment'},{title:'状态',dataIndex:'status'}];
+async function getData<T>(path:string):Promise<T>{
+ const res=await fetch(path,{headers:{Authorization:'Bearer '+token.value,Accept:'application/json'},credentials:'omit'});
+ if(!res.ok)throw new Error(path+' 返回 HTTP '+res.status);
+ return await res.json() as T;
+}
+async function reload(){
+ if(!token.value)return;busy.value=true;error.value='';
+ try{
+  profile.value=await getData<typeof profile.value>('/api/v1/me');
+  const results=await Promise.allSettled([
+   getData<Record<string,unknown>[]>('/api/v1/agents?limit=100'),
+   getData<Record<string,unknown>[]>('/api/v1/datasources?limit=100')
+  ]);
+  agents.value=results[0].status==='fulfilled'?results[0].value:[];
+  datasources.value=results[1].status==='fulfilled'?results[1].value:[];
+  if(results.some(x=>x.status==='rejected'))error.value='部分数据权限不足，请检查 agent:read 和 datasource:read 角色。';
+ }catch(e){profile.value=null;error.value=(e as Error).message;}
+ finally{busy.value=false;}
+}
+async function login(){if(auth)await auth.signinRedirect();}
+async function logout(){if(auth)await auth.removeUser();token.value='';profile.value=null;agents.value=[];datasources.value=[];}
+onMounted(async()=>{
+ if(!auth)return;
+ try{
+  if(location.pathname==='/auth/callback'){await auth.signinRedirectCallback();history.replaceState(null,'','/');}
+  const user=await auth.getUser();
+  if(user&&!user.expired){token.value=user.access_token;await reload();}
+ }catch(e){error.value=(e as Error).message;}
+});
+</script>
+<template>
+ <div class="shell">
+  <aside class="sidebar">
+   <div class="brand"><span class="symbol">◆</span><div>MCP DataGuard<small>AI DATABASE SECURITY</small></div></div>
+   <span class="section">工作台</span>
+   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="selected=page[0]">{{page[1]}}</button>
+   <div class="foot">● 开源研发版 · v0.5</div>
+  </aside>
+  <main class="main">
+   <header class="bar"><div>工作台 / <strong>{{title}}</strong></div>
+    <div class="actions"><a-button size="small" :disabled="!token" :loading="busy" @click="reload">刷新</a-button>
+     <a-button v-if="!token" size="small" type="primary" :disabled="!configured" @click="login">OIDC 登录</a-button>
+     <a-button v-else size="small" @click="logout">退出</a-button>
+    </div></header>
+   <div class="content">
+    <div class="heading"><div><h1>{{title}}</h1><p>AI Agent 多数据库安全访问与管理平台</p></div><span class="status">开发中 · 写入禁用</span></div>
+    <a-alert v-if="!configured" type="warning" show-icon message="请先配置 OIDC：dataguard-web/.env.local"/>
+    <a-alert v-else-if="!profile" type="info" show-icon message="请登录已登记的平台用户；不支持匿名访问。"/>
+    <a-alert v-if="error" type="warning" show-icon :message="error" class="alert"/>
+    <template v-if="profile">
+     <section v-if="selected==='dashboard'">
+      <div class="cards">
+       <article><small>当前用户</small><strong class="person">{{profile.displayName}}</strong><span>{{profile.username}}</span></article>
+       <article><small>Agent 数量（当前页）</small><strong>{{agents.length}}</strong><span>真实授权数据</span></article>
+       <article><small>数据源数量（当前页）</small><strong>{{datasources.length}}</strong><span>真实授权数据</span></article>
+      </div>
+      <div class="panel"><h3>欢迎使用 MCP DataGuard</h3><p>你属于组织 {{profile.orgId}}。当前仅实现 Agent 和数据源的只读查询；其他业务模块仍在开发中。所有危险 SQL 操作默认拒绝。</p></div>
+     </section>
+     <section v-else-if="selected==='agents'" class="panel">
+      <h3>Agent 列表</h3><a-table row-key="id" :columns="columnsAgents" :data-source="agents" size="small" :loading="busy" :pagination="{pageSize:10}"/>
+     </section>
+     <section v-else-if="selected==='datasources'" class="panel">
+      <h3>数据源列表</h3><a-table row-key="id" :columns="columnsSources" :data-source="datasources" size="small" :loading="busy" :pagination="{pageSize:10}"/>
+     </section>
+     <div v-else class="panel placeholder"><h2>{{title}}</h2><p>开发中，暂未提供真实业务功能。</p></div>
+    </template>
+    <p class="disclaimer">必须使用有效 OIDC JWT、后端权限校验和隔离的数据库只读账户。当前版本不得连接生产数据库执行 SQL。</p>
+   </div>
+  </main>
+ </div>
+</template>
+<style scoped>
+*{box-sizing:border-box}.shell{min-height:100vh;display:flex;background:#f6f8fb;color:#1c2e4b;font-family:system-ui,"Microsoft YaHei",sans-serif}
+.sidebar{width:238px;flex:none;background:#fff;border-right:1px solid #e5ebf2;padding:24px 12px;display:flex;flex-direction:column}
+.brand{display:flex;align-items:center;gap:11px;font-weight:700;font-size:17px;padding:4px 12px 25px}.brand small{display:block;font-size:9px;color:#9baac0;letter-spacing:1.1px;margin-top:4px}.symbol{display:grid;place-items:center;background:#e6f0ff;color:#2679da;width:37px;height:37px;border-radius:10px}
+.section{font-size:11px;color:#9baac0;margin:4px 13px 12px}.nav{border:0;display:block;text-align:left;border-radius:8px;background:transparent;color:#596d8a;padding:12px;margin:1px 0;cursor:pointer;font-size:13px}.nav:hover{background:#f7faff}.nav.active{background:#eaf3ff;color:#2570d0;font-weight:600}
+.foot{margin-top:auto;border-top:1px solid #edf0f6;padding:17px 10px;color:#869bb5;font-size:12px}.main{min-width:0;flex:1}.bar{height:65px;background:white;border-bottom:1px solid #e5ebf2;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:13px;color:#8fa0b6}.bar strong{color:#354e6c;margin-left:8px}.actions{display:flex;gap:8px}
+.content{padding:30px;max-width:1300px;margin:0 auto}.heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;gap:16px}.heading h1{font-size:23px;margin:0 0 8px}.heading p{font-size:13px;color:#8595a9;margin:0}.status{font-size:12px;color:#ad7833;background:#fff5e4;border:1px solid #ffdfa9;border-radius:18px;padding:7px 12px;white-space:nowrap}
+.alert{margin:12px 0}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}.cards article{background:#fff;border:1px solid #e6edf5;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:10px}.cards small,.cards span{color:#97a7ba}.cards strong{font-size:31px}.cards strong.person{font-size:22px}.panel{background:#fff;border:1px solid #e6edf5;border-radius:12px;padding:23px;margin-bottom:18px}.panel h3{font-size:16px;margin:0 0 17px}.panel p{font-size:13px;line-height:1.8;color:#7d8ba0}.placeholder{text-align:center;padding:65px 30px}.disclaimer{font-size:11px;color:#a1aec0;margin-top:30px}
+@media(max-width:850px){.sidebar{width:180px}.content{padding:18px}.cards{grid-template-columns:1fr}.bar{padding:0 16px}}
+@media(max-width:570px){.sidebar{width:62px;padding:20px 7px}.brand div,.section,.nav{font-size:0}.brand{padding:0 5px 25px}.nav:after{content:"•";font-size:17px}.foot{display:none}}
+</style>

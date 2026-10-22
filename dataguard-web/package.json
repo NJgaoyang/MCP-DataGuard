@@ -1,0 +1,22 @@
+{
+  "name": "mcp-dataguard-web",
+  "private": true,
+  "version": "0.5.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "ant-design-vue": "^4.2.0",
+    "oidc-client-ts": "^3.3.0",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.0.0",
+    "vue-tsc": "^3.1.0"
+  }
+}
