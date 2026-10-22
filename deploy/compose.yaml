@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dataguard
+      POSTGRES_USER: dataguard_bootstrap
+      POSTGRES_PASSWORD: ${PG_BOOTSTRAP_PASSWORD:?set_pg_bootstrap_password}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+      PG_PLATFORM_USER: ${PG_PLATFORM_USER:?set_pg_platform_user}
+      PG_PLATFORM_PASSWORD: ${PG_PLATFORM_PASSWORD:?set_pg_platform_password}
+      PG_FLOWABLE_USER: ${PG_FLOWABLE_USER:?set_pg_flowable_user}
+      PG_FLOWABLE_PASSWORD: ${PG_FLOWABLE_PASSWORD:?set_pg_flowable_password}
+    ports:
+      - "127.0.0.1:${PG_HOST_PORT:-55432}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+volumes:
+  pg_data: {}
