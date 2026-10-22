@@ -17,6 +17,19 @@ public class UserPrincipalResolver {
   if(jwt==null || jwt.getIssuer()==null || jwt.getSubject()==null)
    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Registered user required");
   String issuer=jwt.getIssuer().toString(), subject=jwt.getSubject();
+  if(NativeTokens.ISSUER.equals(issuer)){
+   if(!subject.matches("local-user:[0-9a-f-]{36}"))
+    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Invalid principal");
+   UUID id=UUID.fromString(subject.substring("local-user:".length()));
+   List<UserPrincipal> local=jdbc.query("""
+    SELECT u.id,u.org_id,u.username,u.display_name
+    FROM dg_user u JOIN dg_organization o ON o.id=u.org_id
+    WHERE u.id=? AND u.status='ACTIVE' AND o.status='ACTIVE' AND u.must_change_password=false
+    """,(rs,i)->new UserPrincipal(rs.getObject("org_id",UUID.class),rs.getObject("id",UUID.class),
+      rs.getString("username"),rs.getString("display_name"),issuer,subject),id);
+   if(local.size()!=1)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Registered user required");
+   return local.get(0);
+  }
   String digest=OidcIdentityHash.compute(issuer,subject);
   List<UserPrincipal> principals=jdbc.query("""
    SELECT u.id, u.org_id, u.username, u.display_name, u.oidc_issuer, u.oidc_subject

@@ -24,6 +24,20 @@ public final class AgentPrincipalResolver {
   String subject=jwt.getSubject();
   if(issuer==null || subject==null || jwt.getAudience()==null)
    throw new AccessDeniedException("Incomplete Agent identity");
+
+  if(NativeTokens.ISSUER.equals(issuer)){
+   if(!subject.matches("local-agent:[0-9a-f-]{36}") ||
+      !jwt.getAudience().contains(NativeTokens.AUDIENCE) ||
+      !"native-agent".equals(jwt.getClaimAsString("azp")))
+    throw new AccessDeniedException("Native agent token required");
+   UUID agentId=UUID.fromString(subject.substring("local-agent:".length()));
+   List<AgentPrincipal> rows=jdbc.query("""
+    SELECT a.org_id,a.id FROM dg_agent a JOIN dg_organization o ON o.id=a.org_id
+    WHERE a.id=? AND a.status='ACTIVE' AND o.status='ACTIVE'
+    """,(rs,i)->new AgentPrincipal(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class)),agentId);
+   if(rows.size()!=1)throw new AccessDeniedException("Agent not active");
+   return rows.get(0);
+  }
   String digest=OidcIdentityHash.compute(issuer,subject);
   String sql="""
    SELECT i.org_id, i.agent_id, i.issuer, i.subject, i.audience, i.client_id
