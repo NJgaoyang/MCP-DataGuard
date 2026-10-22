@@ -23,6 +23,7 @@ jobs:
       - run: python3 -m json.tool contracts/mcp/mcp-tools-v1.json >/dev/null
       - run: python3 -m py_compile bin/bootstrap-admin.py
       - run: python3 -m unittest discover -s tests -p 'test_bootstrap_*.py'
+      - run: python3 -m py_compile bin/bootstrap-native-admin.py
       - run: python3 -c "import re,pathlib; s=pathlib.Path('database/postgresql/V1__platform_baseline.sql').read_text(); assert len(re.findall(r'^CREATE TABLE ',s,re.M)) == 44"
 
 
@@ -66,6 +67,12 @@ jobs:
             added=$(psql -h 127.0.0.1 -U postgres -d dataguard -At -c \
               "SELECT permissions @> '\''[\"identity:admin\"]'\''::jsonb FROM platform.dg_role WHERE code='\''org-admin'\''")
             test "$added" = t
+            PGOPTIONS='-c search_path=platform' PGPASSWORD=platform_ci_password psql -h 127.0.0.1 -U dg_platform -d dataguard \
+              -v ON_ERROR_STOP=1 -f dataguard-server/src/main/resources/db/migration/V3__native_auth.sql
+            sessions=$(psql -h 127.0.0.1 -U postgres -d dataguard -At -c \
+              "SELECT COUNT(*) FROM pg_tables WHERE schemaname='platform' AND tablename LIKE 'dg_native_%'")
+            test "$sessions" = 2
+
           '
 
 
