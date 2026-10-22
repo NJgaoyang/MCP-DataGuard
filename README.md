@@ -49,6 +49,17 @@ OIDC 身份必须先在平台数据库中登记，首次部署可使用 [离线�
 
 查看页面要求 `agent:read` / `datasource:read`，创建或修改分别要求 `agent:write` / `datasource:write`。新增 Agent 和数据源均默认禁用，当前尚未实现可信 Agent 机器身份开通以及数据库连接认证。不能通过浏览器传入自定义租户 ID 进行越权查询。
 
+## 本轮新增：身份管理与数据源凭据（开发中）
+
+- `GET/POST /api/v1/admin/users` 和 `GET/POST /api/v1/admin/roles`：组织管理员登记 OIDC 人员与创建最小权限角色。
+- `POST/DELETE /api/v1/admin/users/{userId}/roles/{roleId}`：仅能委派非系统角色。
+- `POST /api/v1/agents/{agentId}/enroll`：绑定机器身份，验证 issuer、audience、client_id（JWT azp）且拒绝复用人员身份。
+- `POST/GET /api/v1/agents/{agentId}/datasource-permissions`：仅授予数据源发现 `list_datasources`；SQL 工具仍被禁用。
+- `PUT/GET /api/v1/datasources/{datasourceId}/read-secret`：管理只读 ENV 凭据引用，数据库中不保存明文密码。
+- `POST /api/v1/datasources/{datasourceId}/connection-test`：管理员执行服务器端白名单、TLS 身份校验及 SELECT 1 探测；成功也不授予 SQL 执行权限。
+
+参见 [身份与凭据实施说明](docs/IDENTITY_AND_CREDENTIALS.md)。
+
 ## 仍需研发的功能
 
 - 后台新增/修改 Agent、数据源、库表授权、用户与策略；凭据 Secret 安全轮换。
