@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import {ref,onMounted,computed} from 'vue';
+import {ref,onMounted,computed,reactive} from 'vue';
+import {message} from 'ant-design-vue';
 import {auth,configured} from './auth';
 const pages=[
  ['dashboard','总览仪表盘'],['agents','Agent 管理'],['datasources','数据源管理'],
@@ -13,8 +14,17 @@ const agents=ref<Record<string,unknown>[]>([]);
 const datasources=ref<Record<string,unknown>[]>([]);
 const busy=ref(false),error=ref('');
 const title=computed(()=>pages.find(p=>p[0]===selected.value)?.[1]||'总览仪表盘');
-const columnsAgents=[{title:'Agent 名称',dataIndex:'name'},{title:'标识',dataIndex:'code'},{title:'状态',dataIndex:'status'},{title:'每分钟请求数',dataIndex:'rateLimitPerMinute'}];
-const columnsSources=[{title:'数据源',dataIndex:'name'},{title:'数据库类型',dataIndex:'databaseType'},{title:'环境',dataIndex:'environment'},{title:'状态',dataIndex:'status'}];
+const agentDialog=ref(false),sourceDialog=ref(false),saving=ref(false);
+const agentForm=reactive({
+ id:'',code:'',name:'',description:'',rateLimitPerMinute:60,
+ concurrencyLimit:4,maxRows:200,maxExecutionMs:10000,expectedVersion:0
+});
+const sourceForm=reactive({
+ id:'',code:'',name:'',dbType:'POSTGRESQL',environment:'DEV',
+ host:'',port:5432,databaseName:'',expectedVersion:0
+});
+const columnsAgents=[{title:'Agent 名称',dataIndex:'name'},{title:'标识',dataIndex:'code'},{title:'状态',dataIndex:'status'},{title:'每分钟请求数',dataIndex:'rateLimitPerMinute'},{title:'操作',key:'actions'}];
+const columnsSources=[{title:'数据源',dataIndex:'name'},{title:'数据库类型',dataIndex:'databaseType'},{title:'环境',dataIndex:'environment'},{title:'状态',dataIndex:'status'},{title:'操作',key:'actions'}];
 async function getData<T>(path:string):Promise<T>{
  const res=await fetch(path,{headers:{Authorization:'Bearer '+token.value,Accept:'application/json'},credentials:'omit'});
  if(!res.ok)throw new Error(path+' 返回 HTTP '+res.status);
@@ -34,7 +44,76 @@ async function reload(){
  }catch(e){profile.value=null;error.value=(e as Error).message;}
  finally{busy.value=false;}
 }
+
+async function requestWrite(path:string,method:'POST'|'PUT',payload?:unknown){
+ const response=await fetch(path,{
+  method,headers:{Authorization:'Bearer '+token.value,Accept:'application/json',
+   ...(payload?{'Content-Type':'application/json'}:{})},
+  credentials:'omit',body:payload?JSON.stringify(payload):undefined
+ });
+ if(!response.ok)throw new Error('写入接口返回 HTTP '+response.status+'。请检查写入角色、参数或版本号。');
+ return await response.json() as {id:string;status:string;version:number};
+}
+function newAgent(){
+ Object.assign(agentForm,{id:'',code:'',name:'',description:'',rateLimitPerMinute:60,
+  concurrencyLimit:4,maxRows:200,maxExecutionMs:10000,expectedVersion:0});
+ agentDialog.value=true;
+}
+async function editAgent(record:Record<string,unknown>){
+ try{
+  const dto=await getData<typeof agentForm>('/api/v1/agents/'+record.id+'/edit');
+  Object.assign(agentForm,{...dto,description:dto.description||''});
+  agentDialog.value=true;
+ }catch(e){error.value=(e as Error).message;}
+}
+async function saveAgent(){
+ saving.value=true;error.value='';
+ try{
+  const {id,...values}=agentForm;
+  if(id)await requestWrite('/api/v1/agents/'+id,'PUT',values);
+  else await requestWrite('/api/v1/agents','POST',values);
+  agentDialog.value=false;message.success('Agent 已保存，默认禁用，需单独注册可信身份与授权。');
+  await reload();
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
+}
+async function revokeAgent(record:Record<string,unknown>){
+ try{
+  await requestWrite('/api/v1/agents/'+record.id+'/revoke','POST');
+  message.success('Agent 已撤销，其身份绑定同时失效。');await reload();
+ }catch(e){error.value=(e as Error).message;}
+}
+function newDatasource(){
+ Object.assign(sourceForm,{id:'',code:'',name:'',dbType:'POSTGRESQL',environment:'DEV',
+  host:'',port:5432,databaseName:'',expectedVersion:0});
+ sourceDialog.value=true;
+}
+async function editDatasource(record:Record<string,unknown>){
+ try{
+  const dto=await getData<typeof sourceForm>('/api/v1/datasources/'+record.id+'/edit');
+  Object.assign(sourceForm,{...dto,databaseName:dto.databaseName||''});
+  sourceDialog.value=true;
+ }catch(e){error.value=(e as Error).message;}
+}
+async function saveDatasource(){
+ saving.value=true;error.value='';
+ try{
+  const {id,...values}=sourceForm;
+  if(id)await requestWrite('/api/v1/datasources/'+id,'PUT',values);
+  else await requestWrite('/api/v1/datasources','POST',values);
+  sourceDialog.value=false;message.success('数据源配置已保存，连接默认禁用。');
+  await reload();
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
+}
+async function disableDatasource(record:Record<string,unknown>){
+ try{
+  await requestWrite('/api/v1/datasources/'+record.id+'/disable','POST');
+  message.success('数据源已停用。');await reload();
+ }catch(e){error.value=(e as Error).message;}
+}
 async function login(){if(auth)await auth.signinRedirect();}
+
 async function logout(){if(auth)await auth.removeUser();token.value='';profile.value=null;agents.value=[];datasources.value=[];}
 onMounted(async()=>{
  if(!auth)return;
@@ -74,16 +153,79 @@ onMounted(async()=>{
       <div class="panel"><h3>欢迎使用 MCP DataGuard</h3><p>你属于组织 {{profile.orgId}}。当前仅实现 Agent 和数据源的只读查询；其他业务模块仍在开发中。所有危险 SQL 操作默认拒绝。</p></div>
      </section>
      <section v-else-if="selected==='agents'" class="panel">
-      <h3>Agent 列表</h3><a-table row-key="id" :columns="columnsAgents" :data-source="agents" size="small" :loading="busy" :pagination="{pageSize:10}"/>
+      <div class="panel-heading"><h3>Agent 列表</h3><a-button size="small" type="primary" @click="newAgent">新增 Agent</a-button></div>
+      <a-table row-key="id" :columns="columnsAgents" :data-source="agents" size="small" :loading="busy" :pagination="{pageSize:10}">
+       <template #bodyCell="{column,record}">
+        <template v-if="column.key==='actions'">
+         <a-button size="small" type="link" @click="editAgent(record)">编辑</a-button>
+         <a-popconfirm v-if="record.status!=='REVOKED'" title="确认永久撤销这个 Agent？" ok-text="撤销" cancel-text="取消" @confirm="revokeAgent(record)">
+          <a-button size="small" type="link" danger>撤销</a-button>
+         </a-popconfirm>
+        </template>
+       </template>
+      </a-table>
      </section>
      <section v-else-if="selected==='datasources'" class="panel">
-      <h3>数据源列表</h3><a-table row-key="id" :columns="columnsSources" :data-source="datasources" size="small" :loading="busy" :pagination="{pageSize:10}"/>
+      <div class="panel-heading"><h3>数据源列表</h3><a-button size="small" type="primary" @click="newDatasource">新增数据源</a-button></div>
+      <a-table row-key="id" :columns="columnsSources" :data-source="datasources" size="small" :loading="busy" :pagination="{pageSize:10}">
+       <template #bodyCell="{column,record}">
+        <template v-if="column.key==='actions'">
+         <a-button size="small" type="link" @click="editDatasource(record)">编辑</a-button>
+         <a-popconfirm v-if="record.status!=='DISABLED'" title="确认停用数据源？" ok-text="停用" cancel-text="取消" @confirm="disableDatasource(record)">
+          <a-button size="small" type="link" danger>停用</a-button>
+         </a-popconfirm>
+        </template>
+       </template>
+      </a-table>
      </section>
      <div v-else class="panel placeholder"><h2>{{title}}</h2><p>开发中，暂未提供真实业务功能。</p></div>
     </template>
     <p class="disclaimer">必须使用有效 OIDC JWT、后端权限校验和隔离的数据库只读账户。当前版本不得连接生产数据库执行 SQL。</p>
+
    </div>
   </main>
+  <a-modal v-model:open="agentDialog" :title="agentForm.id?'编辑 Agent':'新增 Agent'"
+   :confirm-loading="saving" ok-text="保存" @ok="saveAgent">
+   <a-form layout="vertical">
+    <a-form-item label="唯一编码"><a-input v-model:value="agentForm.code" :disabled="!!agentForm.id" placeholder="agent_sales" maxlength="80"/></a-form-item>
+    <a-form-item label="Agent 名称"><a-input v-model:value="agentForm.name" maxlength="200"/></a-form-item>
+    <a-form-item label="说明"><a-textarea v-model:value="agentForm.description" :rows="2"/></a-form-item>
+    <div class="form-pair">
+     <a-form-item label="每分钟调用上限"><a-input-number v-model:value="agentForm.rateLimitPerMinute" :min="1" :max="100000"/></a-form-item>
+     <a-form-item label="并发上限"><a-input-number v-model:value="agentForm.concurrencyLimit" :min="1" :max="1000"/></a-form-item>
+     <a-form-item label="最大返回行数"><a-input-number v-model:value="agentForm.maxRows" :min="1" :max="100000"/></a-form-item>
+     <a-form-item label="最大执行毫秒"><a-input-number v-model:value="agentForm.maxExecutionMs" :min="100" :max="3600000"/></a-form-item>
+    </div>
+    <a-alert type="info" show-icon message="默认停用，不会自动授予数据库权限。"/>
+   </a-form>
+  </a-modal>
+  <a-modal v-model:open="sourceDialog" :title="sourceForm.id?'编辑数据源':'新增数据源'"
+   :confirm-loading="saving" ok-text="保存" @ok="saveDatasource">
+   <a-form layout="vertical">
+    <a-form-item label="唯一编码"><a-input v-model:value="sourceForm.code" :disabled="!!sourceForm.id" placeholder="pg_reporting"/></a-form-item>
+    <a-form-item label="数据源名称"><a-input v-model:value="sourceForm.name" maxlength="200"/></a-form-item>
+    <div class="form-pair">
+     <a-form-item label="数据库类型">
+      <a-select v-model:value="sourceForm.dbType" :disabled="!!sourceForm.id">
+       <a-select-option value="POSTGRESQL">PostgreSQL</a-select-option>
+       <a-select-option value="MYSQL">MySQL</a-select-option>
+      </a-select>
+     </a-form-item>
+     <a-form-item label="环境">
+      <a-select v-model:value="sourceForm.environment" :disabled="!!sourceForm.id">
+       <a-select-option value="DEV">开发</a-select-option><a-select-option value="TEST">测试</a-select-option>
+       <a-select-option value="STAGING">预发布</a-select-option><a-select-option value="PROD">生产</a-select-option>
+      </a-select>
+     </a-form-item>
+    </div>
+    <a-form-item label="服务器地址"><a-input v-model:value="sourceForm.host" placeholder="db.internal"/></a-form-item>
+    <div class="form-pair">
+     <a-form-item label="端口"><a-input-number v-model:value="sourceForm.port" :min="1" :max="65535"/></a-form-item>
+     <a-form-item label="数据库名"><a-input v-model:value="sourceForm.databaseName" maxlength="255"/></a-form-item>
+    </div>
+    <a-alert type="info" show-icon message="仅保存数据源元数据，不测试连接、不存储明文密码，默认禁用。"/>
+   </a-form>
+  </a-modal>
  </div>
 </template>
 <style scoped>
@@ -93,7 +235,7 @@ onMounted(async()=>{
 .section{font-size:11px;color:#9baac0;margin:4px 13px 12px}.nav{border:0;display:block;text-align:left;border-radius:8px;background:transparent;color:#596d8a;padding:12px;margin:1px 0;cursor:pointer;font-size:13px}.nav:hover{background:#f7faff}.nav.active{background:#eaf3ff;color:#2570d0;font-weight:600}
 .foot{margin-top:auto;border-top:1px solid #edf0f6;padding:17px 10px;color:#869bb5;font-size:12px}.main{min-width:0;flex:1}.bar{height:65px;background:white;border-bottom:1px solid #e5ebf2;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:13px;color:#8fa0b6}.bar strong{color:#354e6c;margin-left:8px}.actions{display:flex;gap:8px}
 .content{padding:30px;max-width:1300px;margin:0 auto}.heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;gap:16px}.heading h1{font-size:23px;margin:0 0 8px}.heading p{font-size:13px;color:#8595a9;margin:0}.status{font-size:12px;color:#ad7833;background:#fff5e4;border:1px solid #ffdfa9;border-radius:18px;padding:7px 12px;white-space:nowrap}
-.alert{margin:12px 0}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}.cards article{background:#fff;border:1px solid #e6edf5;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:10px}.cards small,.cards span{color:#97a7ba}.cards strong{font-size:31px}.cards strong.person{font-size:22px}.panel{background:#fff;border:1px solid #e6edf5;border-radius:12px;padding:23px;margin-bottom:18px}.panel h3{font-size:16px;margin:0 0 17px}.panel p{font-size:13px;line-height:1.8;color:#7d8ba0}.placeholder{text-align:center;padding:65px 30px}.disclaimer{font-size:11px;color:#a1aec0;margin-top:30px}
+.alert{margin:12px 0}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}.cards article{background:#fff;border:1px solid #e6edf5;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:10px}.cards small,.cards span{color:#97a7ba}.cards strong{font-size:31px}.cards strong.person{font-size:22px}.panel{background:#fff;border:1px solid #e6edf5;border-radius:12px;padding:23px;margin-bottom:18px}.panel h3{font-size:16px;margin:0 0 17px}.panel-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.panel-heading h3{margin:0}.form-pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}.form-pair :deep(.ant-form-item){min-width:0}.form-pair :deep(.ant-input-number),.form-pair :deep(.ant-select){width:100%}.panel p{font-size:13px;line-height:1.8;color:#7d8ba0}.placeholder{text-align:center;padding:65px 30px}.disclaimer{font-size:11px;color:#a1aec0;margin-top:30px}
 @media(max-width:850px){.sidebar{width:180px}.content{padding:18px}.cards{grid-template-columns:1fr}.bar{padding:0 16px}}
 @media(max-width:570px){.sidebar{width:62px;padding:20px 7px}.brand div,.section,.nav{font-size:0}.brand{padding:0 5px 25px}.nav:after{content:"•";font-size:17px}.foot{display:none}}
 </style>
