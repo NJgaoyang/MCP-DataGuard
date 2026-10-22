@@ -1,6 +1,8 @@
 package io.github.mcpdataguard.sql;
 
 import java.util.Locale;
+import org.apache.shardingsphere.sql.parser.api.SQLParserEngine;
+import org.apache.shardingsphere.infra.util.cache.CacheOption;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -19,6 +21,15 @@ public final class StrictReadOnlySql {
      sql.contains(";") || sql.contains("--") || sql.contains("/*") ||
      sql.contains("*/") || sql.contains("#") || sql.indexOf('\0')>=0)
    throw new IllegalArgumentException("UNSUPPORTED_SQL_SHAPE");
+  // SQL syntax is validated by ShardingSphere's dialect parser before
+  // applying the extremely restricted single-table query grammar.
+  // This parser is NOT by itself a safety certificate or an execution grant.
+  try {
+   SQLParserEngine parser=new SQLParserEngine("PostgreSQL",new CacheOption(128,1024L));
+   parser.parse(sql,false);
+  }catch(RuntimeException e){
+   throw new IllegalArgumentException("INVALID_SQL_AST",e);
+  }
   Matcher m=SIMPLE.matcher(sql.strip());
   if(!m.matches()) throw new IllegalArgumentException("UNSUPPORTED_SQL_SHAPE");
   return m;
