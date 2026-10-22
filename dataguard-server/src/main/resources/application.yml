@@ -27,7 +27,7 @@ spring:
 dataguard:
   security:
     issuer: ${OIDC_ISSUER}
-    audience: ${OIDC_AUDIENCE:mcp-dataguard}
+    audience: ${OIDC_AUDIENCE:mcp-dataguard}\n    jwk-set-uri: ${OIDC_JWKS_URI:}
   sql:
     allow-read-execution: ${DG_ENABLE_READ_EXECUTION:false}
     max-rows: 100
