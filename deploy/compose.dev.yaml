@@ -19,9 +19,6 @@ services:
       PLATFORM_JDBC_URL: jdbc:postgresql://postgres:5432/dataguard?currentSchema=platform
       PG_PLATFORM_USER: ${PG_PLATFORM_USER:?set_platform_user}
       PG_PLATFORM_PASSWORD: ${PG_PLATFORM_PASSWORD:?set_platform_password}
-      OIDC_ISSUER: ${OIDC_ISSUER:?set_oidc_issuer}
-      OIDC_AUDIENCE: ${OIDC_AUDIENCE:?set_oidc_audience}
-      OIDC_JWKS_URI: ${OIDC_JWKS_URI:-}
       DG_ENABLE_READ_EXECUTION: "false"
       DG_CONNECT_TEST_ALLOW_HOSTS: ${DG_CONNECT_TEST_ALLOW_HOSTS:-}
     expose:
@@ -43,8 +40,6 @@ services:
       FLOWABLE_JDBC_URL: jdbc:postgresql://postgres:5432/dataguard?currentSchema=flowable
       PG_FLOWABLE_USER: ${PG_FLOWABLE_USER:?set_flowable_user}
       PG_FLOWABLE_PASSWORD: ${PG_FLOWABLE_PASSWORD:?set_flowable_password}
-      OIDC_ISSUER: ${OIDC_ISSUER:?set_oidc_issuer}
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${OIDC_JWKS_URI:-}
       FLOWABLE_SCHEMA_UPDATE: ${FLOWABLE_SCHEMA_UPDATE:-true}
     expose:
       - "8083"
@@ -52,10 +47,6 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.web
-      args:
-        VITE_OIDC_AUTHORITY: ${VITE_OIDC_AUTHORITY:?set_web_oidc_authority}
-        VITE_OIDC_CLIENT_ID: ${VITE_OIDC_CLIENT_ID:?set_web_oidc_client}
-        VITE_OIDC_REDIRECT_URI: ${VITE_OIDC_REDIRECT_URI:?set_web_redirect}
     restart: unless-stopped
     depends_on:
       gateway:
