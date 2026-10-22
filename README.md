@@ -1,54 +1,62 @@
 # MCP DataGuard
 
-> 🚧 **Under active development — do not connect this branch to production databases.**
+> **dev20261022 · v0.5 开发分支**。已包含可构建的 Spring Boot / Flowable / Vue3 基础工程，但尚不是可供生产使用的 SQL 安全网关。写入与读取业务数据库的 MCP 工具均保持禁用。
 
-MCP DataGuard is an open-source, self-hosted SQL security gateway for AI Agents.
-The target product includes Spring AI MCP tools, PostgreSQL-backed policy management,
-database dialect plugins, Flowable approvals, audited read/write execution, and Vue 3 admin UI.
+MCP DataGuard 是面向 AI Agent 的完全开源数据库安全访问与管理平台，目标是统一管理 Agent、数据源、SQL 安全规则、Flowable 人工审批、执行与审计。
 
-## Development branch
+## 技术栈
 
-Branch: `dev20261022`. Main contains repository bootstrap only.
+- Java 21 + Spring Boot 4.0.8 + Spring AI MCP Server 2.0.1。
+- Flowable 8.0.0，两级审批 BPMN 示例；尚未接通可信审批工单。
+- PostgreSQL 17 单个 `dataguard` 数据库：`platform` 和 `flowable` 两个 Schema、独立账号。
+- ShardingSphere 5.5.3 依赖已列入项目；AST 安全语义分析尚未认证。
+- Vue3、Ant Design Vue、Vite、OIDC Authorization Code + PKCE。
 
-### Architectural baseline
+## 已实现的代码
 
-- Java 21, Spring Boot 4, Spring AI 2, Flowable 8.
-- **One PostgreSQL 17 server and database** `dataguard` with two schemas:
-  `platform` and `flowable`. Use separate database roles.
-- First target systems: MySQL and PostgreSQL via tightly scoped read-only credentials.
-- Unrecognized SQL and uncategorized database functionality **fail closed**.
-- No vendor license restrictions or paid feature unlocks.
+- 平台管理库 44 张业务表的 Flyway V1 迁移；CI 在实际 PostgreSQL 17 中成功运行。
+- OIDC JWT issuer/audience 基础校验；注册 Agent/User 的可信身份摘要匹配，验证组织及身份状态。
+- Agent 专属 MCP `list_datasources`：根据组织、有效 Agent 和显式库权限过滤，只返回授权的非敏感数据源信息。
+- 管理 REST `GET /api/v1/me`、`GET /api/v1/agents`、`GET /api/v1/datasources`：从 PostgreSQL 真正查询，检查用户角色权限。
+- 六个 MCP 工具已经声明，除了 `list_datasources`，其余五个因未获安全认证而拒绝执行。
+- SQL 简单结构预检查仅用于拒绝，不会因为词法匹配就授予 SQL 执行权限。
+- Vue3 管理台已接入 OIDC 登录、Agent 和数据源的只读列表。其他页面明确显示开发中。
+- GitHub Actions 验证 Maven 单元测试、Vue/TypeScript 构建、实际 PostgreSQL 17 DDL 和 MCP JSON 契约。
 
-### Status
+## 快速开始（开发环境）
 
-This branch has design/contracts/migrations and initial service infrastructure.
-The SQL safety subset is conservative, **disabled by default**, and is not a substitute
-for a formally certified security gateway. The Flowable BPMN is a process template,
-**not** a completed approval-to-execution integration.
-
-### Development prerequisites
-
-JDK 21, Maven 3.9+, PostgreSQL 17, Node 22 (for future Vue UI), Docker.
+依赖 JDK 21、Maven 3.9+、Node 22+、Docker Compose，以及已正确配置的 OIDC Provider。
 
 ```bash
 cp deploy/.env.example deploy/.env
-# Edit secrets in deploy/.env
+# 请编辑密码、数据库连接变量和 OIDC issuer/audience；不要提交 secrets
 docker compose --env-file deploy/.env -f deploy/compose.yaml up -d
 mvn -B -ntp verify
+
+# 在已导出 deploy/.env 中的环境变量后运行 Spring 服务
+mvn -pl dataguard-server -am install
+mvn -pl dataguard-server spring-boot:run
+
+# 另一个终端运行 Vue3
+cd dataguard-web
+cp .env.example .env.local
+# 编辑 VITE_OIDC_* 与身份提供商回调设置
+npm install
+npm run dev
 ```
 
-Read [PRD](docs/PRD.md), [technical design](docs/TECHNICAL_DESIGN.md), and
-[development backlog](docs/DEVELOPMENT_BACKLOG.md) before enabling any SQL tools.
-No database credentials should be committed. The shipped sample env values are placeholders.
+OIDC 身份必须先在平台数据库中登记，且人员角色要包含 `agent:read` / `datasource:read` 才能看对应后台页面。目前尚无完整的首次配置管理员向导和 CRUD 页面。不能通过浏览器传入自定义租户 ID 进行越权查询。
 
-### Current scope / gates
+## 仍需研发的功能
 
-- [x] GitHub branch, design, MCP contract, OpenAPI, PostgreSQL 44-table baseline.
-- [x] Spring service modules, JWT resource-server guards, Flowable BPMN example, SQL fail-closed validator.
-- [ ] CI passing with dependency resolution and actual PostgreSQL startup.
-- [ ] Audited tenant/agent/datasource authorization and real read-only tool execution.
-- [ ] Flowable requester/approver authorization, persistence, reconciliation.
-- [ ] A separate safe write executor with idempotency and crash recovery.
-- [ ] Full Vue admin UI, dialect certification matrix and security tests.
+- 后台新增/修改 Agent、数据源、库表授权、用户与策略；凭据 Secret 安全轮换。
+- ShardingSphere 方言 AST、SQL 副作用分析、字段级权限、读执行器与结果脱敏。
+- Flowable 审批实例 API、任务分配、自批防护、审批快照、可信状态回写。
+- 完全独立的写执行器、幂等任务、故障后 `UNKNOWN` 对账机制。
+- 完整 SQL 审计链、实时监控、策略编辑器、可视化 BPMN 流程管理、稳定安装升级和兼容性认证。
 
-**All write SQL must stay disabled until every security gate passes.**
+**生产数据库 SQL 操作默认拒绝，不要把当前工程视为完整产品。**
+
+详细情况参见 [实施状态](docs/IMPLEMENTATION_STATUS.md)、[PRD](docs/PRD.md)、[技术设计](docs/TECHNICAL_DESIGN.md) 和 [研发任务](docs/DEVELOPMENT_BACKLOG.md)。
+
+项目坚持全功能开源、无商业 License。第三方数据库驱动许可证需要逐项审查。

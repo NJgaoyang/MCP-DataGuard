@@ -1,22 +1,26 @@
-# MCP DataGuard dev20261022 研发状态
+# MCP DataGuard 当前实施状态
 
-> 本分支**不是**已经完成所有功能的数据库安全网关。不要连接生产业务库。
+开发分支：`dev20261022` · v0.5 · 非生产版。
 
-## 已进入 GitHub 源码
+## 已完成并纳入持续构建
 
-- Java 21 / Spring Boot 4、Spring AI MCP Server、PostgreSQL 17 平台管理库 / Flowable 8 双 Schema。
-- Flyway V1 包含原始 44 张 PostgreSQL 平台业务表。
-- 六个 MCP Tool 已有注解入口，并且默认拒绝请求，不执行任何 SQL。
-- SQL 简单结构词法检查只用于识别/拒绝，**永远不独立提供 ALLOW 决策**。
-- JWT iss / aud 校验基础配置、Flowable 两级审批 BPMN 模板、Maven CI。
+- Java/Spring Boot/Flowable 基础服务与 OIDC JWT 资源服务器。
+- PostgreSQL 17 单库双 Schema 的 44 张表 V1 迁移，PostgreSQL 实例 CI 验证。
+- 用户和 Agent 可信 OIDC 身份映射；有效状态与组织隔离。
+- REST 个人信息、Agent 与数据源只读列表，严格角色权限检查。
+- MCP 工具 `list_datasources` 具有真实平台库查询与 Agent 授权过滤；不返回连接密钥或主机。
+- MCP 其余五工具仍为受控拒绝。
+- SQL 词法预检查只用于拒绝，不会授予 SELECT 执行权限。
+- Vue3 管理台 OIDC 登录与只读列表，Node CI 构建。
+- GitHub Actions 后端、前端、真实 PG SQL 初始化、MCP JSON 契约检查。
 
-## 尚未完成的关键功能
+## 未完成或尚未通过验证
 
-- 用户与 Agent 身份数据库注册映射、租户权限、数据源注册和密文凭据管理。
-- ShardingSphere 方言 AST 与安全语义完整认证、只读 JDBC 执行器及数据脱敏。
-- Flowable 可信审批与工单持久化、审批人与申请人回避校验。
-- 独立写入执行器、授权摘要、未知状态 UNKNOWN 故障处理。
-- Vue3 Web 全量管理页面、完整审计、监控告警与安装升级。
-- 真实 PostgreSQL 建库、Flowable 实例以及 MySQL/PG 业务库端到端验证。
+- Agent/数据源 Web 创建修改、OAuth 身份登记向导、统一 RBAC 管理。
+- MySQL/PG 目标数据库连接器与真实安全 SELECT、元数据枚举。
+- ShardingSphere AST 安全认证、策略匹配与敏感字段脱敏。
+- Flowable 审批单与任务业务接口、审批人授权回避。
+- 安全写执行器、非幂等重试保护与 UNKNOWN 对账。
+- 真实 SQL 审计、告警、性能压测、备份恢复与生产安全测试。
 
-**任何语法检查都不能替代 SQL 权限校验和物理只读数据库账户。**
+**禁止将 SQL 词法结构检查作为允许执行的依据。业务 SQL 执行未开放。**
