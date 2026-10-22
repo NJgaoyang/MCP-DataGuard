@@ -21,6 +21,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 -m json.tool contracts/mcp/mcp-tools-v1.json >/dev/null
+      - run: python3 -m py_compile bin/bootstrap-admin.py
+      - run: python3 -m unittest discover -s tests -p 'test_bootstrap_*.py'
       - run: python3 -c "import re,pathlib; s=pathlib.Path('database/postgresql/V1__platform_baseline.sql').read_text(); assert len(re.findall(r'^CREATE TABLE ',s,re.M)) == 44"
 
 
