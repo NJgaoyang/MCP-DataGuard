@@ -14,9 +14,10 @@ public final class SqlTools {
  private final AuthorizedDatasourceService datasources;
  private final SqlPreflightService preflight;
  private final AgentPrincipalResolver agents;
+ private final AuthorizedSchemaService schemas;
  public SqlTools(AuthorizedDatasourceService datasources,SqlPreflightService preflight,
-                 AgentPrincipalResolver agents){
-  this.datasources=datasources;this.preflight=preflight;this.agents=agents;
+                 AgentPrincipalResolver agents,AuthorizedSchemaService schemas){
+  this.datasources=datasources;this.preflight=preflight;this.agents=agents;this.schemas=schemas;
  }
 
  private static Map<String,Object> deny(String code) {
@@ -30,15 +31,14 @@ public final class SqlTools {
   @McpToolParam(description="Page size",required=false) Integer pageSize){
   return datasources.list(environment,cursor,pageSize);
  }
- @McpTool(name="get_schema",description="Inspect caller-authorized schema (not enabled)")
+ @McpTool(name="get_schema",description="List explicitly configured authorized columns (not live database metadata)")
  public Map<String,Object> getSchema(
   @McpToolParam(description="Datasource ID",required=true) String datasourceId,
   @McpToolParam(description="Schema",required=false) String schema,
   @McpToolParam(description="Table",required=false) String table,
   @McpToolParam(description="Cursor",required=false) String cursor,
   @McpToolParam(description="Page size",required=false) Integer pageSize){
-  agents.requireActiveAgent();
-  return deny("METADATA_AUTHORIZATION_NOT_READY");
+  return schemas.get(datasourceId,schema,table,cursor,pageSize);
  }
  @McpTool(name="execute_readonly",description="Execute a verified safe query (disabled)")
  public Map<String,Object> executeReadonly(
