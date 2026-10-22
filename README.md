@@ -17,10 +17,10 @@ MCP DataGuard 是面向 AI Agent 的完全开源数据库安全访问与管理�
 - 平台管理库 44 张业务表的 Flyway V1 迁移；CI 在实际 PostgreSQL 17 中成功运行。
 - OIDC JWT issuer/audience 基础校验；注册 Agent/User 的可信身份摘要匹配，验证组织及身份状态。
 - Agent 专属 MCP `list_datasources`：根据组织、有效 Agent 和显式库权限过滤，只返回授权的非敏感数据源信息。
-- 管理 REST `GET /api/v1/me`、`GET /api/v1/agents`、`GET /api/v1/datasources`：从 PostgreSQL 真正查询，检查用户角色权限。
+- 管理 REST 已实现当前用户、Agent、数据源只读查询，以及 Agent/数据源新增、修改、撤销/停用。后端按可信组织身份和角色权限校验，并进行输入校验及乐观锁控制。
 - 六个 MCP 工具已经声明，除了 `list_datasources`，其余五个因未获安全认证而拒绝执行。
 - SQL 简单结构预检查仅用于拒绝，不会因为词法匹配就授予 SQL 执行权限。
-- Vue3 管理台已接入 OIDC 登录、Agent 和数据源的只读列表。其他页面明确显示开发中。
+- Vue3 管理台已接入 OIDC 登录、Agent 和数据源的增删改入口（仅撤销/停用，不支持实际删除），并提供基础表单。其他页面明确显示开发中。
 - GitHub Actions 验证 Maven 单元测试、Vue/TypeScript 构建、实际 PostgreSQL 17 DDL 和 MCP JSON 契约。
 
 ## 快速开始（开发环境）
@@ -45,7 +45,9 @@ npm install
 npm run dev
 ```
 
-OIDC 身份必须先在平台数据库中登记，且人员角色要包含 `agent:read` / `datasource:read` 才能看对应后台页面。目前尚无完整的首次配置管理员向导和 CRUD 页面。不能通过浏览器传入自定义租户 ID 进行越权查询。
+OIDC 身份必须先在平台数据库中登记，首次部署可使用 [离线管理员初始化工具](docs/BOOTSTRAP_ADMIN.md) 创建首个组织和 OIDC 管理员；工具不提供匿名 Web 入口。
+
+查看页面要求 `agent:read` / `datasource:read`，创建或修改分别要求 `agent:write` / `datasource:write`。新增 Agent 和数据源均默认禁用，当前尚未实现可信 Agent 机器身份开通以及数据库连接认证。不能通过浏览器传入自定义租户 ID 进行越权查询。
 
 ## 仍需研发的功能
 

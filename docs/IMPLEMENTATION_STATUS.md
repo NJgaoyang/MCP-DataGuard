@@ -7,16 +7,16 @@
 - Java/Spring Boot/Flowable 基础服务与 OIDC JWT 资源服务器。
 - PostgreSQL 17 单库双 Schema 的 44 张表 V1 迁移，PostgreSQL 实例 CI 验证。
 - 用户和 Agent 可信 OIDC 身份映射；有效状态与组织隔离。
-- REST 个人信息、Agent 与数据源只读列表，严格角色权限检查。
+- REST 个人信息、Agent 与数据源只读列表，以及 Agent/数据源新增、编辑、撤销/停用。全部按可信用户组织和显式角色权限校验；变更成功后追加 dg_system_event 操作记录。
 - MCP 工具 `list_datasources` 具有真实平台库查询与 Agent 授权过滤；不返回连接密钥或主机。
 - MCP 其余五工具仍为受控拒绝。
 - SQL 词法预检查只用于拒绝，不会授予 SELECT 执行权限。
-- Vue3 管理台 OIDC 登录与只读列表，Node CI 构建。
+- Vue3 管理台 OIDC 登录、真实列表、Agent/数据源新增、编辑、撤销/停用表单，Node CI 构建。
 - GitHub Actions 后端、前端、真实 PG SQL 初始化、MCP JSON 契约检查。
 
 ## 未完成或尚未通过验证
 
-- Agent/数据源 Web 创建修改、OAuth 身份登记向导、统一 RBAC 管理。
+- Agent OIDC 机器身份登记、权限授予与启用，数据源连接认证与启用、统一 RBAC 用户管理。已提供离线首次管理员初始化 CLI。
 - MySQL/PG 目标数据库连接器与真实安全 SELECT、元数据枚举。
 - ShardingSphere AST 安全认证、策略匹配与敏感字段脱敏。
 - Flowable 审批单与任务业务接口、审批人授权回避。
