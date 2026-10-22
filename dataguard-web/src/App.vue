@@ -10,6 +10,7 @@ const selected=ref('dashboard');
 const token=ref('');
 const loginForm=reactive({organization:'dataguard',username:'',password:''});
 const mustChange=ref(false);
+const forcedPasswordChange=ref(false);
 const changeForm=reactive({currentPassword:'',newPassword:''});
 const agentTokenOnce=ref('');
 const profile=ref<{orgId:string;userId:string;username:string;displayName:string}|null>(null);
@@ -210,6 +211,7 @@ async function login(){
   if(!response.ok)throw new Error(response.status===401?'用户名或密码不正确（连续错误会暂时锁定账号）':'登录失败 HTTP '+response.status);
   const result=await response.json() as {token:string;mustChangePassword:boolean};
   token.value=result.token;mustChange.value=result.mustChangePassword;
+  forcedPasswordChange.value=result.mustChangePassword;
   error.value='';profile.value=null;
   loginForm.password='';
   if(!mustChange.value){await reload();await loadAdmin();}
@@ -218,23 +220,36 @@ async function login(){
 }
 async function logout(){
  try{if(token.value)await requestWrite('/api/v1/auth/logout','POST');}catch{}
- token.value='';profile.value=null;mustChange.value=false;agents.value=[];datasources.value=[];
+ token.value='';profile.value=null;mustChange.value=false;forcedPasswordChange.value=false;
+ changeForm.currentPassword='';changeForm.newPassword='';agents.value=[];datasources.value=[];
  usersList.value=[];rolesList.value=[];agentTokenOnce.value='';
+}
+function cancelPasswordChange(){
+ if(forcedPasswordChange.value)return;
+ mustChange.value=false;changeForm.currentPassword='';changeForm.newPassword='';error.value='';
 }
 async function updatePassword(){
  saving.value=true;error.value='';
  try{
-  if(changeForm.newPassword.length<12)throw new Error('新密码至少12位且须包含大小写字母、数字和特殊字符');
+  if(changeForm.newPassword.length<12 || new TextEncoder().encode(changeForm.newPassword).length>72 ||
+    !/[\p{Lu}]/u.test(changeForm.newPassword) || !/[\p{Ll}]/u.test(changeForm.newPassword) ||
+    !/[0-9]/.test(changeForm.newPassword) || !/[^\p{L}\p{N}]/u.test(changeForm.newPassword))
+    throw new Error('新密码需要至少12位，包含大小写字母、数字和特殊字符，且不超过72字节');
+  if(changeForm.currentPassword===changeForm.newPassword)throw new Error('新密码不能与当前密码相同');
   const response=await fetch('/api/v1/auth/password',{
    method:'POST',credentials:'omit',
    headers:{Authorization:'Bearer '+token.value,'Content-Type':'application/json'},
    body:JSON.stringify(changeForm)
   });
-  if(response.status===400)throw new Error('当前密码错误，或者新密码不符合安全要求。');
+  if(response.status===400){
+   const body=await response.json().catch(()=>({})) as {detail?:string;message?:string};
+   const detail=String(body.detail||body.message||'');
+   throw new Error(detail.includes('CURRENT_PASSWORD_INCORRECT')?'当前密码不正确，请重试。':'新密码不符合安全要求，或与原密码相同。');
+  }
   if(response.status===401)throw new Error('登录会话失效，请退出后重新登录。');
   if(response.status===403)throw new Error('登录会话未获得改密权限，请重新登录。');
   if(!response.ok)throw new Error('修改密码失败：HTTP '+response.status);
-  changeForm.currentPassword='';changeForm.newPassword='';
+  // The server revokes all sessions after successful rotation. Clear the local token.
   await logout();message.success('密码已修改，原会话已失效，请使用新密码重新登录');
  }catch(e){error.value=(e as Error).message;}
  finally{saving.value=false;}
@@ -252,7 +267,7 @@ async function updatePassword(){
   <main class="main">
    <header class="bar"><div>工作台 / <strong>{{title}}</strong></div>
     <div class="actions"><a-button size="small" :disabled="!token||mustChange" :loading="busy" @click="reload">刷新</a-button>
-     <a-button v-if="token&&!mustChange" size="small" @click="mustChange=true">修改密码</a-button>
+     <a-button v-if="token&&!mustChange" size="small" @click="mustChange=true;error=''">修改密码</a-button>
      <a-button v-else size="small" @click="logout">退出</a-button>
     </div></header>
    <div class="content">
@@ -276,6 +291,7 @@ async function updatePassword(){
       <a-form-item label="新密码"><a-input-password v-model:value="changeForm.newPassword" autocomplete="new-password"/></a-form-item>
       <p>至少12位，包含大写、小写字母、数字和特殊字符。</p>
       <a-button type="primary" block html-type="submit" :loading="saving">修改密码并重新登录</a-button>
+      <a-button v-if="!forcedPasswordChange" block style="margin-top:10px" @click="cancelPasswordChange">取消修改</a-button>
      </a-form>
     </section>
     <a-alert v-if="error" type="warning" show-icon :message="error" class="alert"/>
