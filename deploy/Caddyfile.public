@@ -17,6 +17,9 @@
         Referrer-Policy no-referrer
         Strict-Transport-Security "max-age=31536000"
     }
+    handle /identity/* {
+        respond "Identity provider no longer installed" 404
+    }
     handle {
         header X-Frame-Options DENY
         reverse_proxy web:8080
