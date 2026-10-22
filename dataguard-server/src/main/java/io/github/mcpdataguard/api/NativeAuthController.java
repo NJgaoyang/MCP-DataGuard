@@ -4,7 +4,6 @@ import io.github.mcpdataguard.security.NativeTokens;
 import io.github.mcpdataguard.security.UserPrincipalResolver;
 import io.github.mcpdataguard.security.UserPrincipalResolver.UserPrincipal;
 import jakarta.servlet.http.HttpServletRequest;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +35,7 @@ public final class NativeAuthController {
  private record Window(long minute,int attempts){}
 
  @PostMapping("/login")
- @Transactional
+ @Transactional(noRollbackFor=ResponseStatusException.class)
  public LoginResult login(@RequestBody Login input,HttpServletRequest request){
   if(input==null || input.organization()==null ||
     !input.organization().matches("[a-z][a-z0-9_-]{2,79}") ||
@@ -77,7 +76,7 @@ public final class NativeAuthController {
      WHERE org_id=? AND id=?
      """,failures,failures>=5?java.sql.Timestamp.from(now.plusSeconds(900)):null,p.orgId(),p.userId());
    // A transaction that rolls back here would undo lockout. Return status AFTER committing.
-   return invalidResult();
+   throw denied();
   }
   jdbc.update("""
    UPDATE dg_user SET failed_login_attempts=0,login_locked_until=NULL,last_login_at=now()
@@ -93,10 +92,6 @@ public final class NativeAuthController {
    VALUES (?,?,?,'NATIVE_LOGIN','USER',?)
    """,UUID.randomUUID(),p.orgId(),p.userId().toString(),p.userId().toString());
   return new LoginResult(token,"Bearer",8*3600);
- }
- private static LoginResult invalidResult() {
-  // This result is never intentionally sent to browser as successful auth.
-  return new LoginResult("","INVALID",0);
  }
  @PostMapping("/logout")
  @Transactional
