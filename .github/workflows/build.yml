@@ -100,6 +100,8 @@ jobs:
           test -s deploy/keycloak/themes/dataguard/login/theme.properties
           test -s deploy/keycloak/themes/dataguard/login/resources/css/dataguard.css
           test -s deploy/keycloak/themes/dataguard/login/resources/css/dataguard-layout-v2.css
+          test -s deploy/keycloak/themes/dataguard/login/resources/css/dataguard-controls-v3.css
+          grep -q 'dataguard-controls-v3.css' deploy/keycloak/themes/dataguard/login/theme.properties
           grep -q 'dataguard-layout-v2.css' deploy/keycloak/themes/dataguard/login/theme.properties
           grep -q 'parent=keycloak.v2' deploy/keycloak/themes/dataguard/login/theme.properties
           docker compose --env-file deploy/.env.dev.example --env-file deploy/.env.idp.example --env-file deploy/.env.public.example -f deploy/compose.yaml -f deploy/compose.dev.yaml -f deploy/compose.identity.yaml -f deploy/compose.public.yaml config --quiet
