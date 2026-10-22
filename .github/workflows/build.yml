@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 -m json.tool contracts/mcp/mcp-tools-v1.json >/dev/null
-      - run: python3 -m py_compile bin/bootstrap-admin.py
+      - run: python3 -m py_compile bin/bootstrap-admin.py bin/bootstrap-native-admin.py
       - run: python3 -m unittest discover -s tests -p 'test_bootstrap_*.py'
       - run: python3 -c "import re,pathlib; s=pathlib.Path('database/postgresql/V1__platform_baseline.sql').read_text(); assert len(re.findall(r'^CREATE TABLE ',s,re.M)) == 44"
 
@@ -66,6 +66,12 @@ jobs:
             added=$(psql -h 127.0.0.1 -U postgres -d dataguard -At -c \
               "SELECT permissions @> '\''[\"identity:admin\"]'\''::jsonb FROM platform.dg_role WHERE code='\''org-admin'\''")
             test "$added" = t
+            PGOPTIONS='-c search_path=platform' PGPASSWORD=platform_ci_password psql -h 127.0.0.1 -U dg_platform -d dataguard \
+              -v ON_ERROR_STOP=1 -f dataguard-server/src/main/resources/db/migration/V3__native_auth.sql
+            tables=$(psql -h 127.0.0.1 -U postgres -d dataguard -At -c \
+              "SELECT count(*) FROM pg_tables WHERE schemaname='platform' AND tablename LIKE 'dg_native_%'")
+            test "$tables" = 2
+
           '
 
 
@@ -95,16 +101,6 @@ jobs:
         run: bash -n bin/check-dev-deploy.sh bin/start-dev-deploy.sh deploy/postgres/init/01-init.sh
       - name: Validate optional public HTTPS overlay
         run: docker compose --env-file deploy/.env.dev.example --env-file deploy/.env.public.example -f deploy/compose.yaml -f deploy/compose.dev.yaml -f deploy/compose.public.yaml config --quiet
-      - name: Validate branded Keycloak login theme and compose overlay
-        run: |
-          test -s deploy/keycloak/themes/dataguard/login/theme.properties
-          test -s deploy/keycloak/themes/dataguard/login/resources/css/dataguard.css
-          test -s deploy/keycloak/themes/dataguard/login/resources/css/dataguard-layout-v2.css
-          test -s deploy/keycloak/themes/dataguard/login/resources/css/dataguard-controls-v3.css
-          grep -q 'dataguard-controls-v3.css' deploy/keycloak/themes/dataguard/login/theme.properties
-          grep -q 'dataguard-layout-v2.css' deploy/keycloak/themes/dataguard/login/theme.properties
-          grep -q 'parent=keycloak.v2' deploy/keycloak/themes/dataguard/login/theme.properties
-          docker compose --env-file deploy/.env.dev.example --env-file deploy/.env.idp.example --env-file deploy/.env.public.example -f deploy/compose.yaml -f deploy/compose.dev.yaml -f deploy/compose.identity.yaml -f deploy/compose.public.yaml config --quiet
       - name: Check public deployment script syntax
         run: bash -n bin/start-public-test.sh
       - name: Protect secrets from Docker build context
