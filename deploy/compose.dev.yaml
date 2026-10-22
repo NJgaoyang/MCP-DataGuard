@@ -1,0 +1,58 @@
+# Overlay for deploy/compose.yaml. Only loopback web/PG ports are published.
+services:
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+      args:
+        SERVICE: dataguard-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      GATEWAY_BIND_ADDRESS: 0.0.0.0
+      GATEWAY_PORT: 8080
+      PLATFORM_JDBC_URL: jdbc:postgresql://postgres:5432/dataguard?currentSchema=platform
+      PG_PLATFORM_USER: ${PG_PLATFORM_USER:?set_platform_user}
+      PG_PLATFORM_PASSWORD: ${PG_PLATFORM_PASSWORD:?set_platform_password}
+      OIDC_ISSUER: ${OIDC_ISSUER:?set_oidc_issuer}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:?set_oidc_audience}
+      DG_ENABLE_READ_EXECUTION: "false"
+    expose:
+      - "8080"
+  workflow:
+    profiles: ["workflow"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+      args:
+        SERVICE: dataguard-workflow
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FLOWABLE_BIND_ADDRESS: 0.0.0.0
+      FLOWABLE_PORT: 8083
+      FLOWABLE_JDBC_URL: jdbc:postgresql://postgres:5432/dataguard?currentSchema=flowable
+      PG_FLOWABLE_USER: ${PG_FLOWABLE_USER:?set_flowable_user}
+      PG_FLOWABLE_PASSWORD: ${PG_FLOWABLE_PASSWORD:?set_flowable_password}
+      OIDC_ISSUER: ${OIDC_ISSUER:?set_oidc_issuer}
+      FLOWABLE_SCHEMA_UPDATE: ${FLOWABLE_SCHEMA_UPDATE:-true}
+    expose:
+      - "8083"
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+      args:
+        VITE_OIDC_AUTHORITY: ${VITE_OIDC_AUTHORITY:?set_web_oidc_authority}
+        VITE_OIDC_CLIENT_ID: ${VITE_OIDC_CLIENT_ID:?set_web_oidc_client}
+        VITE_OIDC_REDIRECT_URI: ${VITE_OIDC_REDIRECT_URI:?set_web_redirect}
+    restart: unless-stopped
+    depends_on:
+      gateway:
+        condition: service_started
+    ports:
+      - "127.0.0.1:${DG_WEB_LOCAL_PORT:-18080}:8080"
