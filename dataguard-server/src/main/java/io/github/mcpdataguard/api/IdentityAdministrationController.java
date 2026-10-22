@@ -1,11 +1,10 @@
 package io.github.mcpdataguard.api;
 
-import io.github.mcpdataguard.security.OidcIdentityHash;
+import io.github.mcpdataguard.security.NativeTokens;
 import io.github.mcpdataguard.security.UserPrincipalResolver;
 import io.github.mcpdataguard.security.UserPrincipalResolver.UserPrincipal;
 import java.util.*;
 import java.util.regex.Pattern;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -23,12 +22,8 @@ public class IdentityAdministrationController {
  private static final Pattern CODE=Pattern.compile("[a-z][a-z0-9_-]{2,63}");
  private final JdbcTemplate jdbc;
  private final UserPrincipalResolver users;
- private final String issuer;
- public IdentityAdministrationController(JdbcTemplate jdbc,UserPrincipalResolver users,
-     @Value("${dataguard.security.issuer}") String issuer){
-  this.jdbc=jdbc;this.users=users;this.issuer=issuer;
- }
- public record NewMember(String issuer,String subject,String username,String displayName){}
+ public IdentityAdministrationController(JdbcTemplate jdbc,UserPrincipalResolver users){this.jdbc=jdbc;this.users=users;}
+ public record NewMember(String username,String displayName,String password){}
  public record NewRole(String code,String name,Set<String> permissions){}
  public record ResourceId(UUID id){}
  private UserPrincipal admin(Jwt jwt){
@@ -56,24 +51,18 @@ public class IdentityAdministrationController {
  @Transactional
  public ResourceId registerUser(@AuthenticationPrincipal Jwt jwt,@RequestBody NewMember input){
   UserPrincipal actor=admin(jwt);
-  if(input==null || !issuer.equals(input.issuer()) || input.subject()==null ||
-   input.subject().isBlank() || input.subject().length()>512 || input.username()==null ||
-   !Pattern.matches("[A-Za-z0-9_.@-]{3,128}",input.username()))
-   throw bad();
+  if(input==null || input.username()==null ||
+    !Pattern.matches("[A-Za-z0-9_.@-]{3,128}",input.username()))throw bad();
+  try{NativeTokens.requireStrongPassword(input.password());}
+  catch(IllegalArgumentException err){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,err.getMessage());}
   String display=ManagementValidators.name(input.displayName());
-  String digest=OidcIdentityHash.compute(issuer,input.subject());
-  Boolean agentIdentity=jdbc.queryForObject("""
-    SELECT EXISTS(SELECT 1 FROM dg_agent_identity WHERE identity_sha256=?)
-    """,Boolean.class,digest);
-  if(Boolean.TRUE.equals(agentIdentity))throw conflict();
   UUID id=UUID.randomUUID();
   try{
    jdbc.update("""
-    INSERT INTO dg_user(id,org_id,oidc_issuer,oidc_subject,oidc_identity_sha256,
-      username,display_name,status) VALUES (?,?,?,?,?,?,?,'ACTIVE')
-    """,id,actor.orgId(),issuer,input.subject(),
-       digest,input.username(),display);
-  }catch(DataIntegrityViolationException e){throw conflict();}
+    INSERT INTO dg_user(id,org_id,username,display_name,status,password_hash,must_change_password)
+    VALUES (?,?,?,?,'ACTIVE',?,true)
+    """,id,actor.orgId(),input.username(),display,NativeTokens.passwords().encode(input.password()));
+  }catch(DataIntegrityViolationException err){throw conflict();}
   audit(actor,"USER_REGISTERED","USER",id);
   return new ResourceId(id);
  }
@@ -138,6 +127,6 @@ public class IdentityAdministrationController {
   return new ResponseStatusException(HttpStatus.CONFLICT,"Object unavailable or duplicate");
  }
  private static ResponseStatusException bad(){
-  return new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid role or OIDC member");
+  return new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid role or native member");
  }
 }
