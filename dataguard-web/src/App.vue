@@ -61,8 +61,8 @@ function newAgent(){
 }
 async function editAgent(record:Record<string,unknown>){
  try{
-  const dto=await getData<typeof agentForm>('/api/v1/agents/'+record.id+'/edit');
-  Object.assign(agentForm,{...dto,description:dto.description||''});
+  const dto=await getData<typeof agentForm & {version:number}>('/api/v1/agents/'+record.id+'/edit');
+  Object.assign(agentForm,{...dto,expectedVersion:dto.version,description:dto.description||''});
   agentDialog.value=true;
  }catch(e){error.value=(e as Error).message;}
 }
@@ -90,8 +90,8 @@ function newDatasource(){
 }
 async function editDatasource(record:Record<string,unknown>){
  try{
-  const dto=await getData<typeof sourceForm>('/api/v1/datasources/'+record.id+'/edit');
-  Object.assign(sourceForm,{...dto,databaseName:dto.databaseName||''});
+  const dto=await getData<typeof sourceForm & {version:number}>('/api/v1/datasources/'+record.id+'/edit');
+  Object.assign(sourceForm,{...dto,expectedVersion:dto.version,databaseName:dto.databaseName||''});
   sourceDialog.value=true;
  }catch(e){error.value=(e as Error).message;}
 }
@@ -99,8 +99,9 @@ async function saveDatasource(){
  saving.value=true;error.value='';
  try{
   const {id,...values}=sourceForm;
-  if(id)await requestWrite('/api/v1/datasources/'+id,'PUT',values);
-  else await requestWrite('/api/v1/datasources','POST',values);
+  const payload={...values,databaseName:values.databaseName.trim()||null};
+  if(id)await requestWrite('/api/v1/datasources/'+id,'PUT',payload);
+  else await requestWrite('/api/v1/datasources','POST',payload);
   sourceDialog.value=false;message.success('数据源配置已保存，连接默认禁用。');
   await reload();
  }catch(e){error.value=(e as Error).message;}
