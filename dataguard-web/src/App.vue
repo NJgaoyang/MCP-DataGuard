@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import {ref,onMounted,computed,reactive} from 'vue';
+import {ref,computed,reactive} from 'vue';
 import {message} from 'ant-design-vue';
-import {auth,configured} from './auth';
 const pages=[
  ['dashboard','总览仪表盘'],['agents','Agent 管理'],['datasources','数据源管理'],
  ['rules','SQL 安全规则'],['flowable','Flowable 审批'],['audit','SQL 审计与监控'],
@@ -9,15 +8,18 @@ const pages=[
 ];
 const selected=ref('dashboard');
 const token=ref('');
+const loginForm=reactive({organization:'dataguard',username:'',password:''});
+const mustChange=ref(false);
+const changeForm=reactive({currentPassword:'',newPassword:''});
+const agentTokenOnce=ref('');
 const profile=ref<{orgId:string;userId:string;username:string;displayName:string}|null>(null);
 const agents=ref<Record<string,unknown>[]>([]);
 const usersList=ref<Record<string,unknown>[]>([]);
 const rolesList=ref<{id:string;code:string;name:string;permissions:string;systemRole:boolean}[]>([]);
 const userDialog=ref(false),roleDialog=ref(false),enrollDialog=ref(false),credentialDialog=ref(false);
-const userForm=reactive({issuer:import.meta.env.VITE_OIDC_AUTHORITY||'',subject:'',username:'',displayName:''});
+const userForm=reactive({username:'',displayName:'',password:''});
 const roleForm=reactive({code:'',name:'',permissions:['agent:read','datasource:read'] as string[]});
-const enrollForm=reactive({agentId:'',issuer:import.meta.env.VITE_OIDC_AUTHORITY||'',
-  subject:'',audience:'mcp-dataguard',clientId:''});
+const enrollForm=reactive({agentId:''});
 const credentialForm=reactive({datasourceId:'',secretRef:''});
 const assignment=reactive({userId:'',roleId:''});
 const datasources=ref<Record<string,unknown>[]>([]);
@@ -142,7 +144,7 @@ async function saveUser(){
  saving.value=true;error.value='';
  try{
   await requestWrite('/api/v1/admin/users','POST',{...userForm});
-  userDialog.value=false;message.success('OIDC 用户登记成功；角色需另行分配。');
+  userDialog.value=false;userForm.password='';message.success('内置用户创建成功；请为其分配角色。');
   await loadAdmin();
  }catch(e){error.value=(e as Error).message;}
  finally{saving.value=false;}
@@ -165,15 +167,15 @@ async function assignRole(){
  finally{saving.value=false;}
 }
 function openEnroll(record:Record<string,unknown>){
- Object.assign(enrollForm,{agentId:String(record.id),subject:'',clientId:'',audience:'mcp-dataguard'});
+ Object.assign(enrollForm,{agentId:String(record.id)});agentTokenOnce.value='';
  enrollDialog.value=true;
 }
 async function saveEnroll(){
  saving.value=true;error.value='';
  try{
-  const {agentId,...payload}=enrollForm;
-  await requestWrite('/api/v1/agents/'+agentId+'/enroll','POST',payload);
-  enrollDialog.value=false;message.success('Agent OIDC 身份已绑定，仍需授权可访问的数据源。');
+  const data=await requestWrite('/api/v1/agents/'+enrollForm.agentId+'/native-token','POST');
+  agentTokenOnce.value=(data as unknown as {token:string}).token;
+  message.success('Agent 令牌仅显示一次，请立即安全保存。');
   await reload();
  }catch(e){error.value=(e as Error).message;}
  finally{saving.value=false;}
@@ -200,18 +202,35 @@ async function testDatasource(record:Record<string,unknown>){
  }catch(e){error.value='连接测试未通过，可能缺少目标白名单、服务器端凭据或有效 TLS：'+(e as Error).message;}
  finally{saving.value=false;}
 }
-async function login(){if(auth)await auth.signinRedirect();}
-
-
-async function logout(){if(auth)await auth.removeUser();token.value='';profile.value=null;agents.value=[];datasources.value=[];}
-onMounted(async()=>{
- if(!auth)return;
+async function login(){
+ busy.value=true;error.value='';
  try{
-  if(location.pathname==='/auth/callback'){await auth.signinRedirectCallback();history.replaceState(null,'','/');}
-  const user=await auth.getUser();
-  if(user&&!user.expired){token.value=user.access_token;await reload();await loadAdmin();}
+  const response=await fetch('/api/v1/auth/login',{method:'POST',credentials:'omit',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify(loginForm)});
+  if(!response.ok)throw new Error(response.status===401?'用户名或密码不正确（连续错误会暂时锁定账号）':'登录失败 HTTP '+response.status);
+  const result=await response.json() as {token:string;mustChangePassword:boolean};
+  token.value=result.token;mustChange.value=result.mustChangePassword;
+  loginForm.password='';
+  if(!mustChange.value){await reload();await loadAdmin();}
  }catch(e){error.value=(e as Error).message;}
-});
+ finally{busy.value=false;}
+}
+async function logout(){
+ try{if(token.value)await requestWrite('/api/v1/auth/logout','POST');}catch{}
+ token.value='';profile.value=null;mustChange.value=false;agents.value=[];datasources.value=[];
+ usersList.value=[];rolesList.value=[];agentTokenOnce.value='';
+}
+async function updatePassword(){
+ saving.value=true;error.value='';
+ try{
+  if(changeForm.newPassword.length<12)throw new Error('新密码至少12位且须包含大小写字母、数字和特殊字符');
+  await requestWrite('/api/v1/auth/password','POST',changeForm);
+  changeForm.currentPassword='';changeForm.newPassword='';
+  await logout();message.success('密码已修改，原会话已失效，请使用新密码重新登录');
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
+}
+
 </script>
 <template>
  <div class="shell">
@@ -224,15 +243,34 @@ onMounted(async()=>{
   <main class="main">
    <header class="bar"><div>工作台 / <strong>{{title}}</strong></div>
     <div class="actions"><a-button size="small" :disabled="!token" :loading="busy" @click="reload">刷新</a-button>
-     <a-button v-if="!token" size="small" type="primary" :disabled="!configured" @click="login">OIDC 登录</a-button>
+     <a-button v-if="token&&!mustChange" size="small" @click="mustChange=true">修改密码</a-button>
      <a-button v-else size="small" @click="logout">退出</a-button>
     </div></header>
    <div class="content">
     <div class="heading"><div><h1>{{title}}</h1><p>AI Agent 多数据库安全访问与管理平台</p></div><span class="status">开发中 · 写入禁用</span></div>
-    <a-alert v-if="!configured" type="warning" show-icon message="请先配置 OIDC：dataguard-web/.env.local"/>
-    <a-alert v-else-if="!profile" type="info" show-icon message="请登录已登记的平台用户；不支持匿名访问。"/>
+
+    <section v-if="!token" class="panel native-login">
+     <h3>MCP DataGuard 登录</h3>
+     <p>统一使用内置账号认证，无需 Keycloak。</p>
+     <a-form :model="loginForm" layout="vertical" @finish="login">
+      <a-form-item label="组织编码" name="organization"><a-input v-model:value="loginForm.organization" autocomplete="organization"/></a-form-item>
+      <a-form-item label="用户名" name="username"><a-input v-model:value="loginForm.username" autocomplete="username"/></a-form-item>
+      <a-form-item label="密码" name="password"><a-input-password v-model:value="loginForm.password" autocomplete="current-password"/></a-form-item>
+      <a-button html-type="submit" type="primary" block :loading="busy">登录</a-button>
+     </a-form>
+    </section>
+    <section v-else-if="mustChange" class="panel native-login">
+     <h3>修改登录密码</h3>
+     <a-alert type="warning" show-icon message="首次登录或管理员要求修改密码。在修改成功前，不能使用业务功能。"/>
+     <a-form :model="changeForm" layout="vertical" @finish="updatePassword">
+      <a-form-item label="当前密码"><a-input-password v-model:value="changeForm.currentPassword" autocomplete="current-password"/></a-form-item>
+      <a-form-item label="新密码"><a-input-password v-model:value="changeForm.newPassword" autocomplete="new-password"/></a-form-item>
+      <p>至少12位，包含大写、小写字母、数字和特殊字符。</p>
+      <a-button type="primary" block html-type="submit" :loading="saving">修改密码并重新登录</a-button>
+     </a-form>
+    </section>
     <a-alert v-if="error" type="warning" show-icon :message="error" class="alert"/>
-    <template v-if="profile">
+    <template v-if="profile&&!mustChange">
      <section v-if="selected==='dashboard'">
       <div class="cards">
        <article><small>当前用户</small><strong class="person">{{profile.displayName}}</strong><span>{{profile.username}}</span></article>
@@ -275,7 +313,7 @@ onMounted(async()=>{
       <div class="panel-heading">
        <h3>用户与组织角色</h3>
        <div class="actions"><a-button size="small" @click="loadAdmin">刷新</a-button>
-        <a-button size="small" @click="userDialog=true">登记 OIDC 用户</a-button>
+        <a-button size="small" @click="userDialog=true">创建用户</a-button>
         <a-button size="small" type="primary" @click="roleDialog=true">创建角色</a-button>
        </div>
       </div>
@@ -299,19 +337,19 @@ onMounted(async()=>{
      </section>
      <div v-else class="panel placeholder"><h2>{{title}}</h2><p>开发中，暂未提供真实业务功能。</p></div>
     </template>
-    <p class="disclaimer">必须使用有效 OIDC JWT、后端权限校验和隔离的数据库只读账户。当前版本不得连接生产数据库执行 SQL。</p>
+    <p class="disclaimer">必须通过内置账号或 Agent Token 验证、后端权限校验和隔离的数据库只读账户。当前版本不得连接生产数据库执行 SQL。</p>
 
    </div>
   </main>
 
-  <a-modal v-model:open="userDialog" title="登记 OIDC 用户" ok-text="保存"
+  <a-modal v-model:open="userDialog" title="创建内置用户" ok-text="保存"
    :confirm-loading="saving" @ok="saveUser">
    <a-form layout="vertical">
-    <a-form-item label="OIDC Issuer"><a-input v-model:value="userForm.issuer"/></a-form-item>
-    <a-form-item label="OIDC Subject (sub)"><a-input v-model:value="userForm.subject"/></a-form-item>
+
     <a-form-item label="用户名"><a-input v-model:value="userForm.username"/></a-form-item>
     <a-form-item label="显示名称"><a-input v-model:value="userForm.displayName"/></a-form-item>
-    <a-alert type="info" show-icon message="OIDC 用户必须已经存在于身份提供方；本操作不创建密码。"/>
+    <a-form-item label="初始复杂密码"><a-input-password v-model:value="userForm.password" autocomplete="new-password"/></a-form-item>
+    <a-alert type="info" show-icon message="创建后用户首次登录必须修改密码；密码以 BCrypt 哈希保存。"/>
    </a-form>
   </a-modal>
   <a-modal v-model:open="roleDialog" title="创建组织角色" ok-text="保存"
@@ -329,15 +367,11 @@ onMounted(async()=>{
     </a-form-item>
    </a-form>
   </a-modal>
-  <a-modal v-model:open="enrollDialog" title="绑定 Agent 的 OIDC 机器身份" ok-text="绑定"
-   :confirm-loading="saving" @ok="saveEnroll">
-   <a-form layout="vertical">
-    <a-form-item label="签发者 Issuer"><a-input v-model:value="enrollForm.issuer"/></a-form-item>
-    <a-form-item label="机器账户 Subject"><a-input v-model:value="enrollForm.subject"/></a-form-item>
-    <a-form-item label="Audience"><a-input v-model:value="enrollForm.audience"/></a-form-item>
-    <a-form-item label="OIDC Client ID"><a-input v-model:value="enrollForm.clientId"/></a-form-item>
-    <a-alert type="warning" show-icon message="只绑定在 IdP 已登记的独立机器身份；不可使用人员账号。"/>
-   </a-form>
+  <a-modal v-model:open="enrollDialog" title="生成 Agent 访问令牌" ok-text="生成或轮换"
+   :confirm-loading="saving" @ok="saveEnroll" @cancel="agentTokenOnce=''">
+   <p>新令牌仅显示一次，生成新令牌会立即撤销旧令牌。</p>
+   <a-textarea v-if="agentTokenOnce" :value="agentTokenOnce" :rows="3" readonly/>
+   <a-alert type="warning" show-icon message="请妥善保存令牌，不要提交到 Git 或在日志中输出。"/>
   </a-modal>
   <a-modal v-model:open="credentialDialog" title="配置服务端只读凭据引用" ok-text="保存"
    :confirm-loading="saving" @ok="saveCredentials">
@@ -398,7 +432,7 @@ onMounted(async()=>{
 .section{font-size:11px;color:#9baac0;margin:4px 13px 12px}.nav{border:0;display:block;text-align:left;border-radius:8px;background:transparent;color:#596d8a;padding:12px;margin:1px 0;cursor:pointer;font-size:13px}.nav:hover{background:#f7faff}.nav.active{background:#eaf3ff;color:#2570d0;font-weight:600}
 .foot{margin-top:auto;border-top:1px solid #edf0f6;padding:17px 10px;color:#869bb5;font-size:12px}.main{min-width:0;flex:1}.bar{height:65px;background:white;border-bottom:1px solid #e5ebf2;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:13px;color:#8fa0b6}.bar strong{color:#354e6c;margin-left:8px}.actions{display:flex;gap:8px}
 .content{padding:30px;max-width:1300px;margin:0 auto}.heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;gap:16px}.heading h1{font-size:23px;margin:0 0 8px}.heading p{font-size:13px;color:#8595a9;margin:0}.status{font-size:12px;color:#ad7833;background:#fff5e4;border:1px solid #ffdfa9;border-radius:18px;padding:7px 12px;white-space:nowrap}
-.alert{margin:12px 0}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}.cards article{background:#fff;border:1px solid #e6edf5;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:10px}.cards small,.cards span{color:#97a7ba}.cards strong{font-size:31px}.cards strong.person{font-size:22px}.panel{background:#fff;border:1px solid #e6edf5;border-radius:12px;padding:23px;margin-bottom:18px}.panel h3{font-size:16px;margin:0 0 17px}.assignment{display:flex;gap:10px;flex-wrap:wrap;margin:15px 0}.panel-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.panel-heading h3{margin:0}.form-pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}.form-pair :deep(.ant-form-item){min-width:0}.form-pair :deep(.ant-input-number),.form-pair :deep(.ant-select){width:100%}.panel p{font-size:13px;line-height:1.8;color:#7d8ba0}.placeholder{text-align:center;padding:65px 30px}.disclaimer{font-size:11px;color:#a1aec0;margin-top:30px}
+.alert{margin:12px 0}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}.cards article{background:#fff;border:1px solid #e6edf5;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:10px}.cards small,.cards span{color:#97a7ba}.cards strong{font-size:31px}.cards strong.person{font-size:22px}.panel{background:#fff;border:1px solid #e6edf5;border-radius:12px;padding:23px;margin-bottom:18px}.panel h3{font-size:16px;margin:0 0 17px}.assignment{display:flex;gap:10px;flex-wrap:wrap;margin:15px 0}.panel-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.panel-heading h3{margin:0}.form-pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}.form-pair :deep(.ant-form-item){min-width:0}.form-pair :deep(.ant-input-number),.form-pair :deep(.ant-select){width:100%}.panel p{font-size:13px;line-height:1.8;color:#7d8ba0}.native-login{max-width:500px;margin:30px auto;padding:34px}.native-login h3{font-size:23px}.placeholder{text-align:center;padding:65px 30px}.disclaimer{font-size:11px;color:#a1aec0;margin-top:30px}
 @media(max-width:850px){.sidebar{width:180px}.content{padding:18px}.cards{grid-template-columns:1fr}.bar{padding:0 16px}}
 @media(max-width:570px){.sidebar{width:62px;padding:20px 7px}.brand div,.section,.nav{font-size:0}.brand{padding:0 5px 25px}.nav:after{content:"•";font-size:17px}.foot{display:none}}
 </style>
