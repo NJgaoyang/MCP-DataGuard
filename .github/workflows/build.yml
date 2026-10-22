@@ -55,3 +55,19 @@ jobs:
             echo "Platform tables: $total"
             test "$total" = 44
           '
+
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dataguard-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install front-end dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify Vue TypeScript and build
+        run: npm run build
