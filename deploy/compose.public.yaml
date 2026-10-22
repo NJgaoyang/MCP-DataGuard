@@ -1,0 +1,21 @@
+# Additional HTTPS ingress for a test machine. Never publish database or JVM directly.
+services:
+  public:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_started
+    environment:
+      DG_PUBLIC_HOST: ${DG_PUBLIC_HOST:?set_public_domain}
+      ACME_EMAIL: ${ACME_EMAIL:?set_acme_email}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.public:/etc/caddy/Caddyfile:ro
+      - dg_caddy_data:/data
+      - dg_caddy_config:/config
+volumes:
+  dg_caddy_data: {}
+  dg_caddy_config: {}
