@@ -64,13 +64,11 @@ public final class SqlPreflightService {
     FROM dg_object_grant g
     WHERE g.org_id=? AND g.agent_id=? AND g.datasource_id=?
       AND (g.table_pattern=? OR g.table_pattern='*')
-      AND (g.column_pattern='*' OR g.column_pattern=ANY(?))
     """,(rs,i)->new ColumnGrantPolicy.Grant(
        rs.getString("schema_pattern"),rs.getString("table_pattern"),
        rs.getString("column_pattern"),rs.getString("decision"),
        java.util.Set.of((String[])rs.getArray("operations").getArray())),
-       agent.orgId(),agent.agentId(),id,table,
-       required.toArray(String[]::new));
+       agent.orgId(),agent.agentId(),id,table);
   if(!ColumnGrantPolicy.allows(table,required,grants))
     return denied("COLUMN_GRANT_NOT_AVAILABLE_OR_DENIED");
   // Deliberately deny even if an ACL record exists: syntax regex is not an AST.
