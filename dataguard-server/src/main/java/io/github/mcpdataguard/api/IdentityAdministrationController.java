@@ -61,13 +61,18 @@ public class IdentityAdministrationController {
    !Pattern.matches("[A-Za-z0-9_.@-]{3,128}",input.username()))
    throw bad();
   String display=ManagementValidators.name(input.displayName());
+  String digest=OidcIdentityHash.compute(issuer,input.subject());
+  Boolean agentIdentity=jdbc.queryForObject("""
+    SELECT EXISTS(SELECT 1 FROM dg_agent_identity WHERE identity_sha256=?)
+    """,Boolean.class,digest);
+  if(Boolean.TRUE.equals(agentIdentity))throw conflict();
   UUID id=UUID.randomUUID();
   try{
    jdbc.update("""
     INSERT INTO dg_user(id,org_id,oidc_issuer,oidc_subject,oidc_identity_sha256,
       username,display_name,status) VALUES (?,?,?,?,?,?,?,'ACTIVE')
     """,id,actor.orgId(),issuer,input.subject(),
-       OidcIdentityHash.compute(issuer,input.subject()),input.username(),display);
+       digest,input.username(),display);
   }catch(DataIntegrityViolationException e){throw conflict();}
   audit(actor,"USER_REGISTERED","USER",id);
   return new ResourceId(id);
