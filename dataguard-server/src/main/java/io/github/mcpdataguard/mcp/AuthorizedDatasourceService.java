@@ -21,8 +21,16 @@ public final class AuthorizedDatasourceService {
   this.jdbc=jdbc;this.identity=identity;
  }
  public Map<String,Object> list(String environment,String cursor,Integer pageSize) {
-  if(cursor!=null&&!cursor.isBlank())
-   return Map.of("code","CURSOR_NOT_IMPLEMENTED","decision","DENY","retryable",false);
+  int offset=0;
+  if(cursor!=null&&!cursor.isBlank()) {
+   if(!cursor.matches("[1-9][0-9]{0,5}"))
+    return Map.of("code","INVALID_CURSOR","decision","DENY","retryable",false);
+   try {offset=Integer.parseInt(cursor);}catch(NumberFormatException e){
+    return Map.of("code","INVALID_CURSOR","decision","DENY","retryable",false);
+   }
+   if(offset>100000)
+    return Map.of("code","INVALID_CURSOR","decision","DENY","retryable",false);
+  }
   if(environment!=null&&!List.of("DEV","TEST","STAGING","PROD").contains(environment))
    return Map.of("code","INVALID_ENVIRONMENT","decision","DENY","retryable",false);
   int limit=pageSize==null?50:pageSize;
@@ -45,8 +53,9 @@ public final class AuthorizedDatasourceService {
    """;
   List<Object> params=new ArrayList<>(List.of(actor.orgId(),actor.agentId()));
   if(environment!=null){sql+=" AND d.environment=?";params.add(environment);}
-  sql+=" ORDER BY d.name, d.id LIMIT ?";
-  params.add(limit);
+  sql+=" ORDER BY d.name, d.id LIMIT ? OFFSET ?";
+  params.add(limit+1);
+  params.add(offset);
   List<Map<String,Object>> data=jdbc.query(sql,(rs,index)->{
    Map<String,Object> result=new LinkedHashMap<>();
    result.put("id",rs.getString("id"));
@@ -57,6 +66,9 @@ public final class AuthorizedDatasourceService {
    result.put("databaseName",rs.getString("database_name"));
    return result;
   },params.toArray());
-  return Map.of("items",data,"nextCursor","","hasMore",false);
+  boolean hasMore=data.size()>limit;
+  List<Map<String,Object>> page=hasMore?data.subList(0,limit):data;
+  return Map.of("items",page,"nextCursor",hasMore?Integer.toString(offset+limit):"",
+    "hasMore",hasMore);
  }
 }
