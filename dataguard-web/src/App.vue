@@ -969,43 +969,63 @@ async function updatePassword(){
   </a-table>
  </section>
 </section>
-      <section v-else-if="selected==='users'" class="users-workspace">
-      <div class="filter-panel">
-       <label>用户名称</label><a-input v-model:value="userSearch" placeholder="搜索用户名" allow-clear style="width:220px"/>
-       <label>状态</label><a-select v-model:value="userStatusFilter" style="width:150px" :options="[{label:'全部',value:'ALL'},{label:'启用',value:'ACTIVE'},{label:'停用',value:'DISABLED'}]"/>
-       <a-button type="primary" @click="loadAdmin">查询</a-button>
-       <a-button @click="userSearch='';userStatusFilter='ALL'">重置</a-button>
-      </div>
-      <div class="user-actions"><a-button type="primary" @click="userDialog=true">新增用户</a-button><a-button @click="roleDialog=true">新增角色</a-button></div>
-      <div class="panel user-table">
-       <a-table :data-source="filteredUsers" row-key="id" size="small" :pagination="{pageSize:10,showSizeChanger:true,pageSizeOptions:['10','20','50'],showTotal:(total:number)=>'共 '+total+' 条'}"
-        :columns="[{title:'用户名',dataIndex:'username'},{title:'显示名称',dataIndex:'displayName'},{title:'状态',dataIndex:'status'}]">
-         <template #bodyCell="{column,record}">
-          <template v-if="column.dataIndex==='displayName'">{{localizedDisplayName(record.displayName)}}</template>
-          <template v-else-if="column.dataIndex==='status'"><span class="status-label" :class="{'is-active':record.status==='ACTIVE'}">{{localizedStatus(record.status)}}</span></template>
-         </template>
-        </a-table>
-      </div>
-      <div class="panel user-roles">
-       <div class="panel-heading"><h3>角色管理</h3></div>
-       <a-table :data-source="rolesList" row-key="id" size="small" :pagination="{pageSize:10}"
-        :columns="[{title:'角色编码',dataIndex:'code'},{title:'角色名称',dataIndex:'name'},{title:'权限',dataIndex:'permissions'}]">
-         <template #bodyCell="{column,record}">
-          <template v-if="column.dataIndex==='name'">{{localizedDisplayName(record.name)}}</template>
-          <template v-else-if="column.dataIndex==='permissions'"><span class="permission-summary" :title="localizedPermissions(record.permissions)">{{localizedPermissions(record.permissions)}}</span></template>
-         </template>
-        </a-table>
-       <div class="assignment">
-        <a-select v-model:value="assignment.userId" placeholder="选择用户" style="min-width:170px">
-         <a-select-option v-for="u in usersList" :key="String(u.id)" :value="String(u.id)">{{u.username}}</a-select-option>
-        </a-select>
-        <a-select v-model:value="assignment.roleId" placeholder="选择角色" style="min-width:170px">
-         <a-select-option v-for="r in rolesList.filter(x=>!x.systemRole)" :key="r.id" :value="r.id">{{localizedDisplayName(r.name)}}</a-select-option>
-        </a-select>
-        <a-button type="primary" :disabled="!assignment.userId||!assignment.roleId" @click="assignRole">分配角色</a-button>
-       </div>
-      </div>
-     </section>
+      <section v-else-if="selected==='users'" class="identity-workspace b2b-workspace">
+ <header class="workspace-heading">
+  <div><h2>用户与权限</h2><p>统一维护登录用户、角色与授权关系</p></div>
+  <div class="workspace-heading-actions">
+   <a-button v-if="workspaceTab==='users'" type="primary" @click="userDialog=true">新增用户</a-button>
+   <a-button v-else type="primary" @click="roleDialog=true">新增角色</a-button>
+  </div>
+ </header>
+ <div class="identity-stats">
+  <div><small>用户总数</small><strong>{{usersList.length}}</strong></div>
+  <div><small>已启用用户</small><strong>{{usersList.filter(x=>x.status==='ACTIVE').length}}</strong></div>
+  <div><small>角色总数</small><strong>{{rolesList.length}}</strong></div>
+ </div>
+ <section class="workspace-surface identity-content">
+  <div class="identity-tabs" role="tablist" aria-label="用户与角色">
+   <button type="button" role="tab" :aria-selected="workspaceTab==='users'" :class="{active:workspaceTab==='users'}" @click="workspaceTab='users'">用户管理 <span>{{usersList.length}}</span></button>
+   <button type="button" role="tab" :aria-selected="workspaceTab==='roles'" :class="{active:workspaceTab==='roles'}" @click="workspaceTab='roles'">角色管理 <span>{{rolesList.length}}</span></button>
+  </div>
+  <template v-if="workspaceTab==='users'">
+   <div class="identity-toolbar">
+    <a-input v-model:value="userSearch" placeholder="搜索用户名" allow-clear class="identity-search"/>
+    <a-select v-model:value="userStatusFilter" class="identity-status-select" :options="[{label:'全部状态',value:'ALL'},{label:'已启用',value:'ACTIVE'},{label:'已停用',value:'DISABLED'}]"/>
+    <a-button @click="loadAdmin">刷新</a-button>
+    <a-button @click="userSearch='';userStatusFilter='ALL'">重置筛选</a-button>
+   </div>
+   <a-table :data-source="filteredUsers" row-key="id" size="small" :scroll="{x:640}" :pagination="{pageSize:10,showSizeChanger:true,pageSizeOptions:['10','20','50'],showTotal:(total:number)=>'共 '+total+' 条'}"
+    :columns="[{title:'用户名',dataIndex:'username'},{title:'显示名称',dataIndex:'displayName'},{title:'账号状态',dataIndex:'status'}]">
+    <template #bodyCell="{column,record}">
+     <template v-if="column.dataIndex==='displayName'">{{localizedDisplayName(record.displayName)}}</template>
+     <template v-else-if="column.dataIndex==='status'"><span class="status-label" :class="{'is-active':record.status==='ACTIVE'}">{{localizedStatus(record.status)}}</span></template>
+    </template>
+   </a-table>
+  </template>
+  <template v-else>
+   <div class="identity-section-description">角色用于组合授权项，下方展示中文权限说明，内部权限编码保持不变。</div>
+   <a-table :data-source="rolesList" row-key="id" size="small" :pagination="{pageSize:10}" :scroll="{x:720}"
+    :columns="[{title:'角色编码',dataIndex:'code',width:150},{title:'角色名称',dataIndex:'name',width:170},{title:'授权权限',dataIndex:'permissions'}]">
+    <template #bodyCell="{column,record}">
+     <template v-if="column.dataIndex==='name'">{{localizedDisplayName(record.name)}}</template>
+     <template v-else-if="column.dataIndex==='permissions'"><span class="permission-summary" :title="localizedPermissions(record.permissions)">{{localizedPermissions(record.permissions)}}</span></template>
+    </template>
+   </a-table>
+   <div class="role-assignment-panel">
+    <div><h3>分配用户角色</h3><p>选择用户和自定义角色，提交后生效</p></div>
+    <div class="role-assignment-controls">
+     <a-select v-model:value="assignment.userId" placeholder="选择用户">
+      <a-select-option v-for="u in usersList" :key="String(u.id)" :value="String(u.id)">{{u.username}}</a-select-option>
+     </a-select>
+     <a-select v-model:value="assignment.roleId" placeholder="选择角色">
+      <a-select-option v-for="r in rolesList.filter(x=>!x.systemRole)" :key="r.id" :value="r.id">{{localizedDisplayName(r.name)}}</a-select-option>
+     </a-select>
+     <a-button type="primary" :disabled="!assignment.userId||!assignment.roleId" @click="assignRole">确认分配</a-button>
+    </div>
+   </div>
+  </template>
+ </section>
+</section>
      <div v-else class="panel placeholder"><h2>{{title}}</h2><p>开发中，暂未提供真实业务功能。</p></div>
     </template>
     
