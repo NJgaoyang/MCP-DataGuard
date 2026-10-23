@@ -146,6 +146,38 @@ class ApprovalOutboxIntegrationTest {
      SELECT count(*) FROM platform.dg_outbox_event
       WHERE org_id=? AND state='PENDING'
      """,Long.class,org));
+   // A published definition whose bytes no longer match its immutable digest
+   // must be rejected before creating a third process instance.
+   UUID changedRequest=UUID.randomUUID(),changedApproval=UUID.randomUUID(),
+     changedEvent=UUID.randomUUID();
+   db.update("""
+     INSERT INTO platform.dg_sql_request
+       (id,org_id,agent_id,datasource_id,tool_name,decision,request_status)
+     VALUES(?,?,?,?,'submit_change','REQUIRE_APPROVAL','PENDING_APPROVAL')
+     """,changedRequest,org,agent,source);
+   db.update("""
+     INSERT INTO platform.dg_sql_approval
+       (id,org_id,request_id,workflow_version_id,approval_status,execution_status,expires_at)
+     VALUES(?,?,?,?,'PENDING','NOT_SCHEDULED',now()+interval '1 day')
+     """,changedApproval,org,changedRequest,workflowVersion);
+   db.update("""
+     INSERT INTO platform.dg_outbox_event
+       (id,org_id,aggregate_type,aggregate_id,event_type,payload)
+     VALUES(?,?,'SQL_APPROVAL',?,'APPROVAL_REQUESTED','{}'::jsonb)
+     """,changedEvent,org,changedApproval);
+   db.update("""
+     UPDATE platform.dg_workflow_version SET bpmn_digest=?
+     WHERE org_id=? AND id=?
+     ""","0".repeat(64),org,workflowVersion);
+   dynamicWorker.poll();
+   assertNull(db.queryForObject("""
+      SELECT process_instance_id FROM platform.dg_sql_approval WHERE id=?
+      """,String.class,changedApproval));
+   assertEquals(1,db.queryForObject(
+     "SELECT attempts FROM platform.dg_outbox_event WHERE id=?",Integer.class,changedEvent));
+   assertEquals("PENDING",db.queryForObject(
+     "SELECT state FROM platform.dg_outbox_event WHERE id=?",String.class,changedEvent));
+
   }finally{engine.close();}
  }
  private static void submitStage(JdbcTemplate db,UUID org,UUID approval,UUID reviewer,int stage){
