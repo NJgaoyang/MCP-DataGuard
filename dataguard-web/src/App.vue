@@ -7,6 +7,8 @@ const pages=[
  ['users','用户与权限']
 ];
 const selected=ref('dashboard');
+const userSearch=ref('');
+const userStatusFilter=ref('ALL');
 const sqlPolicies=ref<{id:string;code:string;name:string;status:string;version:number;latestVersion:number}[]>([]);
 const policyDialog=ref(false);
 const operationalSummary=ref<{deniedRequests:number;pendingApprovals:number;openAlerts:number}|null>(null);
@@ -254,6 +256,9 @@ const grantLoading=ref(false);
 const profile=ref<{orgId:string;userId:string;username:string;displayName:string}|null>(null);
 const agents=ref<Record<string,unknown>[]>([]);
 const usersList=ref<Record<string,unknown>[]>([]);
+const filteredUsers=computed(()=>usersList.value.filter(u=>
+ String(u.username??'').toLowerCase().includes(userSearch.value.trim().toLowerCase()) &&
+ (userStatusFilter.value==='ALL'||String(u.status)===userStatusFilter.value)));
 const rolesList=ref<{id:string;code:string;name:string;permissions:string;systemRole:boolean}[]>([]);
 const userDialog=ref(false),roleDialog=ref(false),enrollDialog=ref(false),credentialDialog=ref(false);
 const userForm=reactive({username:'',displayName:'',password:''});
@@ -634,20 +639,43 @@ async function updatePassword(){
     </section>
     <a-alert v-if="error" type="warning" show-icon :message="error" class="alert"/>
     <template v-if="profile&&!mustChange">
-     <section v-if="selected==='dashboard'" class="dashboard">
-      <div class="cards">
-       <article><small>Agent</small><strong>{{agents.length}}</strong><span>已登记</span></article>
-       <article><small>数据源</small><strong>{{datasources.length}}</strong><span>已登记</span></article>
-       <article><small>待审批</small><strong>{{operationalSummary?.pendingApprovals ?? 0}}</strong><span>待处理申请</span></article>
-      </div>
-      <div class="panel quick-start">
-       <div class="panel-heading"><h3>快捷操作</h3></div>
-       <div class="quick-actions">
-        <a-button @click="selected='agents';newAgent()">新增 Agent</a-button>
-        <a-button @click="selected='datasources';newDatasource()">新增数据源</a-button>
-        <a-button @click="selected='flowable';loadOperations();loadWorkflowDesigns()">查看审批</a-button>
+     <section v-if="selected==='dashboard'" class="overview">
+      <div class="overview-main">
+       <div class="overview-stats">
+        <div class="metric"><span>Agent 数量</span><strong>{{agents.length}}</strong><span class="metric-icon blue">A</span></div>
+        <div class="metric"><span>数据源</span><strong>{{datasources.length}}</strong><span class="metric-icon cyan">D</span></div>
+        <div class="metric"><span>待审批</span><strong>{{operationalSummary?.pendingApprovals ?? 0}}</strong><span class="metric-icon mint">✓</span></div>
+        <div class="metric"><span>安全告警</span><strong>{{operationalSummary?.openAlerts ?? 0}}</strong><span class="metric-icon red">!</span></div>
+       </div>
+       <div class="panel overview-block">
+        <div class="panel-heading"><h3>业务管理</h3></div>
+        <div class="overview-shortcuts">
+         <button class="shortcut" @click="selected='agents';newAgent()"><span class="shortcut-icon blue">A</span><strong>Agent 管理</strong><span>新建 Agent →</span></button>
+         <button class="shortcut" @click="selected='datasources';newDatasource()"><span class="shortcut-icon cyan">D</span><strong>数据源管理</strong><span>新增数据源 →</span></button>
+         <button class="shortcut" @click="selected='rules';loadPolicies()"><span class="shortcut-icon violet">S</span><strong>SQL 安全规则</strong><span>查看规则 →</span></button>
+        </div>
+       </div>
+       <div class="panel overview-block">
+        <div class="panel-heading"><h3>近期 SQL 活动</h3><a-button type="link" size="small" @click="selected='audit';loadAuditEvents();loadTrends()">查看审计</a-button></div>
+        <div class="overview-figures">
+         <div><span>拒绝请求</span><strong>{{operationalSummary?.deniedRequests ?? 0}}</strong></div>
+         <div><span>待处理审批</span><strong>{{operationalSummary?.pendingApprovals ?? 0}}</strong></div>
+         <div><span>未处理告警</span><strong>{{operationalSummary?.openAlerts ?? 0}}</strong></div>
+        </div>
        </div>
       </div>
+      <aside class="overview-aside">
+       <div class="panel overview-block">
+        <div class="panel-heading"><h3>安全状态</h3></div>
+        <div class="security-overview"><div class="security-ring"><span>{{operationalSummary?.openAlerts ?? 0}}</span></div><p>当前未处理告警</p></div>
+        <div class="security-legend"><span><i class="legend-dot blue"></i>SQL 拒绝 {{operationalSummary?.deniedRequests ?? 0}}</span><span><i class="legend-dot red"></i>待处理告警 {{operationalSummary?.openAlerts ?? 0}}</span></div>
+       </div>
+       <div class="panel overview-block">
+        <div class="panel-heading"><h3>待办事项</h3><a-button type="link" size="small" @click="selected='flowable';loadOperations()">查看全部</a-button></div>
+        <div class="todo-row"><span class="todo-tag">审批</span><span>待审核申请</span><strong>{{operationalSummary?.pendingApprovals ?? 0}}</strong></div>
+        <div class="todo-row"><span class="todo-tag alert-tag">告警</span><span>待处理安全告警</span><strong>{{operationalSummary?.openAlerts ?? 0}}</strong></div>
+       </div>
+      </aside>
      </section>
      <section v-else-if="selected==='agents'" class="panel data-panel">
       <div class="panel-heading"><h3>Agent 列表 <span class="table-count">{{agents.length}}</span></h3><a-button type="primary" @click="newAgent">新增 Agent</a-button></div>
@@ -811,30 +839,31 @@ async function updatePassword(){
        </template>
       </a-table>
      </section>
-     <section v-else-if="selected==='users'" class="panel">
-      <div class="panel-heading">
-       <h3>用户与角色</h3>
-       <div class="actions"><a-button size="small" @click="loadAdmin">刷新</a-button>
-        <a-button size="small" @click="userDialog=true">创建用户</a-button>
-        <a-button size="small" type="primary" @click="roleDialog=true">创建角色</a-button>
-       </div>
+     <section v-else-if="selected==='users'" class="users-workspace">
+      <div class="filter-panel">
+       <label>用户名称</label><a-input v-model:value="userSearch" placeholder="搜索用户名" allow-clear style="width:220px"/>
+       <label>状态</label><a-select v-model:value="userStatusFilter" style="width:150px" :options="[{label:'全部',value:'ALL'},{label:'启用',value:'ACTIVE'},{label:'停用',value:'DISABLED'}]"/>
+       <a-button type="primary" @click="loadAdmin">查询</a-button>
+       <a-button @click="userSearch='';userStatusFilter='ALL'">重置</a-button>
       </div>
-      
-      <h4 style="margin-top:24px">内部用户</h4>
-      <a-table :data-source="usersList" row-key="id" size="small"
-       :columns="[{title:'用户名',dataIndex:'username'},{title:'显示名称',dataIndex:'displayName'},{title:'状态',dataIndex:'status'}]"/>
-      <h4>基础角色</h4>
-      <a-table :data-source="rolesList" row-key="id" size="small"
-       :columns="[{title:'编码',dataIndex:'code'},{title:'名称',dataIndex:'name'},{title:'权限(JSON)',dataIndex:'permissions'}]"/>
-      <h4>分配角色（不包括系统角色）</h4>
-      <div class="assignment">
-       <a-select v-model:value="assignment.userId" placeholder="选择用户" style="min-width:170px">
-        <a-select-option v-for="u in usersList" :key="String(u.id)" :value="String(u.id)">{{u.username}}</a-select-option>
-       </a-select>
-       <a-select v-model:value="assignment.roleId" placeholder="选择非系统角色" style="min-width:170px">
-        <a-select-option v-for="r in rolesList.filter(x=>!x.systemRole)" :key="r.id" :value="r.id">{{r.name}}</a-select-option>
-       </a-select>
-       <a-button type="primary" :disabled="!assignment.userId||!assignment.roleId" @click="assignRole">分配</a-button>
+      <div class="user-actions"><a-button type="primary" @click="userDialog=true">新增用户</a-button><a-button @click="roleDialog=true">新增角色</a-button></div>
+      <div class="panel user-table">
+       <a-table :data-source="filteredUsers" row-key="id" size="small" :pagination="{pageSize:10,showSizeChanger:true,pageSizeOptions:['10','20','50'],showTotal:(total:number)=>'共 '+total+' 条'}"
+        :columns="[{title:'用户名',dataIndex:'username'},{title:'显示名称',dataIndex:'displayName'},{title:'状态',dataIndex:'status'}]"/>
+      </div>
+      <div class="panel user-roles">
+       <div class="panel-heading"><h3>角色管理</h3></div>
+       <a-table :data-source="rolesList" row-key="id" size="small" :pagination="{pageSize:10}"
+        :columns="[{title:'角色编码',dataIndex:'code'},{title:'角色名称',dataIndex:'name'},{title:'权限',dataIndex:'permissions'}]"/>
+       <div class="assignment">
+        <a-select v-model:value="assignment.userId" placeholder="选择用户" style="min-width:170px">
+         <a-select-option v-for="u in usersList" :key="String(u.id)" :value="String(u.id)">{{u.username}}</a-select-option>
+        </a-select>
+        <a-select v-model:value="assignment.roleId" placeholder="选择角色" style="min-width:170px">
+         <a-select-option v-for="r in rolesList.filter(x=>!x.systemRole)" :key="r.id" :value="r.id">{{r.name}}</a-select-option>
+        </a-select>
+        <a-button type="primary" :disabled="!assignment.userId||!assignment.roleId" @click="assignRole">分配角色</a-button>
+       </div>
       </div>
      </section>
      <div v-else class="panel placeholder"><h2>{{title}}</h2><p>开发中，暂未提供真实业务功能。</p></div>
@@ -1170,4 +1199,37 @@ async function updatePassword(){
 .shell :deep(.ant-select-focused .ant-select-selector){border-color:var(--blue9)!important;box-shadow:0 0 0 1px var(--blue4)!important}
 @media(max-width:900px){.sidebar{width:176px}.content{padding:18px}.bar{padding:0 18px}}
 @media(max-width:650px){.sidebar{width:64px;padding:12px 6px}.content{padding:14px}.cards{grid-template-columns:1fr}}
+/* Layout-matched sections from the two supplied management screenshots */
+.overview{display:grid;grid-template-columns:minmax(0,1fr) 268px;gap:14px;align-items:start}
+.overview-main,.overview-aside{min-width:0;display:flex;flex-direction:column;gap:14px}
+.overview-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.metric{height:96px;background:#fff;border:0.5px solid var(--slate5);border-radius:6px;padding:16px;position:relative;display:flex;flex-direction:column;justify-content:center;gap:5px}
+.metric>span:first-child{font-size:12px;color:var(--slate11)}.metric strong{font-size:20px;line-height:26px}
+.metric-icon{position:absolute;right:12px;top:28px;display:grid;place-items:center;width:38px;height:38px;border-radius:50%;font-size:14px;font-weight:700}
+.metric-icon.blue,.shortcut-icon.blue{color:#0d74ce;background:#edf6ff}
+.metric-icon.cyan,.shortcut-icon.cyan{color:#0888a8;background:#def7f9}
+.metric-icon.mint{color:#218358;background:#ddf8e8}.metric-icon.red{color:#ce2c31;background:#ffe5e5}
+.shortcut-icon.violet{color:#6e56cf;background:#ede9fe}
+.overview-block{margin:0;padding:18px}.overview-block .panel-heading{margin-bottom:12px}
+.overview-shortcuts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.shortcut{border:0;background:#168cff;color:#fff;min-width:0;min-height:120px;padding:14px;text-align:left;border-radius:6px;display:flex;flex-direction:column;align-items:start;gap:7px;cursor:pointer}
+.shortcut:nth-child(2){background:#0d74ce}.shortcut:nth-child(3){background:#3d88e8}
+.shortcut .shortcut-icon{height:30px;width:30px;display:grid;place-items:center;border-radius:5px}
+.shortcut strong{font-size:14px}.shortcut>span:last-child{font-size:12px;color:#edf6ff;margin-top:auto}
+.overview-figures{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:12px 0}
+.overview-figures>div{display:flex;flex-direction:column;gap:12px}.overview-figures span{font-size:12px;color:var(--slate11)}.overview-figures strong{font-size:20px}
+.security-overview{display:flex;align-items:center;flex-direction:column;padding:16px 0 10px}
+.security-ring{height:130px;width:130px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(#168cff 0 68%,#2dd4bf 68% 87%,#f8d44c 87% 100%);position:relative}
+.security-ring:before{content:"";position:absolute;inset:15px;background:#fff;border-radius:50%}.security-ring span{z-index:1;font-weight:650;font-size:20px}
+.security-overview p{font-size:12px;margin:10px 0 0;color:var(--slate11)}
+.security-legend{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;font-size:12px;color:var(--slate11)}
+.legend-dot{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:5px}.legend-dot.blue{background:#168cff}.legend-dot.red{background:#e5484d}
+.todo-row{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:0.5px solid var(--slate5);font-size:12px}.todo-row:last-child{border-bottom:0}.todo-row strong{margin-left:auto;font-size:14px}.todo-tag{background:#edf6ff;color:#0d74ce;border-radius:3px;padding:3px 6px}.todo-tag.alert-tag{background:#ffe5e5;color:#ce2c31}
+.users-workspace{display:flex;flex-direction:column;gap:14px}.filter-panel{background:#fff;border:0.5px solid var(--slate5);border-radius:6px;padding:16px;display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.filter-panel label{font-size:12px;color:var(--slate11)}.user-actions{display:flex;gap:10px}.user-table,.user-roles{margin:0}
+.user-table :deep(.ant-table-thead>tr>th),.user-roles :deep(.ant-table-thead>tr>th){background:var(--slate3);font-size:12px}
+.user-table :deep(.ant-table-tbody>tr>td),.user-roles :deep(.ant-table-tbody>tr>td){padding:11px 12px;font-size:12px}
+.user-table :deep(.ant-pagination),.user-roles :deep(.ant-pagination){margin-top:18px}
+@media(max-width:1150px){.overview{grid-template-columns:1fr}.overview-aside{display:grid;grid-template-columns:1fr 1fr}.overview-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.overview-aside{grid-template-columns:1fr}.overview-shortcuts{grid-template-columns:1fr}.overview-stats{grid-template-columns:1fr 1fr}.filter-panel{align-items:stretch}}
 </style>
