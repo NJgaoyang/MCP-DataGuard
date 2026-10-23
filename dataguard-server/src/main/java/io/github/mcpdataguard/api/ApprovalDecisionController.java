@@ -1,5 +1,6 @@
 package io.github.mcpdataguard.api;
 
+import io.github.mcpdataguard.workflow.contract.SafeApprovalGraph;
 import io.github.mcpdataguard.security.UserPrincipalResolver;
 import io.github.mcpdataguard.security.UserPrincipalResolver.UserPrincipal;
 import java.util.List;
@@ -83,24 +84,47 @@ public class ApprovalDecisionController {
   if(input==null || input.expectedVersion()<0 || input.reason()==null ||
      input.reason().isBlank() || input.reason().length()>1000)
    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Review reason required");
-  List<Boolean> eligible=jdbc.query("""
-   SELECT r.requester_user_id IS DISTINCT FROM ? AS eligible
-   FROM dg_sql_approval a JOIN dg_sql_request r ON r.org_id=a.org_id AND r.id=a.request_id
+  record ReviewScope(boolean independent,String bpmn,String risk){}
+  List<ReviewScope> eligible=jdbc.query("""
+   SELECT r.requester_user_id IS DISTINCT FROM ? AS eligible,
+      v.bpmn_xml,r.risk_level
+   FROM dg_sql_approval a
+   JOIN dg_sql_request r ON r.org_id=a.org_id AND r.id=a.request_id
+   JOIN dg_workflow_version v ON v.org_id=a.org_id AND v.id=a.workflow_version_id
    WHERE a.org_id=? AND a.id=? AND a.approval_status='PENDING'
      AND a.execution_status='NOT_SCHEDULED' AND a.expires_at>now()
-     AND a.process_instance_id IS NOT NULL AND a.version=? FOR UPDATE OF a
-   """,(rs,i)->rs.getBoolean(1),u.userId(),u.orgId(),approvalId,input.expectedVersion());
+     AND a.process_instance_id IS NOT NULL AND a.version=?
+     AND v.status IN ('PUBLISHED','RETIRED') FOR UPDATE OF a
+   """,(rs,i)->new ReviewScope(rs.getBoolean(1),rs.getString(2),rs.getString(3)),
+      u.userId(),u.orgId(),approvalId,input.expectedVersion());
   if(eligible.size()!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Workflow not started or stale");
-  if(!eligible.get(0))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Self-review prohibited");
+  ReviewScope scope=eligible.get(0);
+  if(!scope.independent())throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Self-review prohibited");
+  boolean highRisk=List.of("HIGH","CRITICAL").contains(scope.risk());
+  int requiredStages;
+  try{requiredStages=SafeApprovalGraph.requiredReviewers(scope.bpmn(),highRisk);}
+  catch(SecurityException e){throw new ResponseStatusException(HttpStatus.CONFLICT,"Uncertified workflow graph");}
   List<UUID> previous=jdbc.query("""
    SELECT reviewer_user_id FROM dg_sql_approval_action
    WHERE org_id=? AND approval_id=? AND action='APPROVE'
    ORDER BY acted_at,id LIMIT 2
    """,(rs,i)->rs.getObject(1,UUID.class),u.orgId(),approvalId);
-  if(previous.size()>1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Review already complete");
+  if(previous.size()>=requiredStages)throw new ResponseStatusException(HttpStatus.CONFLICT,"Review already complete");
   if(previous.contains(u.userId()))
    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Independent second reviewer required");
   int nextStage=previous.size()+1;
+  if(scope.bpmn()!=null&&scope.bpmn().contains("safeWorkflowV2")){
+   String requiredRole=SafeApprovalGraph.roleAt(scope.bpmn(),nextStage,highRisk);
+   Boolean member=jdbc.queryForObject("""
+    SELECT EXISTS(
+     SELECT 1 FROM dg_user_role ur JOIN dg_role role
+       ON role.org_id=ur.org_id AND role.id=ur.role_id
+     WHERE ur.org_id=? AND ur.user_id=? AND role.code=?
+    )
+    """,Boolean.class,u.orgId(),u.userId(),requiredRole);
+   if(!Boolean.TRUE.equals(member))
+    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Reviewer role not assigned for current step");
+  }
   UUID actionId=UUID.randomUUID();
   jdbc.update("""
    INSERT INTO dg_sql_approval_action
@@ -108,7 +132,7 @@ public class ApprovalDecisionController {
    VALUES (?,?,?,?,?,'APPROVE',?)
    """,actionId,u.orgId(),approvalId,u.userId(),"platform:awaiting-flowable",
       input.reason().strip());
-  if(nextStage==2){
+  if(nextStage==requiredStages){
    int updated=jdbc.update("""
     UPDATE dg_sql_approval
     SET approval_status='APPROVED',decided_at=now(),updated_at=now(),version=version+1
@@ -130,7 +154,7 @@ public class ApprovalDecisionController {
    """,UUID.randomUUID(),u.orgId(),approvalId,eventPayload);
   auditDecision(u,"SQL_APPROVAL_STAGE_APPROVED",approvalId);
   return Map.of("approvalId",approvalId.toString(),"stage",nextStage,
-    "approvalStatus",nextStage==2?"APPROVED":"PENDING",
+    "approvalStatus",nextStage==requiredStages?"APPROVED":"PENDING",
     "executionStatus","NOT_SCHEDULED","executionEnabled",false);
  }
  private void auditDecision(UserPrincipal u,String operation,UUID id){
