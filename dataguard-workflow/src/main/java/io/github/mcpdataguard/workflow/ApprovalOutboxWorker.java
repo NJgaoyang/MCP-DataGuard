@@ -50,7 +50,7 @@ public class ApprovalOutboxWorker {
      WHERE e.state='PENDING' AND e.available_at<=now() AND
        ((e.event_type='APPROVAL_REQUESTED' AND a.approval_status='PENDING')
         OR (e.event_type='APPROVAL_STEP_APPROVED' AND a.process_instance_id IS NOT NULL)
-        OR (e.event_type='APPROVAL_REJECTED' AND a.approval_status='REJECTED'))
+        OR (e.event_type='APPROVAL_REJECTED' AND a.approval_status IN ('REJECTED','EXPIRED')))
      ORDER BY e.created_at,e.id
      LIMIT 1 FOR UPDATE OF e SKIP LOCKED
      """)){
