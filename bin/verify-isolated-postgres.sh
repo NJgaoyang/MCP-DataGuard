@@ -125,6 +125,19 @@ if [[ "${DG_RUN_WRITE_TLS_E2E:-false}" == "true" ]]; then
    maven:3.9.11-eclipse-temurin-21 \
    mvn -B -o -ntp -pl dataguard-server -am \
      -Dtest=CertifiedWriteJdbcTlsTest -Dsurefire.failIfNoSpecifiedTests=false test
+ docker run --rm --network "container:$NAME" \
+   -e DG_WRITE_JDBC_E2E=true \
+   -e DG_OUTBOX_E2E_URL=jdbc:postgresql://127.0.0.1:5432/dataguard \
+   -e DG_APPROVAL_MASTER_KEY_BASE64=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+   -e DG_EXECUTION_SIGNING_KEY_BASE64=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+   -e DG_TARGET_91234567111122223333444455556666_WRITE_USER=dg_test_write_role \
+   -e DG_TARGET_91234567111122223333444455556666_WRITE_PASSWORD=test-only \
+   -v "$ROOT:/workspace" -v "$CACHE:/root/.m2" \
+   -v "$WRITE_TLS_TMP/root.crt:/root/.postgresql/root.crt:ro" -w /workspace \
+   maven:3.9.11-eclipse-temurin-21 \
+   mvn -B -o -ntp -pl dataguard-server -am \
+     -Dtest=ApprovedWritePipelineIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false test
+ echo "PASSED: signed approval queue to physical JDBC commit and unknown-outcome quarantine"
  echo "PASSED: physical single-row write role and verified TLS safety"
 fi
 echo "ISOLATED_POSTGRES_VERIFICATION_PASSED"
