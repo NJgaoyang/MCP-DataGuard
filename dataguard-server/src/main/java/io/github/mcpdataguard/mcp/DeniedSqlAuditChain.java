@@ -17,6 +17,16 @@ public final class DeniedSqlAuditChain {
  private final JdbcTemplate jdbc;
  public DeniedSqlAuditChain(JdbcTemplate jdbc){this.jdbc=jdbc;}
  public void append(UUID org,UUID agent,UUID request,String fingerprint,String reason){
+  appendEvent(org,agent,request,fingerprint,reason,"mcp-denied-sql","SQL_CHECK_DENIED");
+ }
+ public void appendRead(UUID org,UUID agent,UUID request,String fingerprint,int rows,int bytes){
+  if(rows<0||rows>100||bytes<0||bytes>1048576)
+   throw new IllegalArgumentException("Invalid read receipt");
+  appendEvent(org,agent,request,fingerprint,"ROWS_"+rows+"_BYTES_"+bytes,
+    "mcp-read-sql","SQL_READ_DONE");
+ }
+ private void appendEvent(UUID org,UUID agent,UUID request,String fingerprint,String reason,
+                          String streamName,String eventType){
   if(org==null||agent==null||request==null||fingerprint==null||
     !fingerprint.matches("[a-f0-9]{64}")||reason==null||
     !reason.matches("[A-Z0-9_]{1,100}"))
@@ -24,23 +34,23 @@ public final class DeniedSqlAuditChain {
   jdbc.update("""
     INSERT INTO dg_audit_stream(id,org_id,stream_key,last_seq,last_hash)
     VALUES (?,?,?,0,?) ON CONFLICT(org_id,stream_key) DO NOTHING
-    """,UUID.randomUUID(),org,STREAM,GENESIS);
+    """,UUID.randomUUID(),org,streamName,GENESIS);
   List<Stream> streams=jdbc.query("""
     SELECT id,last_seq,last_hash FROM dg_audit_stream
     WHERE org_id=? AND stream_key=? FOR UPDATE
     """,(rs,i)->new Stream(rs.getObject("id",UUID.class),
-       rs.getLong("last_seq"),rs.getString("last_hash")),org,STREAM);
+       rs.getLong("last_seq"),rs.getString("last_hash")),org,streamName);
   if(streams.size()!=1)throw new IllegalStateException("Audit stream unavailable");
   Stream stream=streams.get(0);
   long seq=Math.addExact(stream.seq(),1);
   String payload="{\"fingerprint\":\""+fingerprint+"\",\"reason\":\""+reason+"\"}";
-  String digest=hash(stream.hash()+"|"+seq+"|"+request+"|"+agent+"|"+payload);
+  String digest=hash(stream.hash()+"|"+seq+"|"+request+"|"+agent+"|"+eventType+"|"+payload);
   jdbc.update("""
     INSERT INTO dg_audit_event(id,org_id,stream_id,seq_no,request_id,actor_type,
       actor_id,event_type,event_data,prev_hash,event_hash)
-    VALUES(?,?,?,?,?,'AGENT',?,'SQL_CHECK_DENIED',CAST(? AS jsonb),?,?)
+    VALUES(?,?,?,?,?,'AGENT',?,?,CAST(? AS jsonb),?,?)
     """,UUID.randomUUID(),org,stream.id(),seq,request,agent.toString(),
-     payload,stream.hash(),digest);
+     eventType,payload,stream.hash(),digest);
   int updated=jdbc.update("""
     UPDATE dg_audit_stream SET last_seq=?,last_hash=?
     WHERE org_id=? AND id=? AND last_seq=?
