@@ -112,32 +112,37 @@ public class ApprovalOutboxWorker {
   try(Connection c=DriverManager.getConnection(jdbcUrl,user,password)){
    c.setAutoCommit(false);
    try(PreparedStatement q=c.prepareStatement("""
-     SELECT id,org_id,attempts FROM platform.dg_outbox_event
-     WHERE state='PENDING' AND id=? AND org_id=? FOR UPDATE
-     """);ResultSet rs=q.executeQuery()){
-    if(rs.next()){
-     UUID id=rs.getObject(1,UUID.class),org=rs.getObject(2,UUID.class);
-     int attempts=rs.getInt(3)+1;
-     try(PreparedStatement u=c.prepareStatement("""
+     SELECT attempts FROM platform.dg_outbox_event
+     WHERE id=? AND org_id=? AND state='PENDING' FOR UPDATE
+     """)){
+    q.setObject(1,eventId);q.setObject(2,organization);
+    try(ResultSet rs=q.executeQuery()){
+     if(rs.next()){
+      int attempts=rs.getInt(1)+1;
+      try(PreparedStatement update=c.prepareStatement("""
        UPDATE platform.dg_outbox_event
        SET attempts=?,state=?,available_at=now()+(? * interval '1 second')
        WHERE id=? AND org_id=? AND state='PENDING'
        """)){
-      u.setInt(1,attempts);
-      u.setString(2,attempts>=8?"FAILED":"PENDING");
-      u.setInt(3,Math.min(3600,10*(1<<Math.min(attempts,8))));
-      u.setObject(4,id);u.setObject(5,org);u.executeUpdate();
-     }
-     if(attempts>=8){
-      try(PreparedStatement a=c.prepareStatement("""
-       INSERT INTO platform.dg_system_event(id,org_id,actor,operation,resource_type,resource_id)
-       VALUES (?,?,'FLOWABLE_OUTBOX_WORKER','APPROVAL_EVENT_DEAD_LETTER','OUTBOX',?)
-       """)){
-       a.setObject(1,UUID.randomUUID());a.setObject(2,org);
-       a.setString(3,id.toString());a.executeUpdate();
+       update.setInt(1,attempts);
+       update.setString(2,attempts>=8?"FAILED":"PENDING");
+       update.setInt(3,Math.min(3600,10*(1<<Math.min(attempts,8))));
+       update.setObject(4,eventId);update.setObject(5,organization);
+       if(update.executeUpdate()!=1)throw new IllegalStateException("Concurrent outbox change");
+      }
+      if(attempts>=8){
+       try(PreparedStatement audit=c.prepareStatement("""
+        INSERT INTO platform.dg_system_event
+           (id,org_id,actor,operation,resource_type,resource_id)
+        VALUES (?,?,'FLOWABLE_OUTBOX_WORKER','APPROVAL_EVENT_DEAD_LETTER','OUTBOX',?)
+        """)){
+        audit.setObject(1,UUID.randomUUID());
+        audit.setObject(2,organization);
+        audit.setString(3,eventId.toString());
+        audit.executeUpdate();
+       }
       }
      }
-    }
     }
    }
    c.commit();
