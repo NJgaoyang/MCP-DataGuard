@@ -41,6 +41,10 @@ services:
       PG_FLOWABLE_USER: ${PG_FLOWABLE_USER:?set_flowable_user}
       PG_FLOWABLE_PASSWORD: ${PG_FLOWABLE_PASSWORD:?set_flowable_password}
       FLOWABLE_SCHEMA_UPDATE: ${FLOWABLE_SCHEMA_UPDATE:-true}
+      FLOWABLE_OUTBOX_ENABLED: ${FLOWABLE_OUTBOX_ENABLED:-false}
+      PLATFORM_JDBC_URL: jdbc:postgresql://postgres:5432/dataguard?currentSchema=platform
+      PG_PLATFORM_USER: ${PG_PLATFORM_USER:?set_platform_user}
+      PG_PLATFORM_PASSWORD: ${PG_PLATFORM_PASSWORD:?set_platform_password}
     expose:
       - "8083"
   web:
