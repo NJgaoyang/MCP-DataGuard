@@ -17,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
  * bound parameters or database credentials. Missing resources are not materialized.
  */
 @Service
-public final class SqlRequestAuditService {
+public class SqlRequestAuditService {
  private final JdbcTemplate jdbc;
  private final AgentPrincipalResolver agents;
  private final DeniedSqlAuditChain chain;
