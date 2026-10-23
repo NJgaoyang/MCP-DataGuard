@@ -32,7 +32,7 @@ public class AgentEnrollmentController {
   UserPrincipal u=actor(jwt,"agent:permission:write");
   Instant now=Instant.now();
   if(input==null || input.datasourceId()==null ||
-     !Set.of("ALLOW","DENY").contains(input.action()) ||
+     (input.action()==null || !Set.of("ALLOW","DENY").contains(input.action())) ||
      (input.expiresAt()!=null && (!input.expiresAt().isAfter(now) ||
         input.expiresAt().isAfter(now.plusSeconds(365L*86400)))))
    throw bad("Permission invalid");
