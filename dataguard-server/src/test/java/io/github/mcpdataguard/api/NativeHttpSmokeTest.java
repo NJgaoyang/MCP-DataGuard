@@ -30,9 +30,13 @@ class NativeHttpSmokeTest {
   return new Reply(result.statusCode(),result.body());
  }
  private static String token(String json){
-  var m=Pattern.compile("\\"token\\"\\s*:\\s*\\"([^\\"]+)\\"").matcher(json);
-  assertTrue(m.find(),"Native login must return an opaque bearer token");
-  return m.group(1);
+  int key=json.indexOf("token");
+  assertTrue(key>=0);
+  int colon=json.indexOf(':',key);
+  int first=json.indexOf('"',colon);
+  int end=json.indexOf('"',first+1);
+  assertTrue(first>colon && end>first);
+  return json.substring(first+1,end);
  }
  @Test void realFirstLoginPasswordRotationAuthorizationMcpAndConsoleHttp()throws Exception{
   String base=System.getenv("DG_HTTP_E2E_URL"),web=System.getenv("DG_WEB_E2E_URL"),
