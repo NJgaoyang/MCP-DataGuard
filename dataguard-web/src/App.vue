@@ -667,7 +667,7 @@ async function updatePassword(){
       <aside class="overview-aside">
        <div class="panel overview-block">
         <div class="panel-heading"><h3>安全状态</h3></div>
-        <div class="security-overview"><div class="security-ring"><span>{{operationalSummary?.openAlerts ?? 0}}</span></div><p>当前未处理告警</p></div>
+        <div class="security-overview"><div class="security-ring"><span>{{operationalSummary?.openAlerts ?? 0}}</span></div><p>未处理告警</p></div>
         <div class="security-legend"><span><i class="legend-dot blue"></i>SQL 拒绝 {{operationalSummary?.deniedRequests ?? 0}}</span><span><i class="legend-dot red"></i>待处理告警 {{operationalSummary?.openAlerts ?? 0}}</span></div>
        </div>
        <div class="panel overview-block">
@@ -1219,7 +1219,7 @@ async function updatePassword(){
 .overview-figures{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:12px 0}
 .overview-figures>div{display:flex;flex-direction:column;gap:12px}.overview-figures span{font-size:12px;color:var(--slate11)}.overview-figures strong{font-size:20px}
 .security-overview{display:flex;align-items:center;flex-direction:column;padding:16px 0 10px}
-.security-ring{height:130px;width:130px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(#168cff 0 68%,#2dd4bf 68% 87%,#f8d44c 87% 100%);position:relative}
+.security-ring{height:130px;width:130px;border-radius:50%;display:grid;place-items:center;background:var(--slate5);position:relative}
 .security-ring:before{content:"";position:absolute;inset:15px;background:#fff;border-radius:50%}.security-ring span{z-index:1;font-weight:650;font-size:20px}
 .security-overview p{font-size:12px;margin:10px 0 0;color:var(--slate11)}
 .security-legend{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;font-size:12px;color:var(--slate11)}
