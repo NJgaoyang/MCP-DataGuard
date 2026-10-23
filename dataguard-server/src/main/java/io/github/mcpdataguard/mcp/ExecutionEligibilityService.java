@@ -33,7 +33,24 @@ public class ExecutionEligibilityService {
        WHERE ac.org_id=a.org_id AND ac.approval_id=a.id AND ac.action='APPROVE') AS reviews,
       (SELECT count(DISTINCT ac.reviewer_user_id) FROM dg_sql_approval_action ac
        WHERE ac.org_id=a.org_id AND ac.approval_id=a.id AND ac.action='APPROVE') AS distinct_reviews,
-      (a.process_instance_id IS NOT NULL) AS has_flowable
+      (a.process_instance_id IS NOT NULL
+       AND NOT EXISTS(
+        SELECT 1 FROM dg_sql_approval_action ac
+        WHERE ac.org_id=a.org_id AND ac.approval_id=a.id AND ac.action='APPROVE'
+          AND (ac.flowable_task_id IS NULL OR
+               ac.flowable_task_id LIKE 'platform:%')
+       )
+       AND NOT EXISTS(
+        SELECT 1 FROM dg_outbox_event e WHERE e.org_id=a.org_id
+          AND e.aggregate_id=a.id
+          AND e.event_type IN ('APPROVAL_REQUESTED','APPROVAL_STEP_APPROVED')
+          AND e.state<>'PUBLISHED'
+       )
+       AND (SELECT count(*) FROM dg_outbox_event e
+            WHERE e.org_id=a.org_id AND e.aggregate_id=a.id
+              AND e.event_type='APPROVAL_STEP_APPROVED'
+              AND e.state='PUBLISHED')=2
+      ) AS has_flowable
     FROM dg_sql_approval a
     JOIN dg_sql_request r ON r.org_id=a.org_id AND r.id=a.request_id
     JOIN dg_sql_request_payload p ON p.org_id=r.org_id AND p.request_id=r.id
