@@ -165,6 +165,52 @@ public class SqlPolicyController {
      "revision",rule.get("revision"),"priority",rule.get("priority"),
      "simulationOnly",true,"executionEnabled",false);
  }
+ public record LifecycleInput(long expectedVersion){}
+ /** Publishing never enables SQL execution: only DENY rules can be activated. */
+ @PostMapping("/{policyId}/publish")
+ @Transactional
+ public Map<String,Object> publish(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID policyId,
+                                    @RequestBody LifecycleInput input){
+  UserPrincipal u=admin(jwt);
+  if(input==null || input.expectedVersion()<0)
+   throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid version");
+  List<Integer> latest=jdbc.query("""
+    SELECT latest_version FROM dg_sql_policy WHERE org_id=? AND id=? AND status='DRAFT'
+     AND version=? FOR UPDATE
+    """,(rs,i)->rs.getInt(1),u.orgId(),policyId,input.expectedVersion());
+  if(latest.size()!=1 || latest.get(0)==0)
+   throw new ResponseStatusException(HttpStatus.CONFLICT,"Draft unavailable or empty");
+  int revision=latest.get(0);
+  int marked=jdbc.update("""
+    UPDATE dg_sql_policy_version SET published_by=?,published_at=now()
+    WHERE org_id=? AND policy_id=? AND revision=? AND decision='DENY'
+      AND published_at IS NULL
+    """,u.userId(),u.orgId(),policyId,revision);
+  if(marked!=1)
+   throw new ResponseStatusException(HttpStatus.CONFLICT,"Only unpublished DENY may be activated");
+  int changed=jdbc.update("""
+    UPDATE dg_sql_policy SET status='ACTIVE',version=version+1,updated_at=now()
+    WHERE org_id=? AND id=? AND status='DRAFT' AND version=?
+    """,u.orgId(),policyId,input.expectedVersion());
+  if(changed!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Version conflict");
+  audit(u,"SQL_POLICY_DENY_PUBLISHED",policyId);
+  return Map.of("status","ACTIVE","revision",revision,"executionEnabled",false);
+ }
+ @PostMapping("/{policyId}/disable")
+ @Transactional
+ public Map<String,Object> disable(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID policyId,
+                                    @RequestBody LifecycleInput input){
+  UserPrincipal u=admin(jwt);
+  if(input==null || input.expectedVersion()<0)
+   throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid version");
+  int changed=jdbc.update("""
+   UPDATE dg_sql_policy SET status='DISABLED',version=version+1,updated_at=now()
+   WHERE org_id=? AND id=? AND status='ACTIVE' AND version=?
+   """,u.orgId(),policyId,input.expectedVersion());
+  if(changed!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Policy unavailable or stale");
+  audit(u,"SQL_POLICY_DISABLED",policyId);
+  return Map.of("status","DISABLED","executionEnabled",false);
+ }
  private void audit(UserPrincipal u,String operation,UUID id){
   jdbc.update("""
     INSERT INTO dg_system_event(id,org_id,actor,operation,resource_type,resource_id)
