@@ -118,12 +118,56 @@ public class ReadOnlyQueryService {
   // column is still REDACT. PARTIAL/HASH are not safe without key management.
   Map<String,String> masks=new java.util.HashMap<>();
   List<Map.Entry<String,String>> configured=jdbc.query("""
-   SELECT column_pattern,algorithm FROM dg_mask_rule
-   WHERE org_id=? AND datasource_id=? AND enabled=true
-     AND schema_pattern IN ('*','public') AND table_pattern IN ('*',?)
-     AND (column_pattern='*' OR column_pattern ~ '^[a-z][a-z0-9_]*$')
+   SELECT m.column_pattern,m.algorithm FROM dg_mask_rule m
+   WHERE m.org_id=? AND m.datasource_id=? AND m.enabled=true
+     AND m.schema_pattern IN ('*','public') AND m.table_pattern IN ('*',?)
+     AND (m.column_pattern='*' OR m.column_pattern ~ '^[a-z][a-z0-9_]*
+  for(String column:required){
+   String selected="REDACT";
+   for(Map.Entry<String,String> rule:configured){
+    if(rule.getKey().equals("*")||rule.getKey().equals(column)){
+     selected=rule.getValue();break;
+    }
+   }
+   if(!List.of("REDACT","NULLIFY","HASH","PARTIAL").contains(selected))
+    return deny("MASK_ALGORITHM_NOT_CERTIFIED");
+   if("HASH".equals(selected)&&!executor.hashMaskConfigured())
+    return deny("MASK_HMAC_KEY_NOT_CONFIGURED");
+   masks.put(column,selected);
+  }
+  try{
+   IsolatedReadOnlyExecutor.Result result=executor.execute(
+     new IsolatedReadOnlyExecutor.Target(source.host(),source.port(),source.db(),username,password),
+     new IsolatedReadOnlyExecutor.Request(sql,parameters,required,maxRows,maxBytes,timeout,masks,
+       actor.orgId()+":"+id));
+   // A failed control-plane receipt fails closed; never disclose unlogged results.
+   receipts.record(actor.orgId(),actor.agentId(),id,database,sql,
+     result.rows().size(),result.returnedBytes());
+   return Map.of("decision","ALLOW","operation","SELECT",
+      "columns",result.columns(),"rows",result.rows(),
+      "rowCount",result.rows().size(),"returnedBytes",result.returnedBytes(),
+      "masking","TENANT_SCOPED_POLICY","executionEnabled",true);
+  }catch(RuntimeException|SQLException e){
+   return deny("READ_EXECUTION_REJECTED");
+  }
+ }
+}
+)
+     AND (m.rule_config->>'roleCode' IS NULL
+      OR EXISTS(
+       SELECT 1 FROM dg_agent a JOIN dg_user_role ur
+         ON ur.org_id=a.org_id AND ur.user_id=a.owner_user_id
+       JOIN dg_role role ON role.org_id=ur.org_id AND role.id=ur.role_id
+       WHERE a.org_id=m.org_id AND a.id=? AND
+         role.code=m.rule_config->>'roleCode'
+      ))
+     AND (m.algorithm IN ('REDACT','NULLIFY')
+       OR m.rule_config->>'roleCode' IS NOT NULL)
+   ORDER BY m.priority,
+     CASE WHEN m.table_pattern='*' THEN 1 ELSE 0 END,
+     CASE WHEN m.column_pattern='*' THEN 1 ELSE 0 END,m.id
    """,(rs,i)->Map.entry(rs.getString(1),rs.getString(2)),
-       actor.orgId(),id,table);
+       actor.orgId(),id,table,actor.agentId());
   for(String column:required){
    String selected="REDACT";
    for(Map.Entry<String,String> rule:configured){
