@@ -102,10 +102,14 @@ public class WorkflowDesignController {
   UserPrincipal u=admin(jwt);
   if(input==null||!label(input.name())||!label(input.ownerLabel())||!label(input.dbaLabel()))
    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid workflow labels");
+  List<UUID> locked=jdbc.query("""
+    SELECT id FROM dg_workflow_template
+    WHERE org_id=? AND id=? AND state='ACTIVE' FOR UPDATE
+    """,(rs,i)->rs.getObject(1,UUID.class),u.orgId(),id);
+  if(locked.size()!=1)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Design not found");
   List<Integer> versions=jdbc.query("""
-    SELECT COALESCE(MAX(v.revision),0) FROM dg_workflow_template w
-    LEFT JOIN dg_workflow_version v ON v.org_id=w.org_id AND v.workflow_id=w.id
-    WHERE w.org_id=? AND w.id=? AND w.state='ACTIVE' GROUP BY w.id FOR UPDATE OF w
+    SELECT COALESCE(MAX(revision),0) FROM dg_workflow_version
+    WHERE org_id=? AND workflow_id=?
     """,(rs,i)->rs.getInt(1),u.orgId(),id);
   if(versions.size()!=1)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Design not found");
   int next=versions.get(0)+1;
