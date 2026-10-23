@@ -116,14 +116,14 @@ public final class SafeApprovalGraph {
    catch(Exception e){throw new SecurityException("INVALID_APPROVAL_XML");}
  }
  public static int requiredReviewers(String xml,boolean highRisk){
-  if(xml!=null&&xml.contains("id=\"safeWorkflowV2\"")){
+  if(xml!=null&&xml.contains("safeWorkflowV2")){
    Design graph=parseCertified(xml);
    return graph.steps().size()-(graph.highRiskOnlyLast()&&!highRisk?1:0);
   }
   return 2; // Certified legacy two-level process.
  }
  public static String roleAt(String xml,int stage,boolean highRisk){
-  if(xml!=null&&xml.contains("id=\"safeWorkflowV2\"")){
+  if(xml!=null&&xml.contains("safeWorkflowV2")){
    var graph=parseCertified(xml);
    if(stage<1||stage>requiredReviewers(xml,highRisk))
     throw new SecurityException("INVALID_REVIEW_STAGE");
