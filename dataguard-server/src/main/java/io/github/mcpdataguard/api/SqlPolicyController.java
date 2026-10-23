@@ -1,5 +1,6 @@
 package io.github.mcpdataguard.api;
 
+import io.github.mcpdataguard.mcp.RuntimeSqlPolicyService;
 import io.github.mcpdataguard.security.UserPrincipalResolver;
 import io.github.mcpdataguard.security.UserPrincipalResolver.UserPrincipal;
 import java.util.List;
@@ -83,14 +84,23 @@ public class SqlPolicyController {
   audit(u,"SQL_POLICY_DRAFT_RENAMED",policyId);
   return Map.of("id",policyId.toString(),"status","DRAFT","version",input.expectedVersion()+1);
  }
- public record RuleInput(String decision,int priority,String table,String environment){}
+ public record RuleInput(String decision,int priority,String table,String environment,String operation){
+  public RuleInput(String decision,int priority,String table,String environment){
+   this(decision,priority,table,environment,"SELECT");
+  }
+ }
+ private static String operation(RuleInput input){
+  return input.operation()==null?"SELECT":input.operation();
+ }
  private static Map<String,Object> validate(RuleInput input){
   if(input==null || input.decision()==null || !List.of("DENY","REQUIRE_APPROVAL").contains(input.decision()) ||
      input.priority()<1 || input.priority()>10000 ||
      input.table()==null || !input.table().matches("[a-z][a-z0-9_]{0,254}") ||
-     input.environment()==null || !List.of("DEV","TEST","STAGING","PROD").contains(input.environment()))
+     input.environment()==null || !List.of("DEV","TEST","STAGING","PROD").contains(input.environment()) ||
+     !List.of("SELECT","UPDATE","DELETE","INSERT").contains(operation(input)))
    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid draft rule");
-  return Map.of("table",input.table(),"environment",input.environment(),"operation","SELECT");
+  return Map.of("table",input.table(),"environment",input.environment(),
+    "operation",operation(input));
  }
  @GetMapping("/{policyId}/versions")
  public List<Map<String,Object>> versions(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID policyId){
@@ -117,7 +127,7 @@ public class SqlPolicyController {
    """,(rs,i)->rs.getInt(1),u.orgId(),policyId);
   if(current.size()!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Draft unavailable");
   int revision=current.get(0)+1;
-  String json="{\"environment\":\""+input.environment()+"\",\"table\":\""+input.table()+"\",\"operation\":\"SELECT\"}";
+  String json="{\"environment\":\""+input.environment()+"\",\"table\":\""+input.table()+"\",\"operation\":\""+operation(input)+"\"}";
   String digest;
   try{
    byte[] hash=java.security.MessageDigest.getInstance("SHA-256")
@@ -165,7 +175,9 @@ public class SqlPolicyController {
      "revision",rule.get("revision"),"priority",rule.get("priority"),
      "simulationOnly",true,"executionEnabled",false);
  }
- public record EffectiveInput(String table,String environment){}
+ public record EffectiveInput(String table,String environment,String operation){
+  public EffectiveInput(String table,String environment){this(table,environment,"SELECT");}
+ }
  /**
   * Deterministic precedence across active published policies:
   * priority ascending, then DENY before REQUIRE_APPROVAL, then stable policy ID.
@@ -180,24 +192,14 @@ public class SqlPolicyController {
      input.environment()==null||
      !List.of("DEV","TEST","STAGING","PROD").contains(input.environment()))
    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid evaluation scope");
-  List<Map<String,Object>> ordered=jdbc.query("""
-    SELECT p.id AS policy_id,p.code,v.revision,v.priority,v.decision
-    FROM dg_sql_policy p JOIN dg_sql_policy_version v
-      ON v.org_id=p.org_id AND v.policy_id=p.id AND v.revision=p.latest_version
-    WHERE p.org_id=? AND p.status='ACTIVE' AND v.published_at IS NOT NULL
-      AND v.decision IN ('DENY','REQUIRE_APPROVAL')
-      AND v.rule->>'operation'='SELECT'
-      AND v.rule->>'environment'=? AND v.rule->>'table'=?
-    ORDER BY v.priority ASC,
-       CASE WHEN v.decision='DENY' THEN 0 ELSE 1 END ASC,p.id ASC LIMIT 100
-    """,(rs,i)->Map.<String,Object>of(
-      "policyId",rs.getString("policy_id"),"code",rs.getString("code"),
-      "revision",rs.getInt("revision"),"priority",rs.getInt("priority"),
-      "decision",rs.getString("decision")),
-      u.orgId(),input.environment(),input.table());
-  boolean denied=ordered.stream().anyMatch(row->"DENY".equals(row.get("decision")));
-  // A single published DENY overrides weaker rules regardless of priority.
-  String decision=denied?"DENY":ordered.isEmpty()?"DENY":"REQUIRE_APPROVAL";
+  String operation=input.operation()==null?"SELECT":input.operation();
+  RuntimeSqlPolicyService.Verdict result=new RuntimeSqlPolicyService(jdbc)
+    .evaluate(u.orgId(),input.environment(),input.table(),operation);
+  List<Map<String,Object>> ordered=result.matches().stream().map(rule->
+    Map.<String,Object>of("policyId",rule.policyId().toString(),
+      "code",rule.code(),"revision",rule.revision(),"priority",rule.priority(),
+      "decision",rule.decision())).toList();
+  String decision="NO_RULE".equals(result.decision())?"DENY":result.decision();
   return Map.of("decision",decision,"matched",!ordered.isEmpty(),
     "matchedRules",ordered,"evaluatedRuleCount",ordered.size(),
     "simulationOnly",true,"executionEnabled",false);
