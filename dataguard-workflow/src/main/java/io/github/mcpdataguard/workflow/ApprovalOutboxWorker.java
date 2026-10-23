@@ -100,7 +100,7 @@ public class ApprovalOutboxWorker {
              expectedDigest.getBytes(java.nio.charset.StandardCharsets.US_ASCII)))
            throw new SecurityException("PUBLISHED_BPMN_DIGEST_MISMATCH");
           instanceId=dynamic.start(xml,approval.toString(),org.toString(),
-             List.of("HIGH","CRITICAL").contains(version.getString(3)));
+             ("HIGH".equals(version.getString(3)) || "CRITICAL".equals(version.getString(3))));
          }
         }
        }else{
