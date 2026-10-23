@@ -68,8 +68,76 @@ public class ApprovalDecisionController {
    INSERT INTO dg_system_event(id,org_id,actor,operation,resource_type,resource_id)
    VALUES (?,?,?,'SQL_APPROVAL_REJECTED','SQL_APPROVAL',?)
    """,UUID.randomUUID(),u.orgId(),u.userId().toString(),approvalId.toString());
+  jdbc.update("""
+    INSERT INTO dg_outbox_event(id,org_id,aggregate_type,aggregate_id,event_type,payload)
+    VALUES (?,?,'SQL_APPROVAL',?,'APPROVAL_REJECTED','{}'::jsonb)
+    """,UUID.randomUUID(),u.orgId(),approvalId);
   return Map.of("approvalId",approvalId.toString(),"approvalStatus","REJECTED",
      "executionStatus","CANCELLED","sqlExecutionEnabled",false);
+ }
+ @PostMapping("/{approvalId}/approve")
+ @Transactional
+ public Map<String,Object> approve(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID approvalId,
+                                    @RequestBody DecisionInput input){
+  UserPrincipal u=actor(jwt);
+  if(input==null || input.expectedVersion()<0 || input.reason()==null ||
+     input.reason().isBlank() || input.reason().length()>1000)
+   throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Review reason required");
+  List<Boolean> eligible=jdbc.query("""
+   SELECT r.requester_user_id IS DISTINCT FROM ? AS eligible
+   FROM dg_sql_approval a JOIN dg_sql_request r ON r.org_id=a.org_id AND r.id=a.request_id
+   WHERE a.org_id=? AND a.id=? AND a.approval_status='PENDING'
+     AND a.execution_status='NOT_SCHEDULED' AND a.expires_at>now()
+     AND a.process_instance_id IS NOT NULL AND a.version=? FOR UPDATE OF a
+   """,(rs,i)->rs.getBoolean(1),u.userId(),u.orgId(),approvalId,input.expectedVersion());
+  if(eligible.size()!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Workflow not started or stale");
+  if(!eligible.get(0))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Self-review prohibited");
+  List<UUID> previous=jdbc.query("""
+   SELECT reviewer_user_id FROM dg_sql_approval_action
+   WHERE org_id=? AND approval_id=? AND action='APPROVE'
+   ORDER BY acted_at,id LIMIT 2
+   """,(rs,i)->rs.getObject(1,UUID.class),u.orgId(),approvalId);
+  if(previous.size()>1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Review already complete");
+  if(previous.contains(u.userId()))
+   throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Independent second reviewer required");
+  int nextStage=previous.size()+1;
+  UUID actionId=UUID.randomUUID();
+  jdbc.update("""
+   INSERT INTO dg_sql_approval_action
+    (id,org_id,approval_id,reviewer_user_id,flowable_task_id,action,comment_text)
+   VALUES (?,?,?,?,?,'APPROVE',?)
+   """,actionId,u.orgId(),approvalId,u.userId(),"platform:awaiting-flowable",
+      input.reason().strip());
+  if(nextStage==2){
+   int updated=jdbc.update("""
+    UPDATE dg_sql_approval
+    SET approval_status='APPROVED',decided_at=now(),updated_at=now(),version=version+1
+    WHERE org_id=? AND id=? AND approval_status='PENDING' AND version=?
+    """,u.orgId(),approvalId,input.expectedVersion());
+   if(updated!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Approval changed");
+  }else{
+   int updated=jdbc.update("""
+    UPDATE dg_sql_approval SET version=version+1,updated_at=now()
+    WHERE org_id=? AND id=? AND approval_status='PENDING' AND version=?
+    """,u.orgId(),approvalId,input.expectedVersion());
+   if(updated!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Approval changed");
+  }
+  String eventPayload="{\"actionId\":\""+actionId+"\",\"reviewerId\":\""+u.userId()+
+    "\",\"stage\":"+nextStage+"}";
+  jdbc.update("""
+   INSERT INTO dg_outbox_event(id,org_id,aggregate_type,aggregate_id,event_type,payload)
+   VALUES (?,?,'SQL_APPROVAL',?,'APPROVAL_STEP_APPROVED',CAST(? AS jsonb))
+   """,UUID.randomUUID(),u.orgId(),approvalId,eventPayload);
+  auditDecision(u,"SQL_APPROVAL_STAGE_APPROVED",approvalId);
+  return Map.of("approvalId",approvalId.toString(),"stage",nextStage,
+    "approvalStatus",nextStage==2?"APPROVED":"PENDING",
+    "executionStatus","NOT_SCHEDULED","executionEnabled",false);
+ }
+ private void auditDecision(UserPrincipal u,String operation,UUID id){
+  jdbc.update("""
+    INSERT INTO dg_system_event(id,org_id,actor,operation,resource_type,resource_id)
+    VALUES (?,?,?,?,'SQL_APPROVAL',?)
+    """,UUID.randomUUID(),u.orgId(),u.userId().toString(),operation,id.toString());
  }
  @GetMapping("/{approvalId}/actions")
  public List<Map<String,String>> actions(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID approvalId){
