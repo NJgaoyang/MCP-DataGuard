@@ -44,7 +44,7 @@ public final class DeniedSqlAuditChain {
   Stream stream=streams.get(0);
   long seq=Math.addExact(stream.seq(),1);
   String payload="{\"fingerprint\":\""+fingerprint+"\",\"reason\":\""+reason+"\"}";
-  String digest=hash(stream.hash()+"|"+seq+"|"+request+"|"+agent+"|"+eventType+"|"+payload);
+  String digest=computeEventHash(stream.hash(),seq,request,agent.toString(),eventType,fingerprint,reason);
   jdbc.update("""
     INSERT INTO dg_audit_event(id,org_id,stream_id,seq_no,request_id,actor_type,
       actor_id,event_type,event_data,prev_hash,event_hash)
@@ -56,6 +56,16 @@ public final class DeniedSqlAuditChain {
     WHERE org_id=? AND id=? AND last_seq=?
     """,seq,digest,org,stream.id(),stream.seq());
   if(updated!=1)throw new IllegalStateException("Concurrent audit write");
+ }
+ public static String computeEventHash(String previous,long sequence,UUID request,
+      String actorId,String type,String fingerprint,String reason){
+  if(previous==null||!previous.matches("[a-f0-9]{64}") ||
+     sequence<1||request==null||actorId==null||type==null ||
+     fingerprint==null||!fingerprint.matches("[a-f0-9]{64}") ||
+     reason==null||!reason.matches("[A-Z0-9_]{1,100}"))
+   throw new IllegalArgumentException("Invalid audit chain component");
+  String payload="{\\"fingerprint\\":\\""+fingerprint+"\\",\\"reason\\":\\""+reason+"\\"}";
+  return hash(previous+"|"+sequence+"|"+request+"|"+actorId+"|"+type+"|"+payload);
  }
  private static String hash(String message){
   try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
