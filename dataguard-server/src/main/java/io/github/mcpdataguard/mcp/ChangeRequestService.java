@@ -36,7 +36,7 @@ public class ChangeRequestService {
  private static Map<String,Object> denied(String code){
   return Map.of("decision","DENY","code",code,"executionEnabled",false);
  }
- private record Source(String database){}
+ private record Source(String database,String environment){}
  private record Existing(UUID id,String fingerprint,String hmac,UUID approvalId){}
  private static String sha(String value){
   try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
@@ -71,9 +71,9 @@ public class ChangeRequestService {
   }else return denied("UNSUPPORTED_CHANGE_SQL");
   if(!crypto.configured())return denied("APPROVAL_ENCRYPTION_NOT_CONFIGURED");
   List<Source> sources=jdbc.query("""
-    SELECT d.database_name FROM dg_datasource d
+    SELECT d.database_name,d.environment FROM dg_datasource d
     WHERE d.org_id=? AND d.id=? AND d.status='ACTIVE'
-    """,(rs,i)->new Source(rs.getString(1)),agent.orgId(),datasource);
+    """,(rs,i)->new Source(rs.getString(1),rs.getString(2)),agent.orgId(),datasource);
   if(sources.size()!=1 || database==null || !database.equals(sources.get(0).database()))
    return denied("DATASOURCE_UNAVAILABLE");
   Boolean authorized=jdbc.queryForObject("""
@@ -104,6 +104,10 @@ public class ChangeRequestService {
     """,Boolean.class,agent.orgId(),agent.agentId(),datasource,table,column,
       operation,operation);
   if(!Boolean.TRUE.equals(grant))return denied("CHANGE_OBJECT_NOT_AUTHORIZED");
+  // A published DENY wins before an approval is even created.
+  RuntimeSqlPolicyService.Verdict policy=new RuntimeSqlPolicyService(jdbc)
+    .evaluate(agent.orgId(),sources.get(0).environment(),table,operation);
+  if(policy.denied())return denied("SQL_POLICY_HARD_DENY");
   List<UUID> bindings=jdbc.query("""
     SELECT b.workflow_version_id FROM dg_workflow_binding b
     JOIN dg_workflow_version v ON v.org_id=b.org_id AND v.id=b.workflow_version_id
