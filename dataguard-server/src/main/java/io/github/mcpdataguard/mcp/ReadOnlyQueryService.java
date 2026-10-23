@@ -32,7 +32,7 @@ public class ReadOnlyQueryService {
      @Value("${dataguard.sql.allow-read-execution:false}") boolean enabled){
   this.jdbc=jdbc;this.agents=agents;this.executor=executor;this.receipts=receipts;this.enabled=enabled;
  }
- private record Source(String host,int port,String db,String type,String provider,String ref,
+ private record Source(String host,int port,String db,String type,String environment,String provider,String ref,
    int agentRows,long agentBytes,int agentMillis){}
  private static Map<String,Object> deny(String code){
   return Map.of("decision","DENY","code",code,"retryable",false);
@@ -57,7 +57,7 @@ public class ReadOnlyQueryService {
   String predicate=StrictReadOnlySql.predicateColumn(sql);
   if(predicate!=null)required.add(predicate);
   List<Source> sources=jdbc.query("""
-   SELECT d.host,d.port,d.database_name,d.db_type,s.provider,s.secret_ref,
+   SELECT d.host,d.port,d.database_name,d.db_type,d.environment,s.provider,s.secret_ref,
      a.max_rows,a.max_result_bytes,a.max_execution_ms
    FROM dg_datasource d JOIN dg_datasource_secret s
      ON s.org_id=d.org_id AND s.datasource_id=d.id AND s.purpose='READ'
@@ -69,8 +69,8 @@ public class ReadOnlyQueryService {
         AND c.support_status='CERTIFIED' AND c.certified_at IS NOT NULL
         AND c.evidence_ref IS NOT NULL)
    """,(rs,i)->new Source(rs.getString(1),rs.getInt(2),rs.getString(3),
-      rs.getString(4),rs.getString(5),rs.getString(6),rs.getInt(7),
-      rs.getLong(8),rs.getInt(9)),actor.agentId(),actor.orgId(),id);
+      rs.getString(4),rs.getString(5),rs.getString(6),rs.getString(7),
+      rs.getInt(8),rs.getLong(9),rs.getInt(10)),actor.agentId(),actor.orgId(),id);
   if(sources.size()!=1)return deny("DATASOURCE_NOT_CERTIFIED");
   Source source=sources.get(0);
   if(!"POSTGRESQL".equals(source.type())||database==null||!database.equals(source.db()))
@@ -99,17 +99,10 @@ public class ReadOnlyQueryService {
       actor.orgId(),actor.agentId(),id,table);
   if(!ColumnGrantPolicy.allows(table,required,grants))
    return deny("COLUMN_NOT_AUTHORIZED");
-  Boolean hardDeny=jdbc.queryForObject("""
-   SELECT EXISTS(SELECT 1 FROM dg_sql_policy p
-     JOIN dg_sql_policy_version v ON v.org_id=p.org_id AND v.policy_id=p.id
-       AND v.revision=p.latest_version
-     WHERE p.org_id=? AND p.status='ACTIVE'
-       AND v.published_at IS NOT NULL AND v.decision='DENY'
-       AND v.rule->>'table'=? AND v.rule->>'operation'='SELECT'
-       AND v.rule->>'environment'=(
-         SELECT d.environment FROM dg_datasource d WHERE d.org_id=? AND d.id=?))
-   """,Boolean.class,actor.orgId(),table,actor.orgId(),id);
-  if(Boolean.TRUE.equals(hardDeny))return deny("SQL_POLICY_HARD_DENY");
+  RuntimeSqlPolicyService.Verdict policy=new RuntimeSqlPolicyService(jdbc)
+    .evaluate(actor.orgId(),source.environment(),table,"SELECT");
+  if(policy.denied())return deny("SQL_POLICY_HARD_DENY");
+  if(policy.approvalRequired())return deny("SQL_POLICY_REQUIRES_APPROVAL");
   if(!"ENV".equals(source.provider())||source.ref()==null||
      !source.ref().matches("DG_TARGET_[A-Z0-9_]{3,64}"))
    return deny("READ_SECRET_PROVIDER_NOT_CERTIFIED");
