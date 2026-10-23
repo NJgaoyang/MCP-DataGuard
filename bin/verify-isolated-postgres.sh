@@ -39,6 +39,26 @@ echo "PASSED: readonly role SELECT allowed, UPDATE denied"
 docker exec -u postgres "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d dataguard \
  -Atqc 'BEGIN READ ONLY; SHOW transaction_read_only; ROLLBACK' | grep -qx 'on'
 echo "PASSED: PostgreSQL readonly transaction"
+ROLE_PROBE="SELECT NOT EXISTS(SELECT 1 FROM pg_roles r
+ WHERE (r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR r.rolreplication OR r.rolbypassrls)
+   AND pg_has_role(current_user,r.oid,'MEMBER'))
+ AND NOT EXISTS(SELECT 1 FROM pg_class c WHERE c.relkind IN ('r','p','f','v','m')
+   AND (has_table_privilege(current_user,c.oid,'INSERT')
+    OR has_table_privilege(current_user,c.oid,'UPDATE')
+    OR has_table_privilege(current_user,c.oid,'DELETE')
+    OR has_table_privilege(current_user,c.oid,'TRUNCATE')
+    OR has_table_privilege(current_user,c.oid,'TRIGGER')))
+ AND NOT EXISTS(SELECT 1 FROM pg_namespace n WHERE n.nspname NOT LIKE 'pg_%'
+   AND n.nspname<>'information_schema'
+   AND has_schema_privilege(current_user,n.oid,'CREATE'))
+ AND NOT has_database_privilege(current_user,current_database(),'CREATE')"
+docker exec -u postgres "$NAME" psql -v ON_ERROR_STOP=1 -U dg_test_reader -d dataguard \
+ -Atqc "$ROLE_PROBE" | grep -qx 't'
+docker exec -u postgres "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d dataguard \
+ -c 'GRANT UPDATE ON platform.readonly_probe TO dg_test_reader' >/dev/null
+docker exec -u postgres "$NAME" psql -v ON_ERROR_STOP=1 -U dg_test_reader -d dataguard \
+ -Atqc "$ROLE_PROBE" | grep -qx 'f'
+echo "PASSED: execution role certification rejects gained UPDATE privilege"
 docker exec -u postgres "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d dataguard \
  -Atqc "SELECT count(*) FROM information_schema.tables WHERE table_schema='platform' AND table_name IN ('dg_sql_approval','dg_outbox_event','dg_audit_event','dg_sql_request')" | grep -qx '4'
 echo "PASSED: approval, outbox, audit and SQL request schema"
