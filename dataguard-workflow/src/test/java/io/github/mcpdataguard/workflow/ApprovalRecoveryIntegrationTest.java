@@ -94,6 +94,12 @@ class ApprovalRecoveryIntegrationTest {
      SELECT count(*) FROM dg_system_event
      WHERE org_id=? AND resource_id=? AND operation='APPROVAL_EVENT_DEAD_LETTER'
      """,Long.class,f.org(),event.toString()));
+   assertEquals(1L,f.jdbc().queryForObject("""
+     SELECT count(*) FROM dg_alert_event e JOIN dg_alert_rule r
+       ON r.org_id=e.org_id AND r.id=e.rule_id
+     WHERE e.org_id=? AND e.event_state='OPEN'
+       AND r.code='APPROVAL_OUTBOX_DEAD_LETTER'
+     """,Long.class,f.org()));
   }finally{engine.close();}
  }
 }
