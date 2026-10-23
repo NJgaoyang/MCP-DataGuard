@@ -26,10 +26,10 @@ const approvalRows=ref<Record<string,unknown>[]>([]);
 const workflowDesigns=ref<{id:string;code:string;name:string;version:number;revision:number;publishedRevision:number}[]>([]);
 const workflowDesignerOpen=ref(false);
 const workflowDesignTarget=ref<{id:string;version:number}|null>(null);
-const workflowDesignForm=reactive({code:'',name:'SQL 双级审批',ownerLabel:'数据源负责人审核',dbaLabel:'DBA 审核'});
+const workflowDesignForm=reactive({code:'',name:'SQL 双级审批',ownerLabel:'数据源负责人',dbaLabel:'DBA 审核'});
 type WorkflowStep={role:string;label:string};
 const workflowSteps=ref<WorkflowStep[]>([
- {role:'db-owner',label:'数据源负责人审核'},
+ {role:'db-owner',label:'数据源负责人'},
  {role:'dba',label:'DBA 审核'}
 ]);
 const workflowHighRiskLast=ref(false);
@@ -82,8 +82,8 @@ async function publishWorkflowDesign(row:{id:string;revision:number;version:numb
 }
 function workflowDesignOpenReset(){
  workflowDesignForm.code='';workflowDesignForm.name='SQL 双级审批';
- workflowDesignForm.ownerLabel='数据源负责人审核';workflowDesignForm.dbaLabel='DBA 审核';
- workflowSteps.value=[{role:'db-owner',label:'数据源负责人审核'},
+ workflowDesignForm.ownerLabel='数据源负责人';workflowDesignForm.dbaLabel='DBA 审核';
+ workflowSteps.value=[{role:'db-owner',label:'数据源负责人'},
    {role:'dba',label:'DBA 审核'}];workflowHighRiskLast.value=false;
  workflowDesignerOpen.value=true;
 }
@@ -601,7 +601,7 @@ async function updatePassword(){
    <div class="brand"><span class="symbol">◆</span><div>MCP DataGuard<small>AI DATABASE SECURITY</small></div></div>
    <span class="section">工作台</span>
    <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations();loadSecurityAlerts();loadTrends()};if(page[0]==='flowable'){loadOperations();loadDeadLetters();loadWorkflowDesigns()}}">{{page[1]}}</button>
-   <div class="foot">● 开源研发版 · v0.5</div>
+   <div class="foot">● 开源研发版 v0.5</div>
   </aside>
   <main class="main">
    <header class="bar"><div>工作台 / <strong>{{title}}</strong></div>
@@ -610,7 +610,7 @@ async function updatePassword(){
      <a-button v-else size="small" @click="logout">退出</a-button>
     </div></header>
    <div class="content">
-    <div class="heading"><div><h1>{{title}}</h1><p>AI Agent 多数据库安全访问与管理平台</p></div><span class="status">开发中 · 写入禁用</span></div>
+    <div class="heading"><div><h1>{{title}}</h1><p>AI Agent 多数据库安全访问与管理平台</p></div><span class="status">开发中 写入禁用</span></div>
 
     <section v-if="!token" class="panel native-login">
      <h3>MCP DataGuard 登录</h3>
@@ -623,7 +623,7 @@ async function updatePassword(){
     </section>
     <section v-else-if="mustChange" class="panel native-login">
      <h3>修改登录密码</h3>
-     <a-alert type="warning" show-icon message="首次登录或管理员要求修改密码。在修改成功前，不能使用业务功能。"/>
+     
      <a-form :model="changeForm" layout="vertical" @finish="updatePassword">
       <a-form-item label="当前密码"><a-input-password v-model:value="changeForm.currentPassword" autocomplete="current-password"/></a-form-item>
       <a-form-item label="新密码"><a-input-password v-model:value="changeForm.newPassword" autocomplete="new-password"/></a-form-item>
@@ -692,7 +692,7 @@ async function updatePassword(){
         </template>
        </template>
       </a-table>
-      <a-alert type="info" show-icon message="仅显示审批记录，不开放审批执行操作；Flowable 任务闭环仍待验收。"/>
+      
       <a-table style="margin-top:16px" row-key="id" size="small" :data-source="approvalRows"
        :columns="[{title:'审批编号',dataIndex:'id'},{title:'审批状态',dataIndex:'approvalStatus'},
         {title:'执行状态',dataIndex:'executionStatus'},{title:'到期时间',dataIndex:'expiresAt'},{title:'操作',key:'actions'}]">
@@ -717,25 +717,25 @@ async function updatePassword(){
      </section>
      <section v-else-if="selected==='audit'" class="panel">
       <div class="panel-heading"><h3>管理操作审计</h3><a-button size="small" @click="loadAuditEvents">刷新</a-button></div>
-      <a-alert type="info" show-icon message="查看 SQL 请求元数据及管理操作历史；请求明文和凭据不会返回。"/>
+      
       <div v-if="operationalSummary" class="cards" style="margin-top:16px">
        <article><small>被拒绝请求</small><strong>{{operationalSummary.deniedRequests}}</strong></article>
        <article><small>待审批工单</small><strong>{{operationalSummary.pendingApprovals}}</strong></article>
        <article><small>未处理安全告警</small><strong>{{operationalSummary.openAlerts}}</strong></article>
       </div>
-      <h4>近 14 天 · SQL 请求和拒绝趋势</h4>
+      <h4>近 14 天 SQL 请求和拒绝趋势</h4>
       <div style="display:flex;gap:8px;align-items:end;height:165px;margin:16px 0 6px">
        <div v-for="day in dailyTrends" :key="day.day" :title="day.day+' 请求：'+day.requests+'；拒绝：'+day.denied+'；告警：'+day.alerts"
          style="display:flex;flex:1;min-width:0;height:100%;align-items:end;gap:2px">
-        <div style="flex:1;background:#5b8ff9;border-radius:4px 4px 0 0;min-height:2px"
+        <div style="flex:1;background:#0090ff;border-radius:4px 4px 0 0;min-height:2px"
           :style="{height:trendPercent(day.requests)}"></div>
-        <div style="flex:1;background:#e47e7e;border-radius:4px 4px 0 0;min-height:2px"
+        <div style="flex:1;background:#e5484d;border-radius:4px 4px 0 0;min-height:2px"
           :style="{height:trendPercent(day.denied)}"></div>
        </div>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:12px;color:#888">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--slate11)">
        <span>{{dailyTrends[0]?.day ?? '无数据'}}</span>
-       <span>蓝色：请求 · 红色：拒绝（每日数量）</span>
+       <span>蓝色：请求 红色：拒绝（每日数量）</span>
        <span>{{dailyTrends[dailyTrends.length-1]?.day ?? ''}}</span>
       </div>
       <h4>SQL 请求安全记录</h4>
@@ -772,8 +772,8 @@ async function updatePassword(){
        <a-button size="small" @click="loadPolicies">刷新</a-button>
        <a-button type="primary" size="small" @click="policyDialog=true">创建草稿</a-button>
       </div></div>
-      <a-alert type="info" show-icon message="支持 DENY 策略受控发布、回滚和多规则优先级模拟；模拟结果绝不授予执行权限。"/>
-      <a-card size="small" style="margin:16px 0" title="已发布策略 · 多规则决策预览">
+      
+      <a-card size="small" style="margin:16px 0" title="已发布策略 多规则决策预览">
        <a-space wrap>
         <a-input v-model:value="effectivePolicyScope.table" placeholder="数据库表名" style="width:190px"/>
         <a-select v-model:value="effectivePolicyScope.environment" style="width:145px"
@@ -810,7 +810,7 @@ async function updatePassword(){
         <a-button size="small" type="primary" @click="roleDialog=true">创建角色</a-button>
        </div>
       </div>
-      <a-alert type="info" show-icon message="只允许委派基础管理权限；不能通过此页面授予 SQL 执行权限。"/>
+      
       <h4 style="margin-top:24px">内部用户</h4>
       <a-table :data-source="usersList" row-key="id" size="small"
        :columns="[{title:'用户名',dataIndex:'username'},{title:'显示名称',dataIndex:'displayName'},{title:'状态',dataIndex:'status'}]"/>
@@ -835,8 +835,8 @@ async function updatePassword(){
    </div>
   </main>
 
-  <a-modal v-model:open="maskDialog" :title="'字段脱敏 · '+maskTarget.name" :footer="null" width="700px">
-   <a-alert type="info" show-icon message="REDACT/NULLIFY 默认安全；PARTIAL/HASH 必须绑定组织角色，HASH 还需要服务器配置 HMAC 密钥。未匹配字段始终 REDACT。"/>
+  <a-modal v-model:open="maskDialog" :title="'字段脱敏 '+maskTarget.name" :footer="null" width="700px">
+   
    <a-form layout="vertical" style="margin-top:16px">
     <a-form-item label="表名"><a-input v-model:value="maskForm.table" placeholder="orders"/></a-form-item>
     <a-form-item label="字段名"><a-input v-model:value="maskForm.column" placeholder="account_number"/></a-form-item>
@@ -852,8 +852,8 @@ async function updatePassword(){
     <template #bodyCell="{column,record}"><a-popconfirm v-if="column.key==='actions'" title="确认停用？" @confirm="disableMaskRule(record.id)"><a-button danger type="link" size="small">停用</a-button></a-popconfirm></template>
    </a-table>
   </a-modal>
-  <a-modal v-model:open="workflowDesignerOpen" title="通用流程编排 · 安全审批节点" width="880px" :footer="null">
-   <a-alert type="info" show-icon message="支持 2–6 个角色审批节点、拖动排序及预定义高风险条件分支。禁止任意脚本和不安全 BPMN 表达式。"/>
+  <a-modal v-model:open="workflowDesignerOpen" title="通用流程编排 安全审批节点" width="880px" :footer="null">
+   
    <a-form layout="vertical" style="margin-top:16px">
     <a-form-item label="流程编码"><a-input v-model:value="workflowDesignForm.code" :disabled="!!workflowDesignTarget" placeholder="sql_review"/></a-form-item>
     <a-form-item label="流程名称"><a-input v-model:value="workflowDesignForm.name"/></a-form-item>
@@ -863,9 +863,9 @@ async function updatePassword(){
     <template v-for="(step,index) in workflowSteps" :key="index">
      <span>→</span>
      <div draggable="true" @dragstart="workflowDragging=index" @dragover.prevent @drop.prevent="dropWorkflowStep(index)"
-       @dragend="workflowDragging=null" style="border:1px solid #d0d7de;border-radius:10px;padding:12px;min-width:170px;cursor:move">
+       @dragend="workflowDragging=null" style="border:1px solid #cdced6;border-radius:10px;padding:12px;min-width:170px;cursor:move">
       <strong>{{index+1}}. {{step.label}}</strong>
-      <div style="font-size:12px;color:#888">{{step.role}}</div>
+      <div style="font-size:12px;color:var(--slate11)">{{step.role}}</div>
       <a-tag v-if="workflowHighRiskLast && index===workflowSteps.length-1" color="orange">仅高风险</a-tag>
      </div>
     </template>
@@ -889,17 +889,17 @@ async function updatePassword(){
   </a-modal>
   <a-modal v-model:open="approvalDialog" title="审核 SQL 变更申请" ok-text="确认审核通过"
    :confirm-loading="saving" @ok="approveTask">
-   <a-alert type="warning" show-icon message="必须由两名不同审核人完成两级审批；审批通过也不会自动执行写 SQL。"/>
+   
    <a-form-item label="审核意见" style="margin-top:14px">
     <a-textarea v-model:value="approvalReason" :maxlength="1000" :rows="3"/>
    </a-form-item>
   </a-modal>
   <a-modal v-model:open="rejectionDialog" title="拒绝审批工单" ok-text="确认拒绝" :confirm-loading="saving" @ok="rejectApproval">
-   <a-alert type="warning" show-icon message="拒绝后不会启动 SQL 执行；审批人不能拒绝自己的申请。"/>
+   
    <a-form-item label="拒绝原因" style="margin-top:14px"><a-textarea v-model:value="rejectionReason" :maxlength="1000" :rows="3"/></a-form-item>
   </a-modal>
-  <a-modal v-model:open="policyRuleDialog" :title="'规则草稿版本 · '+policyTarget.name" :footer="null" width="760px">
-   <a-alert type="warning" show-icon message="当前仅保存拒绝/人工审批规则草稿；没有发布或执行权限。"/>
+  <a-modal v-model:open="policyRuleDialog" :title="'规则草稿版本 '+policyTarget.name" :footer="null" width="760px">
+   
    <a-form layout="vertical" style="margin-top:16px">
     <a-form-item label="表名"><a-input v-model:value="policyRule.table" placeholder="orders"/></a-form-item>
     <a-form-item label="操作类型">
@@ -941,7 +941,7 @@ async function updatePassword(){
    <a-form layout="vertical">
     <a-form-item label="策略编码"><a-input v-model:value="policyForm.code" placeholder="restrict_reports"/></a-form-item>
     <a-form-item label="策略名称"><a-input v-model:value="policyForm.name" placeholder="报表访问限制"/></a-form-item>
-    <a-alert type="info" show-icon message="草稿不会自动发布，不会开启 SQL 执行。"/>
+    
    </a-form>
   </a-modal>
   <a-modal v-model:open="userDialog" title="创建内置用户" ok-text="保存"
@@ -951,7 +951,7 @@ async function updatePassword(){
     <a-form-item label="用户名"><a-input v-model:value="userForm.username"/></a-form-item>
     <a-form-item label="显示名称"><a-input v-model:value="userForm.displayName"/></a-form-item>
     <a-form-item label="初始复杂密码"><a-input-password v-model:value="userForm.password" autocomplete="new-password"/></a-form-item>
-    <a-alert type="info" show-icon message="创建后用户首次登录必须修改密码；密码以 BCrypt 哈希保存。"/>
+    
    </a-form>
   </a-modal>
   <a-modal v-model:open="roleDialog" title="创建角色" ok-text="保存"
@@ -973,14 +973,14 @@ async function updatePassword(){
    :confirm-loading="saving" @ok="saveEnroll" @cancel="agentTokenOnce=''">
    <p>新令牌仅显示一次，生成新令牌会立即撤销旧令牌。</p>
    <a-textarea v-if="agentTokenOnce" :value="agentTokenOnce" :rows="3" readonly/>
-   <a-alert type="warning" show-icon message="请妥善保存令牌，不要提交到 Git 或在日志中输出。"/>
+   
   </a-modal>
-  <a-modal v-model:open="grantDialog" :title="'Agent 权限配置 · '+grantAgent.name" :footer="null" width="720px">
-   <a-alert type="info" show-icon message="仅管理 Schema 可见性与 SELECT 字段授权；不会启用 SQL 执行。"/>
+  <a-modal v-model:open="grantDialog" :title="'Agent 权限配置 '+grantAgent.name" :footer="null" width="720px">
+   
    <a-form layout="vertical" style="margin-top:18px">
     <a-form-item label="目标数据源">
      <a-select v-model:value="grantForm.datasourceId" placeholder="选择 ACTIVE 数据源" @change="loadGrants">
-      <a-select-option v-for="d in datasources.filter(x=>x.status==='ACTIVE')" :key="String(d.id)" :value="String(d.id)">{{d.name}} · {{d.environment}}</a-select-option>
+      <a-select-option v-for="d in datasources.filter(x=>x.status==='ACTIVE')" :key="String(d.id)" :value="String(d.id)">{{d.name}} {{d.environment}}</a-select-option>
      </a-select>
     </a-form-item>
     <a-form-item label="表名"><a-input v-model:value="grantForm.table" placeholder="例如 orders（小写字母、数字、下划线）"/></a-form-item>
@@ -1007,7 +1007,7 @@ async function updatePassword(){
    <a-form layout="vertical">
     <a-form-item label="环境变量前缀"><a-input v-model:value="credentialForm.secretRef"
       placeholder="DG_TARGET_REPORTING_READ"/></a-form-item>
-    <a-alert type="info" show-icon message="服务端需配置前缀_USER / 前缀_PASSWORD；不要把密码写在此处。"/>
+    
    </a-form>
   </a-modal>
   <a-modal v-model:open="agentDialog" :title="agentForm.id?'编辑 Agent':'新增 Agent'"
@@ -1022,7 +1022,7 @@ async function updatePassword(){
      <a-form-item label="最大返回行数"><a-input-number v-model:value="agentForm.maxRows" :min="1" :max="100000"/></a-form-item>
      <a-form-item label="最大执行毫秒"><a-input-number v-model:value="agentForm.maxExecutionMs" :min="100" :max="3600000"/></a-form-item>
     </div>
-    <a-alert type="info" show-icon message="默认停用，不会自动授予数据库权限。"/>
+    
    </a-form>
   </a-modal>
   <a-modal v-model:open="sourceDialog" :title="sourceForm.id?'编辑数据源':'新增数据源'"
@@ -1049,19 +1049,21 @@ async function updatePassword(){
      <a-form-item label="端口"><a-input-number v-model:value="sourceForm.port" :min="1" :max="65535"/></a-form-item>
      <a-form-item label="数据库名"><a-input v-model:value="sourceForm.databaseName" maxlength="255"/></a-form-item>
     </div>
-    <a-alert type="info" show-icon message="仅保存数据源元数据，不测试连接、不存储明文密码，默认禁用。"/>
+    
    </a-form>
   </a-modal>
  </div>
 </template>
 <style scoped>
-*{box-sizing:border-box}.shell{min-height:100vh;display:flex;background:#f6f8fb;color:#1c2e4b;font-family:system-ui,"Microsoft YaHei",sans-serif}
-.sidebar{width:238px;flex:none;background:#fff;border-right:1px solid #e5ebf2;padding:24px 12px;display:flex;flex-direction:column}
-.brand{display:flex;align-items:center;gap:11px;font-weight:700;font-size:17px;padding:4px 12px 25px}.brand small{display:block;font-size:9px;color:#9baac0;letter-spacing:1.1px;margin-top:4px}.symbol{display:grid;place-items:center;background:#e6f0ff;color:#2679da;width:37px;height:37px;border-radius:10px}
-.section{font-size:11px;color:#9baac0;margin:4px 13px 12px}.nav{border:0;display:block;text-align:left;border-radius:8px;background:transparent;color:#596d8a;padding:12px;margin:1px 0;cursor:pointer;font-size:13px}.nav:hover{background:#f7faff}.nav.active{background:#eaf3ff;color:#2570d0;font-weight:600}
-.foot{margin-top:auto;border-top:1px solid #edf0f6;padding:17px 10px;color:#869bb5;font-size:12px}.main{min-width:0;flex:1}.bar{height:65px;background:white;border-bottom:1px solid #e5ebf2;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:13px;color:#8fa0b6}.bar strong{color:#354e6c;margin-left:8px}.actions{display:flex;gap:8px}
-.content{padding:30px;max-width:1300px;margin:0 auto}.heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;gap:16px}.heading h1{font-size:23px;margin:0 0 8px}.heading p{font-size:13px;color:#8595a9;margin:0}.status{font-size:12px;color:#ad7833;background:#fff5e4;border:1px solid #ffdfa9;border-radius:18px;padding:7px 12px;white-space:nowrap}
-.alert{margin:12px 0}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}.cards article{background:#fff;border:1px solid #e6edf5;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:10px}.cards small,.cards span{color:#97a7ba}.cards strong{font-size:31px}.cards strong.person{font-size:22px}.panel{background:#fff;border:1px solid #e6edf5;border-radius:12px;padding:23px;margin-bottom:18px}.panel h3{font-size:16px;margin:0 0 17px}.assignment{display:flex;gap:10px;flex-wrap:wrap;margin:15px 0}.panel-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.panel-heading h3{margin:0}.form-pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}.form-pair :deep(.ant-form-item){min-width:0}.form-pair :deep(.ant-input-number),.form-pair :deep(.ant-select){width:100%}.panel p{font-size:13px;line-height:1.8;color:#7d8ba0}.native-login{max-width:500px;margin:30px auto;padding:34px}.native-login h3{font-size:23px}.placeholder{text-align:center;padding:65px 30px}.disclaimer{font-size:11px;color:#a1aec0;margin-top:30px}
+/* Radix Colors: Slate light + Blue light + Amber/Red/Green semantic scales */
+.shell{--slate1:#fcfcfd;--slate2:#f9f9fb;--slate3:#f0f0f3;--slate4:#e8e8ec;--slate5:#e0e1e6;--slate6:#d9d9e0;--slate7:#cdced6;--slate8:#b9bbc6;--slate9:#8b8d98;--slate10:#80838d;--slate11:#60646c;--slate12:#1c2024;--blue3:#edf6ff;--blue4:#d6ebff;--blue7:#8ec8f6;--blue9:#0090ff;--blue10:#0588f0;--blue11:#0d74ce;--blue12:#113264;--amber3:#fff7c2;--amber7:#e9c162;--amber11:#946800;--red9:#e5484d;--green9:#30a46c;--panel-radius:8px;min-height:100vh;display:flex;background:var(--slate2);color:var(--slate12);font:14px/1.5 system-ui,"Microsoft YaHei",sans-serif}
+*{box-sizing:border-box}.sidebar{width:224px;flex:none;background:var(--slate1);border-right:0.5px solid var(--slate6);padding:20px 12px;display:flex;flex-direction:column}
+.brand{display:flex;align-items:center;gap:10px;font-weight:650;font-size:14px;padding:4px 10px 24px}.brand small{display:block;font-size:12px;color:var(--slate11);letter-spacing:0;margin-top:1px;font-weight:400}.symbol{display:grid;place-items:center;background:var(--blue3);color:var(--blue11);width:32px;height:32px;border-radius:6px}
+.section{font-size:12px;color:var(--slate11);margin:4px 10px 10px}.nav{width:100%;border:0;display:block;text-align:left;border-radius:6px;background:transparent;color:var(--slate11);padding:10px 12px;margin:1px 0;cursor:pointer;font-size:14px}.nav:hover{background:var(--slate3);color:var(--slate12)}.nav.active{background:var(--blue3);color:var(--blue11);font-weight:600}
+.foot{margin-top:auto;border-top:0.5px solid var(--slate6);padding:16px 10px;color:var(--slate11);font-size:12px}.main{min-width:0;flex:1}.bar{height:60px;background:var(--slate1);border-bottom:0.5px solid var(--slate6);display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-size:12px;color:var(--slate11)}.bar strong{color:var(--slate12);margin-left:8px}.actions{display:flex;gap:8px;align-items:center}
+.content{padding:24px;max-width:1280px;margin:0 auto}.heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;gap:16px}.heading h1{font-size:20px;line-height:28px;margin:0;font-weight:650}.heading p{font-size:12px;color:var(--slate11);margin:4px 0 0}.status{font-size:12px;color:var(--amber11);background:var(--amber3);border:0.5px solid var(--amber7);border-radius:6px;padding:6px 10px;white-space:nowrap}
+.alert{margin:12px 0}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}.cards article{background:var(--slate1);border:0.5px solid var(--slate6);border-radius:var(--panel-radius);padding:18px;display:flex;flex-direction:column;gap:8px}.cards small,.cards span{color:var(--slate11);font-size:12px}.cards strong,.cards strong.person{font-size:20px;font-weight:650;line-height:28px}.panel{background:var(--slate1);border:0.5px solid var(--slate6);border-radius:var(--panel-radius);padding:20px;margin-bottom:16px}.panel h3{font-size:14px;line-height:22px;font-weight:650;margin:0 0 16px}.panel h4{font-size:14px;font-weight:600}.assignment{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.panel-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px}.panel-heading h3{margin:0}.form-pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}.form-pair :deep(.ant-form-item){min-width:0}.form-pair :deep(.ant-input-number),.form-pair :deep(.ant-select){width:100%}.panel p{font-size:14px;line-height:1.6;color:var(--slate11)}.native-login{max-width:480px;margin:32px auto;padding:28px}.native-login h3{font-size:20px}.placeholder{text-align:center;padding:44px 24px}.disclaimer{font-size:12px;color:var(--slate11);margin-top:18px}
+.shell :deep(.ant-btn-primary){background:var(--blue9);box-shadow:none}.shell :deep(.ant-btn-primary:hover){background:var(--blue10)}.shell :deep(.ant-btn-link),.shell :deep(.ant-typography a){color:var(--blue11)}.shell :deep(.ant-table-wrapper .ant-table),.shell :deep(.ant-form),.shell :deep(.ant-input),.shell :deep(.ant-select),.shell :deep(.ant-alert){font-size:14px}.shell :deep(.ant-card),.shell :deep(.ant-input),.shell :deep(.ant-input-affix-wrapper),.shell :deep(.ant-select-selector),.shell :deep(.ant-modal-content){border-radius:6px;box-shadow:none}.shell :deep(.ant-card),.shell :deep(.ant-input),.shell :deep(.ant-input-affix-wrapper),.shell :deep(.ant-select-selector){border-width:0.5px;border-color:var(--slate7)}.shell :deep(.ant-table-thead>tr>th){background:var(--slate2);color:var(--slate11);font-size:12px;font-weight:600;border-bottom:0.5px solid var(--slate6)}.shell :deep(.ant-table-tbody>tr>td){border-bottom:0.5px solid var(--slate5)}.shell :deep(.ant-alert){border-width:0.5px;border-radius:6px}.shell :deep(.ant-form-item-label>label){font-size:14px;color:var(--slate12)}.shell :deep(.ant-btn){box-shadow:none;transition:background-color 250ms ease-out,color 250ms ease-out,border-color 250ms ease-out}
 @media(max-width:850px){.sidebar{width:180px}.content{padding:18px}.cards{grid-template-columns:1fr}.bar{padding:0 16px}}
-@media(max-width:570px){.sidebar{width:62px;padding:20px 7px}.brand div,.section,.nav{font-size:0}.brand{padding:0 5px 25px}.nav:after{content:"•";font-size:17px}.foot{display:none}}
+@media(max-width:570px){.sidebar{width:62px;padding:16px 6px}.brand div,.section,.nav{font-size:0}.brand{padding:0 5px 22px}.nav:after{content:"•";font-size:14px}.foot{display:none}}
 </style>
