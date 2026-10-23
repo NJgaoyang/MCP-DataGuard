@@ -65,21 +65,24 @@ public class CertifiedWriteWorker {
       task.database(),user,password);
    var result=executor.execute(target,payload.sql(),payload.parameters());
    transactions.executeWithoutResult(status->{
-    jdbc.update("""
+    if(jdbc.update("""
       UPDATE dg_execution_task SET task_state='SUCCEEDED',finished_at=now(),
         lease_until=NULL,updated_at=now(),version=version+1
       WHERE org_id=? AND id=? AND task_state='EXECUTING'
-      """,task.org(),task.task());
-    jdbc.update("""
+      """,task.org(),task.task())!=1)
+     throw new IllegalStateException("Expired execution lease or duplicate completion");
+    if(jdbc.update("""
       UPDATE dg_sql_approval SET execution_status='SUCCEEDED',
         updated_at=now(),version=version+1
       WHERE org_id=? AND id=? AND execution_status='EXECUTING'
-      """,task.org(),task.approval());
-    jdbc.update("""
+      """,task.org(),task.approval())!=1)
+     throw new IllegalStateException("Approval execution state changed");
+    if(jdbc.update("""
       UPDATE dg_execution_attempt SET phase='ACKNOWLEDGED',
         completed_at=now(),affected_rows=?
       WHERE org_id=? AND task_id=? AND phase='IN_FLIGHT'
-      """,result.affectedRows(),task.org(),task.task());
+      """,result.affectedRows(),task.org(),task.task())!=1)
+     throw new IllegalStateException("Missing matching execution attempt");
     event(task,"WRITE_EXECUTION_SUCCEEDED");
    });
   }catch(Exception e){
@@ -119,13 +122,24 @@ public class CertifiedWriteWorker {
     JOIN dg_datasource d ON d.org_id=r.org_id AND d.id=r.datasource_id
     JOIN dg_datasource_capability cap ON cap.org_id=d.org_id
       AND cap.datasource_id=d.id AND cap.capability='WRITE_EXECUTION'
-      AND cap.support_status='CERTIFIED'
+      AND cap.support_status='CERTIFIED' AND cap.certified_at IS NOT NULL AND cap.evidence_ref IS NOT NULL
     JOIN dg_datasource_secret secret ON secret.org_id=d.org_id
       AND secret.datasource_id=d.id AND secret.purpose='WRITE'
       AND secret.provider='ENV'
     WHERE t.task_state='QUEUED' AND t.authorization_expires_at>now()
       AND a.approval_status='APPROVED' AND a.execution_status='QUEUED'
       AND a.expires_at>now() AND d.status='ACTIVE' AND d.db_type='POSTGRESQL'
+      AND NOT EXISTS(
+        SELECT 1 FROM dg_outbox_event e
+        WHERE e.org_id=a.org_id AND e.aggregate_id=a.id
+          AND e.event_type IN ('APPROVAL_REQUESTED','APPROVAL_STEP_APPROVED')
+          AND e.state<>'PUBLISHED'
+      )
+      AND (SELECT count(*) FROM dg_sql_approval_action ac
+           WHERE ac.org_id=a.org_id AND ac.approval_id=a.id AND ac.action='APPROVE'
+             AND ac.flowable_task_id NOT LIKE 'platform:%')=2
+      AND (SELECT count(DISTINCT ac.reviewer_user_id) FROM dg_sql_approval_action ac
+           WHERE ac.org_id=a.org_id AND ac.approval_id=a.id AND ac.action='APPROVE')=2
       AND d.tls_mode='VERIFY_FULL'
     ORDER BY t.enqueued_at,t.id LIMIT 1 FOR UPDATE OF t SKIP LOCKED
     """,(rs,i)->new Task(
