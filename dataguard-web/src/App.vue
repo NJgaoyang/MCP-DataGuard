@@ -1115,4 +1115,43 @@ async function updatePassword(){
 .shell :deep(.ant-btn-default){border-width:0.5px}
 @media(max-width:850px){.sidebar{width:180px}.content{padding:22px 18px}.cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:650px){.cards{grid-template-columns:1fr}.content{padding:18px 14px}.sidebar{width:62px}}
+
+/* Distinct enterprise redesign: Radix Slate Dark rail + restrained content canvas */
+.shell{background:#ffffff}
+.sidebar{width:232px;background:#111113;border-right:0.5px solid #27272a;padding:26px 14px}
+.brand{padding:4px 10px 32px;color:#fcfcfd;gap:12px;font-weight:650}
+.brand small{color:#a0a0ab;letter-spacing:.02em;margin-top:6px}
+.symbol{background:#27272a;color:#fcfcfd;width:36px;height:36px;border:0.5px solid #3f3f46;border-radius:7px}
+.section{color:#a0a0ab;margin:0 12px 12px}
+.nav{color:#a0a0ab;padding:11px 14px;margin-bottom:4px;border-radius:6px}
+.nav:hover{background:#27272a;color:#fcfcfd}
+.nav.active{background:#27272a;color:#fcfcfd;font-weight:600}
+.nav.active:before{content:"";width:3px;height:16px;background:#3b9eff;display:inline-block;vertical-align:-3px;margin-right:10px;border-radius:2px}
+.foot{border-top:0.5px solid #27272a;color:#777781}
+.main{background:#ffffff}
+.bar{background:#ffffff;border-bottom:0.5px solid #e0e1e6;height:64px;padding:0 40px}
+.content{max-width:1220px;padding:38px 44px 60px;margin:0}
+.heading{margin-bottom:28px;min-height:34px}
+.heading h1{font-size:20px;font-weight:650;letter-spacing:-.4px}
+.status{background:#f0f0f3;border-color:#e0e1e6}
+.cards{gap:0;background:#ffffff;border:0.5px solid #e0e1e6;border-radius:8px;margin-bottom:28px;overflow:hidden}
+.cards article{min-height:154px;border:0;border-right:0.5px solid #e0e1e6;border-radius:0;padding:24px 28px;gap:10px}
+.cards article:last-child{border-right:0}
+.cards small{font-size:14px;color:#60646c}
+.cards strong,.cards strong.person{font-size:20px;line-height:30px}
+.cards span{font-size:12px;color:#80838d}
+.panel,.data-panel{border:0.5px solid #e0e1e6;border-radius:8px;padding:24px;background:#ffffff}
+.panel-heading{margin-bottom:20px}
+.panel-heading h3{font-size:14px;font-weight:650}
+.quick-start{border:0;background:#f9f9fb;padding:24px}
+.quick-actions{gap:12px}
+.quick-actions :deep(.ant-btn){background:#ffffff}
+.data-panel{border:0;padding:0}
+.data-panel .panel-heading{padding:0 0 18px;border-bottom:0.5px solid #e0e1e6;margin-bottom:0}
+.empty-state{min-height:330px;border:0;gap:16px}
+.empty-icon{background:#f9f9fb;border-color:#e0e1e6;width:56px;height:56px;font-size:20px}
+.shell :deep(.ant-table-thead>tr>th){background:#f9f9fb}
+.shell :deep(.ant-btn-primary){background:#0090ff}
+@media(max-width:900px){.sidebar{width:208px}.content{padding:28px 24px}.bar{padding:0 24px}}
+@media(max-width:650px){.sidebar{width:64px}.content{padding:20px 16px}.cards{display:grid;grid-template-columns:1fr}.cards article{border-right:0;border-bottom:0.5px solid #e0e1e6}.cards article:last-child{border-bottom:0}}
 </style>
