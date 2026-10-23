@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Runs only inside an isolated ephemeral PostgreSQL container network.
  */
 class ApprovalOutboxIntegrationTest {
- @Test void platformOutboxStartsAndCompletesTwoLevelProcess(){
+ @Test void platformOutboxStartsAndCompletesTwoLevelProcess() throws Exception {
   String url=System.getenv("DG_OUTBOX_E2E_URL");
   Assumptions.assumeTrue(url!=null && url.startsWith("jdbc:postgresql://127.0.0.1:5432/"));
   JdbcTemplate db=new JdbcTemplate(new DriverManagerDataSource(url,"postgres","test-only"));
@@ -89,6 +89,56 @@ class ApprovalOutboxIntegrationTest {
    assertEquals("NOT_SCHEDULED",db.queryForObject("""
       SELECT execution_status FROM platform.dg_sql_approval WHERE id=?
       """,String.class,approval),"Approval may not trigger SQL execution");
+   // Exercise the opt-in runtime path against the same real platform outbox
+   // rather than merely testing the BPMN deployment component in isolation.
+   String certifiedXml;
+   try(var stream=getClass().getClassLoader().getResourceAsStream(
+       "processes/two-level-review.bpmn20.xml")){
+    assertNotNull(stream);
+    certifiedXml=new String(stream.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);
+   }
+   db.update("""
+     UPDATE platform.dg_workflow_version SET bpmn_xml=?
+     WHERE org_id=? AND id=? AND status='PUBLISHED'
+     """,certifiedXml,org,workflowVersion);
+   UUID nextRequest=UUID.randomUUID(),nextApproval=UUID.randomUUID(),nextEvent=UUID.randomUUID();
+   db.update("""
+     INSERT INTO platform.dg_sql_request
+       (id,org_id,agent_id,datasource_id,tool_name,decision,request_status)
+     VALUES(?,?,?,?,'submit_change','REQUIRE_APPROVAL','PENDING_APPROVAL')
+     """,nextRequest,org,agent,source);
+   db.update("""
+     INSERT INTO platform.dg_sql_approval
+       (id,org_id,request_id,workflow_version_id,approval_status,execution_status,expires_at)
+     VALUES(?,?,?,?,'PENDING','NOT_SCHEDULED',now()+interval '1 day')
+     """,nextApproval,org,nextRequest,workflowVersion);
+   db.update("""
+     INSERT INTO platform.dg_outbox_event
+       (id,org_id,aggregate_type,aggregate_id,event_type,payload)
+     VALUES(?,?,'SQL_APPROVAL',?,'APPROVAL_REQUESTED','{}'::jsonb)
+     """,nextEvent,org,nextApproval);
+   var dynamic=new CertifiedWorkflowDeployment(engine.getRepositoryService(),
+     engine.getRuntimeService(),true);
+   var dynamicWorker=new ApprovalOutboxWorker(url,"postgres","test-only",
+      service,engine.getRuntimeService(),engine.getTaskService(),dynamic);
+   dynamicWorker.poll();
+   String dynamicInstance=db.queryForObject("""
+      SELECT process_instance_id FROM platform.dg_sql_approval WHERE org_id=? AND id=?
+      """,String.class,org,nextApproval);
+   assertNotNull(dynamicInstance,"Outbox must start dynamically certified BPMN");
+   assertEquals("ownerReview",service.pending(dynamicInstance,org.toString()).get(0).stage());
+   submitStage(db,org,nextApproval,first,1);
+   dynamicWorker.poll();
+   assertEquals("dbaReview",service.pending(dynamicInstance,org.toString()).get(0).stage());
+   submitStage(db,org,nextApproval,second,2);
+   dynamicWorker.poll();
+   assertTrue(engine.getRuntimeService().createProcessInstanceQuery()
+      .processInstanceId(dynamicInstance).list().isEmpty());
+   assertEquals("PUBLISHED",db.queryForObject(
+      "SELECT state FROM platform.dg_outbox_event WHERE id=?",String.class,nextEvent));
+   assertEquals("NOT_SCHEDULED",db.queryForObject("""
+      SELECT execution_status FROM platform.dg_sql_approval WHERE id=?
+      """,String.class,nextApproval));
    assertEquals(0L,db.queryForObject("""
      SELECT count(*) FROM platform.dg_outbox_event
       WHERE org_id=? AND state='PENDING'
