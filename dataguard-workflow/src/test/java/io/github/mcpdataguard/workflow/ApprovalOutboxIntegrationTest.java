@@ -97,10 +97,13 @@ class ApprovalOutboxIntegrationTest {
     assertNotNull(stream);
     certifiedXml=new String(stream.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);
    }
+   String certifiedDigest=java.util.HexFormat.of().formatHex(
+      java.security.MessageDigest.getInstance("SHA-256")
+        .digest(certifiedXml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
    db.update("""
-     UPDATE platform.dg_workflow_version SET bpmn_xml=?
+     UPDATE platform.dg_workflow_version SET bpmn_xml=?,bpmn_digest=?
      WHERE org_id=? AND id=? AND status='PUBLISHED'
-     """,certifiedXml,org,workflowVersion);
+     """,certifiedXml,certifiedDigest,org,workflowVersion);
    UUID nextRequest=UUID.randomUUID(),nextApproval=UUID.randomUUID(),nextEvent=UUID.randomUUID();
    db.update("""
      INSERT INTO platform.dg_sql_request
