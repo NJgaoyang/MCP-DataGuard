@@ -615,7 +615,7 @@ async function updatePassword(){
      <a-button v-else size="small" @click="logout">退出</a-button>
     </div></header>
    <div class="content">
-    <div class="heading"><h1>{{title}}</h1><span class="status"><span class="status-dot"></span>写入已关闭</span></div>
+    
 
     <section v-if="!token" class="panel native-login">
      <h3>MCP DataGuard 登录</h3>
