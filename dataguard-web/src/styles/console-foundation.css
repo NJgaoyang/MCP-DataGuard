@@ -1,0 +1,191 @@
+/*
+ * MCP DataGuard console typography & navigation foundation
+ *
+ * One visual scale for authenticated pages; login has its own typography.
+ * Page titles   20px   Section titles 16px    Body / controls 13px
+ * Labels        12px   Numbers / KPIs use semantic hierarchy
+ * Sidebar width 184px on desktop; compact 64px icon rail on mobile.
+ */
+.shell:not(.auth-shell){
+ --ui-font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+ --ui-font-body:13px;
+ --ui-font-caption:12px;
+ --ui-font-section:16px;
+ --ui-font-page:20px;
+ --ui-line-height:1.55;
+ --ui-sidebar-width:184px;
+ font-family:var(--ui-font-family);
+ font-size:var(--ui-font-body);
+ line-height:var(--ui-line-height);
+ font-weight:400;
+}
+
+/* Compress the marked brand/navigation block on every logged-in page. */
+@media(min-width:761px){
+ .shell:not(.auth-shell) .sidebar{
+  width:var(--ui-sidebar-width)!important;
+  flex:0 0 var(--ui-sidebar-width)!important;
+  padding:14px 9px 18px!important;
+ }
+ .shell:not(.auth-shell) .sidebar .brand{
+  padding:2px 8px 14px!important;
+  margin:0;
+  gap:9px;
+  align-items:center;
+  font-size:14px!important;
+  font-weight:700;
+  line-height:1.35;
+ }
+ .shell:not(.auth-shell) .sidebar .symbol{
+  width:36px;
+  height:36px;
+  flex:0 0 36px;
+  border-radius:9px;
+  font-size:18px;
+ }
+ .shell:not(.auth-shell) .sidebar .brand>div{min-width:0}
+ .shell:not(.auth-shell) .sidebar .brand small{
+  display:block;
+  margin-top:3px;
+  color:#8190a6;
+  font-size:11px;
+  line-height:1.4;
+  white-space:nowrap;
+ }
+ .shell:not(.auth-shell) .sidebar .section{
+  display:block;
+  margin:0 4px 5px;
+  padding:0 9px;
+  font-size:11px;
+  color:#8a9bb2;
+  letter-spacing:.2px;
+ }
+ .shell:not(.auth-shell) .sidebar .nav{
+  height:44px;
+  min-height:44px;
+  padding:9px 12px;
+  margin:2px 0;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  border-radius:7px;
+  font-size:13px;
+  line-height:20px;
+  font-weight:450;
+ }
+ .shell:not(.auth-shell) .sidebar .nav svg{
+  width:18px;
+  height:18px;
+  flex:0 0 18px;
+ }
+ .shell:not(.auth-shell) .sidebar .nav.active{font-weight:650}
+}
+.shell:not(.auth-shell) .sidebar .foot{font-size:11px}
+
+/* Clear, repeatable type hierarchy across dashboard and management pages. */
+.shell:not(.auth-shell) .bar .breadcrumb{font-size:13px;gap:9px}
+.shell:not(.auth-shell) .bar .account-name{font-size:13px;font-weight:620}
+.shell:not(.auth-shell) .dashboard-hero h1{
+ font-size:27px;
+ line-height:1.36;
+ letter-spacing:-.5px;
+}
+.shell:not(.auth-shell) .dashboard-hero p{font-size:13px}
+.shell:not(.auth-shell) .overview-section-head h2{
+ font-size:16px;
+ line-height:24px;
+ font-weight:680;
+}
+.shell:not(.auth-shell) .overview-section-head p{
+ font-size:12px;
+ line-height:1.55;
+}
+.shell:not(.auth-shell) .shortcut strong{
+ font-size:16px;
+ line-height:23px;
+}
+.shell:not(.auth-shell) .shortcut .shortcut-caption{font-size:12px}
+.shell:not(.auth-shell) .metric-copy small{font-size:12px}
+.shell:not(.auth-shell) .figure-content small{font-size:12px}
+.shell:not(.auth-shell) .panel-heading h3,
+.shell:not(.auth-shell) .workspace-section-title h3,
+.shell:not(.auth-shell) .role-assignment-panel h3{
+ font-size:15px;
+ line-height:22px;
+ font-weight:650;
+}
+.shell:not(.auth-shell) .workspace-heading h2{
+ font-size:var(--ui-font-page);
+ line-height:1.35;
+ font-weight:700;
+}
+.shell:not(.auth-shell) .workspace-heading p,
+.shell:not(.auth-shell) .workspace-section-title p{
+ font-size:var(--ui-font-caption);
+ line-height:1.6;
+}
+.shell:not(.auth-shell) .cards small,
+.shell:not(.auth-shell) .data-panel small,
+.shell:not(.auth-shell) .status,
+.shell:not(.auth-shell) .section,
+.shell:not(.auth-shell) .workspace-count{
+ font-size:var(--ui-font-caption);
+}
+.shell:not(.auth-shell) .panel p{font-size:13px}
+.shell:not(.auth-shell) .metric .metric-copy strong{font-size:27px}
+.shell:not(.auth-shell) .audit-kpi strong,
+.shell:not(.auth-shell) .rule-metrics strong,
+.shell:not(.auth-shell) .identity-stats strong{font-size:23px}
+
+/* Controls, tables and forms should not change font size between pages. */
+.shell:not(.auth-shell) :is(button,input,textarea,select),
+.shell:not(.auth-shell) .ant-btn,
+.shell:not(.auth-shell) .ant-input,
+.shell:not(.auth-shell) .ant-input-number-input,
+.shell:not(.auth-shell) .ant-select-selector,
+.shell:not(.auth-shell) .ant-picker,
+.shell:not(.auth-shell) .ant-form-item-label>label,
+.shell:not(.auth-shell) .ant-radio-wrapper,
+.shell:not(.auth-shell) .ant-checkbox-wrapper{
+ font-family:var(--ui-font-family);
+ font-size:var(--ui-font-body);
+}
+.shell:not(.auth-shell) .ant-table-thead>tr>th{
+ font-size:12px!important;
+ font-weight:600!important;
+ line-height:1.5;
+}
+.shell:not(.auth-shell) .ant-table-tbody>tr>td{
+ font-size:13px!important;
+ line-height:1.55;
+}
+.shell:not(.auth-shell) .ant-form-item-label>label{font-weight:500}
+.shell:not(.auth-shell) .ant-tag,
+.shell:not(.auth-shell) .ant-pagination,
+.shell:not(.auth-shell) .ant-empty-description{
+ font-size:12px;
+}
+.shell:not(.auth-shell) .table-count,
+.shell:not(.auth-shell) .text-status,
+.shell:not(.auth-shell) .status-label,
+.shell:not(.auth-shell) .todo-tag{
+ font-size:12px;
+}
+
+@media(max-width:760px){
+ .shell:not(.auth-shell) .sidebar{
+  width:64px!important;
+  flex:0 0 64px!important;
+ }
+ .shell:not(.auth-shell) .sidebar .nav{
+  height:44px;
+  min-height:44px;
+  font-size:13px;
+ }
+ .shell:not(.auth-shell) .sidebar .nav:after{content:none}
+ .shell:not(.auth-shell) .dashboard-hero h1{font-size:23px}
+ .shell:not(.auth-shell) .workspace-heading h2{font-size:18px}
+ .shell:not(.auth-shell) .overview-section-head h2{font-size:15px}
+ .shell:not(.auth-shell) .shortcut strong{font-size:15px}
+ .shell:not(.auth-shell) .metric .metric-copy strong{font-size:22px}
+}
