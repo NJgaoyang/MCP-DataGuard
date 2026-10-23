@@ -1,5 +1,6 @@
 package io.github.mcpdataguard.api;
 
+import io.github.mcpdataguard.workflow.contract.SafeApprovalGraph;
 import io.github.mcpdataguard.security.UserPrincipalResolver;
 import io.github.mcpdataguard.security.UserPrincipalResolver.UserPrincipal;
 import java.nio.charset.StandardCharsets;
@@ -28,7 +29,12 @@ public class WorkflowDesignController {
  public WorkflowDesignController(JdbcTemplate jdbc,UserPrincipalResolver users){
   this.jdbc=jdbc;this.users=users;
  }
- public record DesignInput(String code,String name,String ownerLabel,String dbaLabel){}
+ public record DesignInput(String code,String name,String ownerLabel,String dbaLabel,
+    List<SafeApprovalGraph.Step> steps,boolean highRiskOnlyLast){
+  public DesignInput(String code,String name,String ownerLabel,String dbaLabel){
+   this(code,name,ownerLabel,dbaLabel,null,false);
+  }
+ }
  public record PublishInput(int revision,long expectedVersion){}
  private UserPrincipal admin(Jwt jwt){
   UserPrincipal u=users.requireUser(jwt);users.requirePermission(u,"identity:admin");return u;
@@ -51,6 +57,21 @@ public class WorkflowDesignController {
       </process>
     </definitions>
     """.formatted(owner,dba);
+ }
+ private static String xml(DesignInput input){
+  if(input.steps()!=null){
+   try{return SafeApprovalGraph.compile(
+      new SafeApprovalGraph.Design(input.steps(),input.highRiskOnlyLast()));}
+   catch(SecurityException e){
+    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unsafe workflow graph");
+   }
+  }
+  if(!label(input.ownerLabel())||!label(input.dbaLabel()))
+   throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid workflow task labels");
+  return xml(input.ownerLabel(),input.dbaLabel());
+ }
+ private static String processKey(DesignInput input){
+  return input.steps()!=null?"safeWorkflowV2":"sqlTwoLevelReview";
  }
  private static String digest(String xml){
   try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
@@ -78,11 +99,10 @@ public class WorkflowDesignController {
  @Transactional
  public Map<String,Object> create(@AuthenticationPrincipal Jwt jwt,@RequestBody DesignInput input){
   UserPrincipal u=admin(jwt);
-  if(input==null||!code(input.code())||!label(input.name())||
-     !label(input.ownerLabel())||!label(input.dbaLabel()))
+  if(input==null||!code(input.code())||!label(input.name()))
    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid workflow labels or code");
   UUID id=UUID.randomUUID(),revisionId=UUID.randomUUID();
-  String bpmn=xml(input.ownerLabel(),input.dbaLabel());
+  String bpmn=xml(input);
   jdbc.update("""
    INSERT INTO dg_workflow_template(id,org_id,code,name,created_by)
    VALUES(?,?,?,?,?)
@@ -90,8 +110,8 @@ public class WorkflowDesignController {
   jdbc.update("""
    INSERT INTO dg_workflow_version(id,org_id,workflow_id,revision,bpmn_xml,
      bpmn_digest,flowable_definition_key,status)
-   VALUES(?,?,?,1,?,?,'sqlTwoLevelReview','DRAFT')
-   """,revisionId,u.orgId(),id,bpmn,digest(bpmn));
+   VALUES(?,?,?,1,?,? ,?,'DRAFT')
+   """,revisionId,u.orgId(),id,bpmn,digest(bpmn),processKey(input));
   audit(u,"WORKFLOW_DESIGN_CREATED",id);
   return Map.of("id",id.toString(),"revision",1,"status","DRAFT");
  }
@@ -100,7 +120,7 @@ public class WorkflowDesignController {
  public Map<String,Object> draft(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID id,
                                  @RequestBody DesignInput input){
   UserPrincipal u=admin(jwt);
-  if(input==null||!label(input.name())||!label(input.ownerLabel())||!label(input.dbaLabel()))
+  if(input==null||!label(input.name()))
    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid workflow labels");
   List<UUID> locked=jdbc.query("""
     SELECT id FROM dg_workflow_template
@@ -117,8 +137,8 @@ public class WorkflowDesignController {
   jdbc.update("""
     INSERT INTO dg_workflow_version(id,org_id,workflow_id,revision,bpmn_xml,
       bpmn_digest,flowable_definition_key,status)
-    VALUES(?,?,?,?,?,?,'sqlTwoLevelReview','DRAFT')
-    """,UUID.randomUUID(),u.orgId(),id,next,bpmn,digest(bpmn));
+    VALUES(?,?,?,?,?,?,?,'DRAFT')
+    """,UUID.randomUUID(),u.orgId(),id,next,bpmn,digest(bpmn),processKey(input));
   jdbc.update("UPDATE dg_workflow_template SET name=?,version=version+1,updated_at=now() WHERE org_id=? AND id=?",
     input.name(),u.orgId(),id);
   audit(u,"WORKFLOW_DESIGN_REVISION",id);
