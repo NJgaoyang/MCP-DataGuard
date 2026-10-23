@@ -39,6 +39,7 @@ public class ApprovalOutboxWorker {
  }
  @Scheduled(fixedDelayString="${dataguard.workflow.outbox.poll-ms:10000}")
  public void poll(){
+  UUID failedId=null,failedOrg=null;
   try(Connection c=DriverManager.getConnection(jdbcUrl,user,password)){
    c.setAutoCommit(false);
    try(PreparedStatement q=c.prepareStatement("""
@@ -57,6 +58,7 @@ public class ApprovalOutboxWorker {
      if(!rs.next()){c.rollback();return;}
      UUID eventId=rs.getObject(1,UUID.class),org=rs.getObject(2,UUID.class),
        approval=rs.getObject(3,UUID.class);
+     failedId=eventId;failedOrg=org;
      String type=rs.getString(4),action=rs.getString(5),
        reviewer=rs.getString(6),stage=rs.getString(7);
      String instanceId=lookupInstance(c,org,approval);
@@ -99,21 +101,19 @@ public class ApprovalOutboxWorker {
   }catch(Exception e){
    // Do not leak event payload or database errors into logs.
    System.err.println("Approval outbox dispatch failed (details redacted)");
-   retryFailedEvent();
+   if(failedId!=null)retryFailedEvent(failedId,failedOrg);
   }
  }
  /**
   * A separate transaction survives the failed business transaction. Bounded
   * exponential delays; after 8 attempts FAILED is a dead-letter state.
   */
- private void retryFailedEvent(){
+ private void retryFailedEvent(UUID eventId,UUID organization){
   try(Connection c=DriverManager.getConnection(jdbcUrl,user,password)){
    c.setAutoCommit(false);
    try(PreparedStatement q=c.prepareStatement("""
      SELECT id,org_id,attempts FROM platform.dg_outbox_event
-     WHERE state='PENDING' AND available_at<=now()
-       AND event_type IN ('APPROVAL_REQUESTED','APPROVAL_STEP_APPROVED','APPROVAL_REJECTED')
-     ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED
+     WHERE state='PENDING' AND id=? AND org_id=? FOR UPDATE
      """);ResultSet rs=q.executeQuery()){
     if(rs.next()){
      UUID id=rs.getObject(1,UUID.class),org=rs.getObject(2,UUID.class);
@@ -137,6 +137,7 @@ public class ApprovalOutboxWorker {
        a.setString(3,id.toString());a.executeUpdate();
       }
      }
+    }
     }
    }
    c.commit();
