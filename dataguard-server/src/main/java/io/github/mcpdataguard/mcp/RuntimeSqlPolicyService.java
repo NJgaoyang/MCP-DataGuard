@@ -15,7 +15,7 @@ import org.springframework.stereotype.Service;
 public class RuntimeSqlPolicyService {
  private final JdbcTemplate jdbc;
  public RuntimeSqlPolicyService(JdbcTemplate jdbc){this.jdbc=jdbc;}
- public record Matched(UUID policyId,String code,int priority,String decision){}
+ public record Matched(UUID policyId,String code,int revision,int priority,String decision){}
  public record Verdict(String decision,List<Matched> matches){
   public boolean denied(){return "DENY".equals(decision);}
   public boolean approvalRequired(){return "REQUIRE_APPROVAL".equals(decision);}
@@ -27,7 +27,7 @@ public class RuntimeSqlPolicyService {
      !List.of("SELECT","UPDATE","DELETE","INSERT").contains(operation))
    throw new SecurityException("INVALID_SQL_POLICY_SCOPE");
   List<Matched> matches=jdbc.query("""
-    SELECT p.id,p.code,v.priority,v.decision
+    SELECT p.id,p.code,v.revision,v.priority,v.decision
     FROM dg_sql_policy p JOIN dg_sql_policy_version v
       ON v.org_id=p.org_id AND v.policy_id=p.id
       AND v.revision=p.latest_version
@@ -38,7 +38,7 @@ public class RuntimeSqlPolicyService {
       CASE WHEN v.decision='DENY' THEN 0 ELSE 1 END,p.id
     LIMIT 100
     """,(rs,i)->new Matched(rs.getObject(1,UUID.class),rs.getString(2),
-      rs.getInt(3),rs.getString(4)),org,table,environment,operation);
+      rs.getInt(3),rs.getInt(4),rs.getString(5)),org,table,environment,operation);
   if(matches==null)throw new SecurityException("SQL_POLICY_DATABASE_UNAVAILABLE");
   if(matches.stream().anyMatch(row->"DENY".equals(row.decision())))
    return new Verdict("DENY",List.copyOf(matches));
