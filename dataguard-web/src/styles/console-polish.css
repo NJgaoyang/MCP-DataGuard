@@ -1,0 +1,224 @@
+/* MCP DataGuard — shared enterprise console components and responsive rules.
+   Keep page density consistent without modifying business data or API behavior. */
+:root{font-synthesis:none}
+body{margin:0;min-width:320px}
+#app{min-height:100vh}
+.shell:not(.auth-shell){overflow-x:clip}
+.shell:not(.auth-shell) .main{min-width:0}
+.shell:not(.auth-shell) .content{min-width:0}
+.shell:not(.auth-shell) .content>section{min-width:0}
+.shell:not(.auth-shell) .panel,
+.shell:not(.auth-shell) .data-panel{min-width:0}
+.shell:not(.auth-shell) .data-panel{
+ padding:16px 18px!important;
+ border:1px solid #e7eef7;
+ box-shadow:0 2px 12px #244c7e08;
+}
+.shell:not(.auth-shell) .panel-heading{min-width:0}
+.shell:not(.auth-shell) .panel-heading>h3{color:#14233e;font-size:14px;font-weight:650}
+.shell:not(.auth-shell) .panel-heading>.actions{flex-wrap:wrap;justify-content:flex-end}
+.shell:not(.auth-shell) .empty-state{
+ min-height:206px;
+ border-top:1px solid #edf2f8;
+ gap:8px;
+ background:transparent;
+ text-align:center;
+}
+.shell:not(.auth-shell) .empty-icon{
+ width:52px;height:52px;display:grid;place-items:center;
+ border:0!important;border-radius:14px;
+ background:#f0f7ff;color:#2387ed;
+}
+.shell:not(.auth-shell) .empty-state strong{color:#253650;font-size:14px;font-weight:650}
+.shell:not(.auth-shell) .empty-description{color:#8a9bb2;font-size:12px;line-height:1.6}
+.shell:not(.auth-shell) .rules-panel{padding:10px 16px 16px!important}
+.shell:not(.auth-shell) .rules-panel>.panel-heading{
+ min-height:38px;height:auto;min-width:0;
+ padding:0 0 9px;margin:0 0 7px;
+ gap:10px;display:flex;align-items:center;
+ border-bottom:1px solid #edf1f7;
+}
+.shell:not(.auth-shell) .rules-panel>.panel-heading h3{margin:0;white-space:nowrap}
+.shell:not(.auth-shell) .rules-preview{
+ margin:8px 0 14px!important;
+ border-color:#e9eef6;
+ box-shadow:none;
+}
+.shell:not(.auth-shell) .rules-preview .ant-card-head{
+ min-height:35px;
+ padding:0 12px;
+ font-size:12px;
+ color:#3a516f;
+}
+.shell:not(.auth-shell) .rules-preview .ant-card-body{padding:12px}
+.shell:not(.auth-shell) .audit-summary{
+ display:grid;
+ grid-template-columns:repeat(3,minmax(0,1fr));
+ gap:9px;
+ margin:10px 0 18px;
+}
+.shell:not(.auth-shell) .audit-kpi{
+ min-width:0;
+ min-height:76px;
+ display:flex;
+ align-items:center;
+ gap:13px;
+ padding:11px 14px;
+ border:1px solid #e6edf7;
+ background:#fafdff;
+ border-radius:8px;
+}
+.shell:not(.auth-shell) .audit-kpi-icon{
+ height:40px;width:40px;flex:none;
+ display:grid;place-items:center;border-radius:12px;
+}
+.shell:not(.auth-shell) .audit-kpi span:last-child{display:flex;flex-direction:column;gap:2px;min-width:0}
+.shell:not(.auth-shell) .audit-kpi small{font-size:12px;color:#74859f}
+.shell:not(.auth-shell) .audit-kpi strong{font-size:22px;font-weight:740;line-height:27px;color:#132541}
+.shell:not(.auth-shell) .audit-blue{color:#1677ef;background:#eaf4ff}
+.shell:not(.auth-shell) .audit-amber{color:#de9414;background:#fff4e5}
+.shell:not(.auth-shell) .audit-rose{color:#e64c64;background:#ffedf1}
+.shell:not(.auth-shell) .status-label{
+ display:inline-block;min-width:42px;
+ border-radius:5px;padding:3px 8px;
+ background:#f1f3f6;color:#66758c;
+ text-align:center;font-size:12px;
+}
+.shell:not(.auth-shell) .status-label.is-active{background:#e7f8f1;color:#18885e}
+.shell:not(.auth-shell) .permission-summary{
+ color:#586a83;line-height:1.7;
+ overflow-wrap:anywhere;
+ display:inline-block;max-width:100%;
+}
+.shell:not(.auth-shell) .user-table .ant-table-cell,
+.shell:not(.auth-shell) .user-roles .ant-table-cell{vertical-align:top}
+.shell:not(.auth-shell) .users-workspace{gap:10px}
+.shell:not(.auth-shell) .users-workspace .user-actions{flex-wrap:wrap}
+.shell:not(.auth-shell) .users-workspace .panel{margin-bottom:0}
+/* User menu: a light command menu, not a stack of bordered form buttons. */
+.dg-account-popover .ant-popover-inner{
+ padding:7px!important;
+ background:#fff;border:1px solid #e7edf5;
+ border-radius:12px!important;
+ box-shadow:0 12px 34px #253b5d1a,0 2px 8px #253b5d0a!important;
+}
+.dg-account-popover .ant-popover-inner-content{padding:0}
+.dg-account-popover .account-detail{width:225px;min-width:0;padding:0;color:#21324d}
+.dg-account-popover .account-summary{
+ display:flex;gap:10px;align-items:center;
+ padding:12px 10px 11px;
+}
+.dg-account-popover .account-summary-avatar{
+ width:37px;height:37px;flex:none;
+ display:grid;place-items:center;border-radius:50%;
+ color:#1677ee;background:#e8f4ff;font-size:15px;font-weight:700;
+}
+.dg-account-popover .account-summary-info{display:flex;flex-direction:column;min-width:0;gap:2px}
+.dg-account-popover .account-summary-info strong{
+ font-size:13px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.dg-account-popover .account-summary-info small{color:#8b9aae;font-size:12px}
+.dg-account-popover .account-menu-divider{height:1px;background:#edf1f6;margin:1px 7px 5px}
+.dg-account-popover .account-menu-item{
+ width:100%;min-height:39px;display:flex;align-items:center;justify-content:space-between;
+ padding:8px 11px;border:0;border-radius:7px;
+ font:13px/1.4 inherit;color:#3d506a;
+ text-align:left;background:transparent;cursor:pointer;
+}
+.dg-account-popover .account-menu-item:hover{background:#f2f7fd;color:#087bfa}
+.dg-account-popover .account-menu-danger{color:#dc4558}
+.dg-account-popover .account-menu-danger:hover{color:#dc4558;background:#fff3f5}
+.dg-account-popover .account-menu-item:focus-visible{
+ outline:2px solid #87bdfe;outline-offset:-2px;
+}
+.dg-account-popover .menu-item-arrow{font-size:19px;color:#aab6c7;line-height:1}
+/* Modal/pagination consistency */
+.ant-modal-content{max-width:100%}
+.ant-modal-footer .ant-btn-default{color:#506581}
+.ant-pagination-options .ant-select{min-width:104px}
+/* Desktop with insufficient horizontal space */
+@media(max-width:1280px){
+ .shell:not(.auth-shell) .sidebar{width:192px!important}
+ .shell:not(.auth-shell) .filter-panel{gap:8px}
+ .shell:not(.auth-shell) .overview-shortcuts{gap:7px}
+ .shell:not(.auth-shell) .metric-token{display:none}
+ .shell:not(.auth-shell) .shortcut strong{font-size:16px}
+}
+@media(max-width:1050px){
+ .shell:not(.auth-shell) .audit-summary{gap:7px}
+ .shell:not(.auth-shell) .audit-kpi{gap:8px;padding:9px}
+ .shell:not(.auth-shell) .audit-kpi-icon{width:34px;height:34px}
+ .shell:not(.auth-shell) .users-workspace .filter-panel{
+  display:flex;flex-wrap:wrap;align-items:center;
+ }
+ .shell:not(.auth-shell) .rules-preview .ant-space{display:flex;flex-wrap:wrap}
+}
+@media(max-width:760px){
+ .shell:not(.auth-shell) .sidebar{width:64px!important;padding:14px 5px!important}
+ .shell:not(.auth-shell) .sidebar .brand{padding:0 7px 25px!important}
+ .shell:not(.auth-shell) .sidebar .brand>div,
+ .shell:not(.auth-shell) .sidebar .section,
+ .shell:not(.auth-shell) .sidebar .foot,
+ .shell:not(.auth-shell) .sidebar .nav span{display:none!important}
+ .shell:not(.auth-shell) .sidebar .symbol{width:40px;height:40px}
+ .shell:not(.auth-shell) .sidebar .nav{
+  justify-content:center!important;padding:11px 5px!important;gap:0!important;
+  min-height:44px!important;
+ }
+ .shell:not(.auth-shell) .bar{height:54px!important;min-height:54px!important;padding:0 10px!important}
+ .shell:not(.auth-shell) .bar .breadcrumb{min-width:0;font-size:12px;gap:5px}
+ .shell:not(.auth-shell) .bar .breadcrumb strong{
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+ }
+ .shell:not(.auth-shell) .bar .actions{gap:5px}
+ .shell:not(.auth-shell) .account-separator{display:none}
+ .shell:not(.auth-shell) .account-name{max-width:65px}
+ .shell:not(.auth-shell) .account-avatar{height:30px;width:30px}
+ .shell:not(.auth-shell) .content{padding:0 4px 16px!important}
+ .shell:not(.auth-shell) .panel,
+ .shell:not(.auth-shell) .data-panel{padding:13px 11px!important}
+ .shell:not(.auth-shell) .panel-heading{align-items:flex-start;flex-wrap:wrap;gap:8px}
+ .shell:not(.auth-shell) .panel-heading .actions{flex-wrap:wrap;justify-content:flex-start}
+ .shell:not(.auth-shell) .rules-panel{padding:10px!important}
+ .shell:not(.auth-shell) .rules-panel>.panel-heading{align-items:center}
+ .shell:not(.auth-shell) .rules-preview .ant-card-body{padding:10px}
+ .shell:not(.auth-shell) .rules-preview .ant-space-item{max-width:100%}
+ .shell:not(.auth-shell) .audit-summary{grid-template-columns:1fr;gap:6px}
+ .shell:not(.auth-shell) .audit-kpi{min-height:61px;padding:8px 12px}
+ .shell:not(.auth-shell) .audit-kpi strong{font-size:19px}
+ .shell:not(.auth-shell) .users-workspace .filter-panel{
+  padding:10px;gap:7px;display:flex;flex-wrap:wrap;
+ }
+ .shell:not(.auth-shell) .users-workspace .filter-panel .ant-input-affix-wrapper{
+  width:min(100%,280px)!important;
+ }
+ .shell:not(.auth-shell) .users-workspace .filter-panel .ant-select{
+  width:min(100%,160px)!important;
+ }
+ .shell:not(.auth-shell) .form-pair{grid-template-columns:1fr;gap:0}
+ .shell:not(.auth-shell) .assignment{display:grid;grid-template-columns:1fr;align-items:stretch}
+ .shell:not(.auth-shell) .assignment>.ant-select{width:100%;min-width:0!important}
+ .shell:not(.auth-shell) .assignment>.ant-btn{width:max-content}
+ .shell:not(.auth-shell) .quick-actions{flex-wrap:wrap}
+ .shell:not(.auth-shell) .ant-table-wrapper{width:100%;max-width:100%;overflow-x:auto}
+ .shell:not(.auth-shell) .ant-table-wrapper .ant-table{min-width:650px}
+ .shell:not(.auth-shell) .user-table .ant-table{min-width:530px}
+ .shell:not(.auth-shell) .user-roles .ant-table{min-width:760px}
+ .shell:not(.auth-shell) .ant-pagination{flex-wrap:wrap;gap:5px}
+ .ant-modal{width:calc(100vw - 24px)!important;max-width:calc(100vw - 24px)!important;margin:12px auto}
+ .ant-modal .ant-modal-content{padding:18px 14px}
+ .ant-modal .ant-form-item{margin-bottom:14px}
+}
+@media(max-width:420px){
+ .shell:not(.auth-shell) .bar .alerts-trigger{display:none}
+ .shell:not(.auth-shell) .account-name{max-width:48px}
+ .shell:not(.auth-shell) .overview-stats{grid-template-columns:1fr 1fr}
+ .shell:not(.auth-shell) .metric-symbol{width:35px;height:35px}
+ .shell:not(.auth-shell) .metric{gap:7px}
+ .shell:not(.auth-shell) .metric-copy small{font-size:11px}
+ .shell:not(.auth-shell) .metric .metric-copy strong{font-size:22px}
+ .shell:not(.auth-shell) .rules-panel>.panel-heading{align-items:flex-start}
+}
+@media(prefers-reduced-motion:reduce){
+ .shell:not(.auth-shell) *, .dg-account-popover *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
