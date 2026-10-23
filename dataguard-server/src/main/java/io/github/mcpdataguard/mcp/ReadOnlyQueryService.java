@@ -159,9 +159,8 @@ public class ReadOnlyQueryService {
  }
 }
 )
-   ORDER BY priority ASC,id ASC
    """,(rs,i)->Map.entry(rs.getString(1),rs.getString(2)),
-       actor.orgId(),id,table,"*");
+       actor.orgId(),id,table);
   for(String column:required){
    String selected="REDACT";
    for(Map.Entry<String,String> rule:configured){
