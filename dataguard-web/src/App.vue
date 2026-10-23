@@ -12,6 +12,20 @@ const policyDialog=ref(false);
 const operationalSummary=ref<{deniedRequests:number;pendingApprovals:number;openAlerts:number}|null>(null);
 const sqlRequestRows=ref<Record<string,unknown>[]>([]);
 const approvalRows=ref<Record<string,unknown>[]>([]);
+const securityAlerts=ref<{id:string;status:string;severity:string;rule:string;observedAt:string}[]>([]);
+async function loadSecurityAlerts(){
+ try{securityAlerts.value=await getData<typeof securityAlerts.value>('/api/v1/security-alerts');}
+ catch(e){error.value='查询告警失败：'+(e as Error).message;}
+}
+async function acknowledgeAlert(id:string){
+ saving.value=true;error.value='';
+ try{
+  await requestWrite('/api/v1/security-alerts/'+encodeURIComponent(id)+'/acknowledge','POST');
+  message.success('告警已确认');await loadSecurityAlerts();await loadOperations();
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
+}
+
 const rejectionDialog=ref(false);
 const rejectingApproval=ref({id:'',version:0});
 const rejectionReason=ref('');
@@ -399,7 +413,7 @@ async function updatePassword(){
   <aside class="sidebar">
    <div class="brand"><span class="symbol">◆</span><div>MCP DataGuard<small>AI DATABASE SECURITY</small></div></div>
    <span class="section">工作台</span>
-   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations()};if(page[0]==='flowable')loadOperations()}">{{page[1]}}</button>
+   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations();loadSecurityAlerts()};if(page[0]==='flowable')loadOperations()}">{{page[1]}}</button>
    <div class="foot">● 开源研发版 · v0.5</div>
   </aside>
   <main class="main">
@@ -498,6 +512,18 @@ async function updatePassword(){
        :columns="[{title:'请求编号',dataIndex:'id'},{title:'工具',dataIndex:'tool_name'},
         {title:'决策',dataIndex:'decision'},{title:'状态',dataIndex:'request_status'},
         {title:'指纹',dataIndex:'sql_fingerprint'},{title:'接收时间',dataIndex:'receivedAt'}]"/>
+      <h4>安全告警处置</h4>
+      <a-table row-key="id" size="small" :data-source="securityAlerts" :pagination="{pageSize:10}"
+       :columns="[{title:'规则',dataIndex:'rule'},{title:'等级',dataIndex:'severity'},
+        {title:'状态',dataIndex:'status'},{title:'发生时间',dataIndex:'observedAt'},
+        {title:'操作',key:'actions'}]">
+       <template #bodyCell="{column,record}">
+        <a-popconfirm v-if="column.key==='actions' && record.status==='OPEN'" title="确认已查看此安全告警？"
+         @confirm="acknowledgeAlert(record.id)">
+         <a-button size="small" type="link">确认告警</a-button>
+        </a-popconfirm>
+       </template>
+      </a-table>
       <h4>管理操作历史</h4>
       <a-table style="margin-top:16px" row-key="id" size="small" :data-source="systemEvents"
        :pagination="{pageSize:10}"
