@@ -19,7 +19,7 @@ class SqlRequestAuditServiceTest {
   jdbc=mock(JdbcTemplate.class);
   identity=mock(AgentPrincipalResolver.class);
   when(identity.requireActiveAgent()).thenReturn(new AgentPrincipal(UUID.randomUUID(),UUID.randomUUID()));
-  service=new SqlRequestAuditService(jdbc,identity);
+  service=new SqlRequestAuditService(jdbc,identity,mock(DeniedSqlAuditChain.class));
  }
  @Test void invalidDatasourceDoesNotWriteAudit(){
   service.recordDeniedCheck("invalid","db","SELECT 1",Map.of("decision","DENY"));
