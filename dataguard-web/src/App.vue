@@ -276,7 +276,7 @@ function localizedDisplayName(value:unknown){const name=String(value??'');return
 const permissionNameMap:Record<string,string>={'agent:read':'查看 Agent','agent:write':'管理 Agent','datasource:read':'查看数据源','datasource:write':'管理数据源','datasource:test':'测试数据源','datasource:secret:write':'管理数据源凭据','identity:admin':'身份与用户管理','agent:identity:write':'管理 Agent 身份','agent:permission:write':'管理 Agent 权限','sql:read':'查看 SQL','sql:write':'SQL 策略管理','approval:read':'查看审批','approval:write':'处理审批','audit:read':'查看审计','security:alert:read':'查看告警'};
 function localizedPermissions(value:unknown):string{
  let items:unknown=value;
- if(typeof items==='string'){try{items=JSON.parse(items);}catch{return items;}}
+ if(typeof items==='string'){try{items=JSON.parse(items);}catch{return String(items);}}
  if(!Array.isArray(items))return String(items??'—');
  return items.map(item=>permissionNameMap[String(item)]||String(item)).join('、')||'无';
 }
