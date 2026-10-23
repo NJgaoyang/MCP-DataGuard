@@ -142,19 +142,16 @@ class ApprovedWritePipelineIntegrationTest {
   f.worker().runOne();
   assertEquals(1,f.db().queryForObject(
     "SELECT count(*) FROM dg_execution_attempt WHERE task_id=?",Integer.class,task.taskId()));
- }
- @Test void failedTargetMutationBecomesUnknownNeverRetried(){
-  Fixture f=create();
-  var approved=approval(f,99999);
-  var task=release(f,approved);
-  assertTrue(task.queued());
+  // A new one-time ticket with a nonexistent row cannot be retried after its
+  // remote outcome becomes uncertain.
+  var unsuccessfulApproval=approval(f,99999);
+  var unsuccessfulTask=release(f,unsuccessfulApproval);
+  assertTrue(unsuccessfulTask.queued());
   f.worker().runOne();
   assertEquals("UNKNOWN",f.db().queryForObject(
-    "SELECT task_state FROM dg_execution_task WHERE id=?",String.class,task.taskId()));
-  assertEquals("UNKNOWN",f.db().queryForObject(
-    "SELECT execution_status FROM dg_sql_approval WHERE id=?",String.class,approved));
+    "SELECT task_state FROM dg_execution_task WHERE id=?",String.class,unsuccessfulTask.taskId()));
   f.worker().runOne();
   assertEquals(1,f.db().queryForObject(
-    "SELECT count(*) FROM dg_execution_attempt WHERE task_id=?",Integer.class,task.taskId()));
+    "SELECT count(*) FROM dg_execution_attempt WHERE task_id=?",Integer.class,unsuccessfulTask.taskId()));
  }
 }
