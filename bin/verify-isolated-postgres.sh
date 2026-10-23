@@ -64,4 +64,15 @@ echo "PASSED: execution role certification rejects gained UPDATE privilege"
 docker exec -u postgres "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d dataguard \
  -Atqc "SELECT count(*) FROM information_schema.tables WHERE table_schema='platform' AND table_name IN ('dg_sql_approval','dg_outbox_event','dg_audit_event','dg_sql_request')" | grep -qx '4'
 echo "PASSED: approval, outbox, audit and SQL request schema"
+if [[ "${DG_RUN_FLOWABLE_OUTBOX_E2E:-false}" == "true" ]]; then
+ CACHE="${DG_M2_CACHE:-$HOME/.cache/mcp-dataguard/m2}"
+ mkdir -p "$CACHE"
+ docker run --rm --network "container:$NAME" \
+   -e DG_OUTBOX_E2E_URL=jdbc:postgresql://127.0.0.1:5432/dataguard \
+   -v "$ROOT:/workspace" -v "$CACHE:/root/.m2" -w /workspace \
+   maven:3.9.11-eclipse-temurin-21 \
+   mvn -B -o -ntp -pl dataguard-workflow -am \
+     -Dtest=ApprovalOutboxIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false test
+ echo "PASSED: platform approval outbox to two-stage Flowable integration"
+fi
 echo "ISOLATED_POSTGRES_VERIFICATION_PASSED"
