@@ -58,9 +58,9 @@ async function loadAuditEvents(){
 }
 const policyForm=reactive({code:'',name:''});
 const policyRuleDialog=ref(false);
-const policyTarget=ref({id:'',name:''});
+const policyTarget=ref({id:'',name:'',status:'',version:0,latestVersion:0});
 const policyRule=reactive({decision:'DENY',priority:100,table:'',environment:'DEV'});
-const policyVersions=ref<{revision:number;priority:number;decision:string;rule:string}[]>([]);
+const policyVersions=ref<{revision:number;priority:number;decision:string;rule:string;published:boolean}[]>([]);
 const policySimulation=ref('');
 const token=ref('');
 const loginForm=reactive({organization:'dataguard',username:'',password:''});
@@ -130,9 +130,19 @@ async function loadPolicyVersions(){
  try{policyVersions.value=await getData<typeof policyVersions.value>('/api/v1/sql-policies/'+encodeURIComponent(policyTarget.value.id)+'/versions');}
  catch(e){error.value='读取规则版本失败：'+(e as Error).message;}
 }
-async function openPolicyRules(row:{id:string;name:string}){
- policyTarget.value={id:row.id,name:row.name};
+async function openPolicyRules(row:{id:string;name:string;status:string;version:number;latestVersion:number}){
+ policyTarget.value={...row};
  policyRuleDialog.value=true;await loadPolicyVersions();
+}
+async function rollbackPolicy(revision:number){
+ saving.value=true;error.value='';
+ try{
+  await requestWrite('/api/v1/sql-policies/'+encodeURIComponent(policyTarget.value.id)+'/rollback','POST',
+   {revision,expectedVersion:policyTarget.value.version});
+  message.success('已从历史版本恢复拒绝策略，并生成新的发布版本');
+  policyRuleDialog.value=false;await loadPolicies();
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
 }
 async function simulatePolicyRule(){
  saving.value=true;error.value='';policySimulation.value='';
@@ -606,14 +616,24 @@ async function updatePassword(){
       <a-radio value="REQUIRE_APPROVAL">需要人工审批</a-radio></a-radio-group>
     </a-form-item>
     <a-form-item label="优先级"><a-input-number v-model:value="policyRule.priority" :min="1" :max="10000"/></a-form-item>
-    <a-button type="primary" :loading="saving" @click="savePolicyRule">保存新草稿版本</a-button>
-    <a-button style="margin-left:8px" :loading="saving" @click="simulatePolicyRule">模拟匹配</a-button>
+    <a-button v-if="policyTarget.status==='DRAFT'" type="primary" :loading="saving" @click="savePolicyRule">保存新草稿版本</a-button>
+    <a-button v-if="policyTarget.status==='DRAFT'" style="margin-left:8px" :loading="saving" @click="simulatePolicyRule">模拟匹配</a-button>
     <a-alert v-if="policySimulation" style="margin-top:12px" type="info" show-icon :message="policySimulation"/>
    </a-form>
    <h4 style="margin-top:18px">已有规则版本</h4>
    <a-table size="small" :data-source="policyVersions" row-key="revision" :pagination="{pageSize:5}"
     :columns="[{title:'版本',dataIndex:'revision'},{title:'优先级',dataIndex:'priority'},
-     {title:'决策',dataIndex:'decision'},{title:'条件(JSON)',dataIndex:'rule'}]"/>
+     {title:'决策',dataIndex:'decision'},{title:'条件(JSON)',dataIndex:'rule'},
+     {title:'操作',key:'actions'}]">
+    <template #bodyCell="{column,record}">
+     <a-popconfirm v-if="column.key==='actions' && record.published && record.decision==='DENY' &&
+        record.revision<policyTarget.latestVersion && ['ACTIVE','DISABLED'].includes(policyTarget.status)"
+       title="确认恢复这个历史 DENY 版本？将产生新的不可变发布版本。"
+       @confirm="rollbackPolicy(record.revision)">
+      <a-button type="link" size="small">恢复此版本</a-button>
+     </a-popconfirm>
+    </template>
+   </a-table>
   </a-modal>
   <a-modal v-model:open="policyDialog" title="创建 SQL 策略草稿" ok-text="创建"
    :confirm-loading="saving" @ok="savePolicy">
