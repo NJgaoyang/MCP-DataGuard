@@ -85,7 +85,7 @@ public class SqlPolicyController {
  }
  public record RuleInput(String decision,int priority,String table,String environment){}
  private static Map<String,Object> validate(RuleInput input){
-  if(input==null || !List.of("DENY","REQUIRE_APPROVAL").contains(input.decision()) ||
+  if(input==null || input.decision()==null || !List.of("DENY","REQUIRE_APPROVAL").contains(input.decision()) ||
      input.priority()<1 || input.priority()>10000 ||
      input.table()==null || !input.table().matches("[a-z][a-z0-9_]{0,254}") ||
      input.environment()==null || !List.of("DEV","TEST","STAGING","PROD").contains(input.environment()))
