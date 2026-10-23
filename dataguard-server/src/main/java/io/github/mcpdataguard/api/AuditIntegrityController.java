@@ -32,7 +32,7 @@ public class AuditIntegrityController {
                       String reason,String prev,String digest){}
  @GetMapping
  public Map<String,Object> verify(@AuthenticationPrincipal Jwt jwt,
-   @RequestParam(defaultValue="mcp-denied-sql") String stream){
+   @RequestParam(name="stream",defaultValue="mcp-denied-sql") String stream){
   UserPrincipal actor=users.requireUser(jwt);
   users.requirePermission(actor,"identity:admin");
   if(!List.of("mcp-denied-sql","mcp-read-sql").contains(stream))
