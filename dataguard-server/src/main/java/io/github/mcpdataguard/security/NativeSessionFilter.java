@@ -60,7 +60,7 @@ public class NativeSessionFilter extends OncePerRequestFilter {
    .subject(sub).audience(List.of(NativeTokens.AUDIENCE))
    .issuedAt(identity.created()).expiresAt(identity.expires())
    .claim("azp",client).build();
-  SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt));
+  SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt,List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_NATIVE_SESSION"))));
  }
  private record Identity(UUID id,Instant created,Instant expires,boolean mustChange){}
 }
