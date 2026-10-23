@@ -62,11 +62,16 @@ class ApprovedWritePipelineIntegrationTest {
       "DG_TARGET_"+TARGET.toString().replace("-","").toUpperCase()+"_WRITE");
   jdbc.update("INSERT INTO dg_workflow_template(id,org_id,code,name,created_by) VALUES(?,?,?,?,?)",
     workflow,org,"sql_write","Isolated approval",owner);
+  String legacyDefinition="certified test definition";
+  String legacyDigest;
+  try{legacyDigest=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+     .digest(legacyDefinition.getBytes(StandardCharsets.UTF_8)));}
+  catch(Exception e){throw new IllegalStateException(e);}
   jdbc.update("""
     INSERT INTO dg_workflow_version(id,org_id,workflow_id,revision,bpmn_xml,
       bpmn_digest,flowable_definition_key,status)
-    VALUES(?,?,?,1,'certified test definition',?,'sqlTwoLevelReview','PUBLISHED')
-    """,ver,org,workflow,"0".repeat(64));
+    VALUES(?,?,?,1,?,?,'sqlTwoLevelReview','PUBLISHED')
+    """,ver,org,workflow,legacyDefinition,legacyDigest);
   var crypto=new ApprovalPayloadCrypto(System.getenv("DG_APPROVAL_MASTER_KEY_BASE64"));
   var signer=new ExecutionTicketSigner(System.getenv("DG_EXECUTION_SIGNING_KEY_BASE64"));
   var tx=new TransactionTemplate(new DataSourceTransactionManager(data));
