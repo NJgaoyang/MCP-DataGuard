@@ -31,30 +31,40 @@ public class ReviewProcessService {
   return runtime.startProcessInstanceByKey("sqlTwoLevelReview",requestKey,
      Map.of("tenantId",orgId,"sqlExecutionEnabled",false)).getId();
  }
- public List<ReviewTask> pending(String processInstanceId){
+ public List<ReviewTask> pending(String processInstanceId,String orgId){
   requireId(processInstanceId);
+  requireTenant(processInstanceId,orgId);
   return tasks.createTaskQuery().processInstanceId(processInstanceId).list().stream()
     .map(t->new ReviewTask(t.getId(),t.getName(),t.getTaskDefinitionKey())).toList();
  }
  @Transactional
- public void complete(String taskId,String assignedReviewer){
+ public void complete(String taskId,String assignedReviewer,String orgId){
   requireId(taskId);
   requireId(assignedReviewer);
   Task task=tasks.createTaskQuery().taskId(taskId).singleResult();
   if(task==null)throw new IllegalArgumentException("Task unavailable");
+  requireTenant(task.getProcessInstanceId(),orgId);
   if(task.getAssignee()==null || !assignedReviewer.equals(task.getAssignee()))
    throw new SecurityException("Task is not assigned to reviewer");
   tasks.complete(taskId,Map.of("lastReviewer",assignedReviewer,"sqlExecutionEnabled",false));
  }
  @Transactional
- public void reject(String taskId,String assignedReviewer,String reason){
+ public void reject(String taskId,String assignedReviewer,String orgId,String reason){
   requireId(taskId);requireId(assignedReviewer);
   if(reason==null || reason.isBlank() || reason.length()>1000)
    throw new IllegalArgumentException("Reason required");
   Task task=tasks.createTaskQuery().taskId(taskId).singleResult();
   if(task==null || task.getAssignee()==null || !assignedReviewer.equals(task.getAssignee()))
    throw new SecurityException("Reviewer does not own task");
+  requireTenant(task.getProcessInstanceId(),orgId);
   runtime.deleteProcessInstance(task.getProcessInstanceId(),"REJECTED: "+reason.strip());
+ }
+ private void requireTenant(String processInstanceId,String orgId){
+  if(orgId==null || !orgId.matches("[0-9a-f-]{36}"))
+   throw new SecurityException("Invalid tenant");
+  ProcessInstance instance=runtime.createProcessInstanceQuery().processInstanceId(processInstanceId).singleResult();
+  if(instance==null || !orgId.equals(runtime.getVariable(processInstanceId,"tenantId")))
+   throw new SecurityException("Workflow is not available for tenant");
  }
  private static void requireId(String id){
   if(id==null || !id.matches("[a-zA-Z0-9_-]{1,128}"))
