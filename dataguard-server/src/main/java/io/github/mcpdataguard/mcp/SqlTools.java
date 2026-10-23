@@ -15,9 +15,10 @@ public final class SqlTools {
  private final SqlPreflightService preflight;
  private final AgentPrincipalResolver agents;
  private final AuthorizedSchemaService schemas;
+ private final SqlRequestAuditService audit;
  public SqlTools(AuthorizedDatasourceService datasources,SqlPreflightService preflight,
-                 AgentPrincipalResolver agents,AuthorizedSchemaService schemas){
-  this.datasources=datasources;this.preflight=preflight;this.agents=agents;this.schemas=schemas;
+                 AgentPrincipalResolver agents,AuthorizedSchemaService schemas,SqlRequestAuditService audit){
+  this.datasources=datasources;this.preflight=preflight;this.agents=agents;this.schemas=schemas;this.audit=audit;
  }
 
  private static Map<String,Object> deny(String code) {
@@ -57,7 +58,9 @@ public final class SqlTools {
   @McpToolParam(description="Database name",required=true) String database,
   @McpToolParam(description="SQL text",required=true) String sql,
   @McpToolParam(description="Bind parameters",required=false) List<Object> parameters){
-  return preflight.check(datasourceId,database,sql,parameters);
+  Map<String,Object> result=preflight.check(datasourceId,database,sql,parameters);
+  audit.recordDeniedCheck(datasourceId,database,sql,result);
+  return result;
  }
  @McpTool(name="submit_change",description="Submit a SQL change for human approval (disabled)")
  public Map<String,Object> submitChange(
