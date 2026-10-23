@@ -10,6 +10,10 @@ const selected=ref('dashboard');
 const sqlPolicies=ref<{id:string;code:string;name:string;status:string}[]>([]);
 const policyDialog=ref(false);
 const policyForm=reactive({code:'',name:''});
+const policyRuleDialog=ref(false);
+const policyTarget=ref({id:'',name:''});
+const policyRule=reactive({decision:'DENY',priority:100,table:'',environment:'DEV'});
+const policyVersions=ref<{revision:number;priority:number;decision:string;rule:string}[]>([]);
 const token=ref('');
 const loginForm=reactive({organization:'dataguard',username:'',password:''});
 const mustChange=ref(false);
@@ -61,6 +65,24 @@ async function savePolicy(){
   await requestWrite('/api/v1/sql-policies','POST',{...policyForm});
   policyDialog.value=false;message.success('SQL 策略草稿创建成功');
   await loadPolicies();
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
+}
+async function loadPolicyVersions(){
+ try{policyVersions.value=await getData<typeof policyVersions.value>('/api/v1/sql-policies/'+encodeURIComponent(policyTarget.value.id)+'/versions');}
+ catch(e){error.value='读取规则版本失败：'+(e as Error).message;}
+}
+async function openPolicyRules(row:{id:string;name:string}){
+ policyTarget.value={id:row.id,name:row.name};
+ policyRuleDialog.value=true;await loadPolicyVersions();
+}
+async function savePolicyRule(){
+ saving.value=true;error.value='';
+ try{
+  if(!/^[a-z][a-z0-9_]{0,254}$/.test(policyRule.table))throw new Error('请填写有效的表名');
+  await requestWrite('/api/v1/sql-policies/'+encodeURIComponent(policyTarget.value.id)+'/versions','POST',{...policyRule});
+  message.success('拒绝/审批规则草稿版本已保存，不会自动生效');
+  await loadPolicyVersions();await loadPolicies();
  }catch(e){error.value=(e as Error).message;}
  finally{saving.value=false;}
 }
@@ -402,7 +424,11 @@ async function updatePassword(){
       </div></div>
       <a-alert type="info" show-icon message="仅支持草稿登记，未开放策略发布、执行授权。"/>
       <a-table row-key="id" size="small" :data-source="sqlPolicies" :pagination="{pageSize:10}"
-       :columns="[{title:'编码',dataIndex:'code'},{title:'名称',dataIndex:'name'},{title:'状态',dataIndex:'status'}]"/>
+       :columns="[{title:'编码',dataIndex:'code'},{title:'名称',dataIndex:'name'},{title:'状态',dataIndex:'status'},{title:'操作',key:'actions'}]">
+       <template #bodyCell="{column,record}">
+        <a-button v-if="column.key==='actions'" size="small" type="link" @click="openPolicyRules(record)">规则版本</a-button>
+       </template>
+      </a-table>
      </section>
      <section v-else-if="selected==='users'" class="panel">
       <div class="panel-heading">
@@ -437,6 +463,28 @@ async function updatePassword(){
    </div>
   </main>
 
+  <a-modal v-model:open="policyRuleDialog" :title="'规则草稿版本 · '+policyTarget.name" :footer="null" width="760px">
+   <a-alert type="warning" show-icon message="当前仅保存拒绝/人工审批规则草稿；没有发布或执行权限。"/>
+   <a-form layout="vertical" style="margin-top:16px">
+    <a-form-item label="表名"><a-input v-model:value="policyRule.table" placeholder="orders"/></a-form-item>
+    <a-form-item label="环境">
+     <a-select v-model:value="policyRule.environment">
+      <a-select-option value="DEV">DEV</a-select-option><a-select-option value="TEST">TEST</a-select-option>
+      <a-select-option value="STAGING">STAGING</a-select-option><a-select-option value="PROD">PROD</a-select-option>
+     </a-select>
+    </a-form-item>
+    <a-form-item label="决策">
+     <a-radio-group v-model:value="policyRule.decision"><a-radio value="DENY">拒绝</a-radio>
+      <a-radio value="REQUIRE_APPROVAL">需要人工审批</a-radio></a-radio-group>
+    </a-form-item>
+    <a-form-item label="优先级"><a-input-number v-model:value="policyRule.priority" :min="1" :max="10000"/></a-form-item>
+    <a-button type="primary" :loading="saving" @click="savePolicyRule">保存新草稿版本</a-button>
+   </a-form>
+   <h4 style="margin-top:18px">已有规则版本</h4>
+   <a-table size="small" :data-source="policyVersions" row-key="revision" :pagination="{pageSize:5}"
+    :columns="[{title:'版本',dataIndex:'revision'},{title:'优先级',dataIndex:'priority'},
+     {title:'决策',dataIndex:'decision'},{title:'条件(JSON)',dataIndex:'rule'}]"/>
+  </a-modal>
   <a-modal v-model:open="policyDialog" title="创建 SQL 策略草稿" ok-text="创建"
    :confirm-loading="saving" @ok="savePolicy">
    <a-form layout="vertical">
