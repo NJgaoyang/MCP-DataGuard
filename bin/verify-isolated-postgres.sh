@@ -79,7 +79,33 @@ if [[ "${DG_RUN_FLOWABLE_OUTBOX_E2E:-false}" == "true" ]]; then
    maven:3.9.11-eclipse-temurin-21 \
    mvn -B -o -ntp -pl dataguard-server -am \
      -Dtest=AuditIntegrityIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false test
+ docker run --rm --network "container:$NAME" \
+   -e DG_OUTBOX_E2E_URL=jdbc:postgresql://127.0.0.1:5432/dataguard \
+   -v "$ROOT:/workspace" -v "$CACHE:/root/.m2" -w /workspace \
+   maven:3.9.11-eclipse-temurin-21 \
+   mvn -B -o -ntp -pl dataguard-workflow -am \
+     -Dtest=ApprovalRecoveryIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false test
+ echo "PASSED: approval timeout, eight retry attempts and high-severity dead-letter alert"
  echo "PASSED: SQL audit chain rejects tampered evidence and cross-tenant access"
  echo "PASSED: platform approval outbox to two-stage Flowable integration"
+fi
+if [[ "${DG_RUN_READ_TLS_E2E:-false}" == "true" ]]; then
+ TLS_TMP="$(mktemp -d)"
+ trap 'docker rm -f "$NAME" >/dev/null 2>&1 || true; rm -rf "$TLS_TMP"' EXIT
+ docker exec -u postgres "$NAME" sh -c 'cd "$PGDATA" && openssl req -x509 -nodes -days 1 -newkey rsa:2048 -keyout server.key -out server.crt -subj /CN=localhost -addext subjectAltName=DNS:localhost >/dev/null 2>&1 && chmod 600 server.key'
+ docker exec -u postgres "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d dataguard -c "ALTER SYSTEM SET ssl='on'" >/dev/null
+ docker exec -u postgres "$NAME" pg_ctl -D /var/lib/postgresql/data reload >/dev/null
+ docker exec -u postgres "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d dataguard \
+   -c 'CREATE ROLE dg_tls_reader LOGIN; CREATE TABLE public.readonly_probe(id integer PRIMARY KEY,amount integer); INSERT INTO public.readonly_probe VALUES(1,123),(2,456); GRANT SELECT ON public.readonly_probe TO dg_tls_reader;' >/dev/null
+ docker cp "$NAME:/var/lib/postgresql/data/server.crt" "$TLS_TMP/root.crt" >/dev/null
+ CACHE="${DG_M2_CACHE:-$HOME/.cache/mcp-dataguard/m2}"
+ mkdir -p "$CACHE"
+ docker run --rm --network "container:$NAME" -e DG_READ_JDBC_E2E=true \
+   -v "$ROOT:/workspace" -v "$CACHE:/root/.m2" \
+   -v "$TLS_TMP/root.crt:/root/.postgresql/root.crt:ro" -w /workspace \
+   maven:3.9.11-eclipse-temurin-21 \
+   mvn -B -o -ntp -pl dataguard-server -am \
+     -Dtest=ReadOnlyJdbcTlsIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false test
+ echo "PASSED: JDBC verify-full TLS, physical roles, masking and resource budgets"
 fi
 echo "ISOLATED_POSTGRES_VERIFICATION_PASSED"
