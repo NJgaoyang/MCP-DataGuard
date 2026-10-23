@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {ref,computed,reactive} from 'vue';
 import {message} from 'ant-design-vue';
+import UiIcon from './components/UiIcon.vue';
 const pages=[
  ['dashboard','总览仪表盘'],['agents','Agent 管理'],['datasources','数据源管理'],
  ['rules','SQL 安全规则'],['flowable','Flowable 审批'],['audit','SQL 审计与监控'],
@@ -269,6 +270,16 @@ const assignment=reactive({userId:'',roleId:''});
 const datasources=ref<Record<string,unknown>[]>([]);
 const busy=ref(false),error=ref('');
 const title=computed(()=>pages.find(p=>p[0]===selected.value)?.[1]||'总览仪表盘');
+const dayGreeting=computed(()=>{
+ const hour=new Date().getHours();
+ return hour<11?'上午好':hour<14?'中午好':hour<19?'下午好':'晚上好';
+});
+const latestAlerts=computed(()=>[...securityAlerts.value].sort((a,b)=>
+ new Date(b.observedAt).getTime()-new Date(a.observedAt).getTime()).slice(0,3));
+function displayAlertTime(value:string){
+ const date=new Date(value);
+ return Number.isNaN(date.getTime())?value:date.toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
 const agentDialog=ref(false),sourceDialog=ref(false),saving=ref(false);
 const agentForm=reactive({
  id:'',code:'',name:'',description:'',rateLimitPerMinute:60,
@@ -558,7 +569,7 @@ async function login(){
   forcedPasswordChange.value=result.mustChangePassword;
   error.value='';profile.value=null;
   loginForm.password='';
-  if(!mustChange.value){await reload();await loadAdmin();}
+  if(!mustChange.value){await reload();await Promise.allSettled([loadOperations(),loadSecurityAlerts()]);await loadAdmin();}
  }catch(e){error.value=(e as Error).message;}
  finally{busy.value=false;}
 }
@@ -605,12 +616,14 @@ async function updatePassword(){
   <aside v-if="token&&!mustChange" class="sidebar">
    <div class="brand"><span class="symbol">M</span><div>MCP DataGuard<small>数据库安全管理</small></div></div>
    <span class="section">工作台</span>
-   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations();loadSecurityAlerts();loadTrends()};if(page[0]==='flowable'){loadOperations();loadDeadLetters();loadWorkflowDesigns()}}">{{page[1]}}</button>
+   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='dashboard'){loadOperations();loadSecurityAlerts()};if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations();loadSecurityAlerts();loadTrends()};if(page[0]==='flowable'){loadOperations();loadDeadLetters();loadWorkflowDesigns()}}"><UiIcon :name="page[0]" :size="19"/><span>{{page[1]}}</span></button>
    <div class="foot">MCP DataGuard</div>
   </aside>
   <main class="main">
    <header v-if="token&&!mustChange" class="bar"><div class="breadcrumb">工作台 <span>/</span> <strong>{{title}}</strong></div>
     <div class="actions">
+     <button type="button" class="alerts-trigger" aria-label="查看安全告警" title="查看安全告警" @click="selected='audit';loadOperations();loadSecurityAlerts()"><UiIcon name="bell" :size="19"/><i v-if="(operationalSummary?.openAlerts??0)>0" class="notification-dot"></i></button>
+     <span class="account-separator" aria-hidden="true"></span>
      <template v-if="token">
       <a-popover placement="bottomRight" trigger="click">
        <template #content>
@@ -625,7 +638,7 @@ async function updatePassword(){
        <button class="account-trigger" type="button" aria-label="查看当前登录用户">
         <span class="account-avatar">{{(profile?.displayName || profile?.username || '用').slice(0,1)}}</span>
         <span class="account-name">{{profile?.username || '当前用户'}}</span>
-        <span class="account-chevron">⌄</span>
+        <UiIcon name="chevron" :size="14" class="account-chevron"/>
        </button>
       </a-popover>
      </template>
@@ -684,43 +697,84 @@ async function updatePassword(){
     </section>
     <a-alert v-if="error" type="warning" show-icon :message="error" class="alert"/>
     <template v-if="profile&&!mustChange">
-     <section v-if="selected==='dashboard'" class="overview">
-      <div class="overview-main">
-       <div class="overview-stats">
-        <div class="metric"><span>Agent 数量</span><strong>{{agents.length}}</strong><span class="metric-icon blue">A</span></div>
-        <div class="metric"><span>数据源</span><strong>{{datasources.length}}</strong><span class="metric-icon cyan">D</span></div>
-        <div class="metric"><span>待审批</span><strong>{{operationalSummary?.pendingApprovals ?? 0}}</strong><span class="metric-icon mint">✓</span></div>
-        <div class="metric"><span>安全告警</span><strong>{{operationalSummary?.openAlerts ?? 0}}</strong><span class="metric-icon red">!</span></div>
-       </div>
-       <div class="panel overview-block">
-        <div class="panel-heading"><h3>业务管理</h3></div>
-        <div class="overview-shortcuts">
-         <button class="shortcut" @click="selected='agents';newAgent()"><span class="shortcut-icon blue">A</span><strong>Agent 管理</strong><span>新建 Agent →</span></button>
-         <button class="shortcut" @click="selected='datasources';newDatasource()"><span class="shortcut-icon cyan">D</span><strong>数据源管理</strong><span>新增数据源 →</span></button>
-         <button class="shortcut" @click="selected='rules';loadPolicies()"><span class="shortcut-icon violet">S</span><strong>SQL 安全规则</strong><span>查看规则 →</span></button>
-        </div>
-       </div>
-       <div class="panel overview-block">
-        <div class="panel-heading"><h3>近期 SQL 活动</h3><a-button type="link" size="small" @click="selected='audit';loadAuditEvents();loadTrends()">查看审计</a-button></div>
-        <div class="overview-figures">
-         <div><span>拒绝请求</span><strong>{{operationalSummary?.deniedRequests ?? 0}}</strong></div>
-         <div><span>待处理审批</span><strong>{{operationalSummary?.pendingApprovals ?? 0}}</strong></div>
-         <div><span>未处理告警</span><strong>{{operationalSummary?.openAlerts ?? 0}}</strong></div>
-        </div>
-       </div>
+     <section v-if="selected==='dashboard'" class="dashboard-screen">
+      <div class="dashboard-hero">
+       <h1>{{dayGreeting}}，{{profile?.username || '管理员'}}</h1>
+       <p>实时掌握数据库安全态势，保障企业数据安全</p>
       </div>
-      <aside class="overview-aside">
-       <div class="panel overview-block">
-        <div class="panel-heading"><h3>安全状态</h3></div>
-        <div class="security-overview"><div class="security-ring"><span>{{operationalSummary?.openAlerts ?? 0}}</span></div><p>未处理告警</p></div>
-        <div class="security-legend"><span><i class="legend-dot blue"></i>SQL 拒绝 {{operationalSummary?.deniedRequests ?? 0}}</span><span><i class="legend-dot red"></i>待处理告警 {{operationalSummary?.openAlerts ?? 0}}</span></div>
+      <div class="overview">
+       <div class="overview-main">
+        <div class="overview-stats">
+         <button type="button" class="metric" @click="selected='agents'">
+          <span class="metric-symbol metric-agent"><UiIcon name="agents" :size="29"/></span>
+          <span class="metric-copy"><small>Agent 数量</small><strong>{{agents.length}}</strong></span><span class="metric-token blue">A</span>
+         </button>
+         <button type="button" class="metric" @click="selected='datasources'">
+          <span class="metric-symbol metric-db"><UiIcon name="datasources" :size="28"/></span>
+          <span class="metric-copy"><small>数据源</small><strong>{{datasources.length}}</strong></span><span class="metric-token cyan">D</span>
+         </button>
+         <button type="button" class="metric" @click="selected='flowable';loadOperations()">
+          <span class="metric-symbol metric-approval"><UiIcon name="document" :size="28"/></span>
+          <span class="metric-copy"><small>待审批</small><strong>{{operationalSummary?.pendingApprovals ?? 0}}</strong></span><span class="metric-token red">!</span>
+         </button>
+        </div>
+        <section class="panel overview-block business-panel">
+         <div class="overview-section-head"><h2>业务管理</h2><p>快速进入核心功能，管理数据库安全策略与资源</p></div>
+         <div class="overview-shortcuts">
+          <button type="button" class="shortcut shortcut-agent" @click="selected='agents';newAgent()">
+           <span class="shortcut-icon"><UiIcon name="agents" :size="24"/></span><UiIcon class="shortcut-watermark" name="agents" :size="102"/>
+           <strong>Agent 管理</strong><span class="shortcut-caption">新建 Agent、管理运行状态</span><span class="shortcut-arrow"><UiIcon name="arrow" :size="18"/></span>
+          </button>
+          <button type="button" class="shortcut shortcut-db" @click="selected='datasources';newDatasource()">
+           <span class="shortcut-icon"><UiIcon name="datasources" :size="24"/></span><UiIcon class="shortcut-watermark" name="datasources" :size="102"/>
+           <strong>数据源管理</strong><span class="shortcut-caption">新增数据源、配置连接信息</span><span class="shortcut-arrow"><UiIcon name="arrow" :size="18"/></span>
+          </button>
+          <button type="button" class="shortcut shortcut-rules" @click="selected='rules';loadPolicies()">
+           <span class="shortcut-icon"><UiIcon name="rules" :size="24"/></span><UiIcon class="shortcut-watermark" name="rules" :size="102"/>
+           <strong>SQL 安全规则</strong><span class="shortcut-caption">查看规则、配置安全策略</span><span class="shortcut-arrow"><UiIcon name="arrow" :size="18"/></span>
+          </button>
+         </div>
+        </section>
+        <section class="panel overview-block activity-panel">
+         <div class="overview-section-head overview-head-actions"><div><h2>近期 SQL 活动</h2><p>SQL 请求与审批概览</p></div><button type="button" class="overview-text-link" @click="selected='audit';loadAuditEvents();loadTrends()"><span>查看审计</span><UiIcon name="arrow" :size="16"/></button></div>
+         <div class="overview-figures">
+          <div class="figure"><span class="figure-icon blue"><UiIcon name="document" :size="23"/></span><span class="figure-content"><small>拒绝请求</small><strong>{{operationalSummary?.deniedRequests ?? 0}}</strong></span></div>
+          <div class="figure"><span class="figure-icon amber"><UiIcon name="clock" :size="23"/></span><span class="figure-content"><small>待处理审批</small><strong>{{operationalSummary?.pendingApprovals ?? 0}}</strong></span></div>
+          <div class="figure"><span class="figure-icon rose"><UiIcon name="rules" :size="23"/></span><span class="figure-content"><small>未处理告警</small><strong>{{operationalSummary?.openAlerts ?? 0}}</strong></span></div>
+         </div>
+         <div v-if="!sqlRequestRows.length" class="activity-empty">
+          <span class="activity-empty-icon"><UiIcon name="document" :size="42"/><UiIcon name="search" :size="27"/></span>
+          <strong>暂无 SQL 活动数据</strong><span>当有 SQL 请求或审批操作后，将在此展示记录</span>
+         </div>
+         <div v-else class="activity-preview">
+          <span>已获取 {{sqlRequestRows.length}} 条 SQL 请求记录</span><button type="button" @click="selected='audit';loadOperations();loadAuditEvents()">查看最近请求 <UiIcon name="arrow" :size="15"/></button>
+         </div>
+        </section>
        </div>
-       <div class="panel overview-block">
-        <div class="panel-heading"><h3>待办事项</h3><a-button type="link" size="small" @click="selected='flowable';loadOperations()">查看全部</a-button></div>
-        <div class="todo-row"><span class="todo-tag">审批</span><span>待审核申请</span><strong>{{operationalSummary?.pendingApprovals ?? 0}}</strong></div>
-        <div class="todo-row"><span class="todo-tag alert-tag">告警</span><span>待处理安全告警</span><strong>{{operationalSummary?.openAlerts ?? 0}}</strong></div>
-       </div>
-      </aside>
+       <aside class="overview-aside">
+        <section class="panel overview-block security-panel">
+         <div class="overview-section-head overview-head-actions"><h2>安全状态</h2><button type="button" class="overview-text-link" @click="selected='audit';loadOperations();loadSecurityAlerts()"><span>查看详情</span><UiIcon name="arrow" :size="16"/></button></div>
+         <div class="security-overview"><div class="security-ring"><span>{{operationalSummary?.openAlerts ?? 0}}</span><small>未处理告警</small></div></div>
+         <div class="security-legend"><span><i class="legend-dot blue"></i>SQL 拒绝 {{operationalSummary?.deniedRequests ?? 0}}</span><span><i class="legend-dot red"></i>待处理告警 {{operationalSummary?.openAlerts ?? 0}}</span></div>
+        </section>
+        <section class="panel overview-block risk-panel">
+         <div class="overview-section-head overview-head-actions"><h2>风险动态</h2><button type="button" class="overview-text-link" @click="selected='audit';loadOperations();loadSecurityAlerts()"><span>查看全部</span><UiIcon name="arrow" :size="16"/></button></div>
+         <div v-if="latestAlerts.length" class="risk-items">
+          <button type="button" class="risk-item" v-for="alert in latestAlerts" :key="alert.id" @click="selected='audit';loadSecurityAlerts()">
+           <span class="risk-item-icon"><UiIcon name="warning" :size="19"/></span>
+           <span class="risk-item-body"><strong>{{alert.rule || '安全告警'}}</strong><small>{{alert.severity}} · {{alert.status}}</small></span>
+           <time>{{displayAlertTime(alert.observedAt)}}</time>
+          </button>
+         </div>
+         <div v-else class="risk-empty"><span class="risk-clear-icon"><UiIcon name="shield-check" :size="24"/></span><strong>暂无风险动态</strong><span>新的安全告警将在此显示</span></div>
+        </section>
+        <section class="panel overview-block todo-panel">
+         <div class="overview-section-head overview-head-actions"><h2>待办事项</h2><button type="button" class="overview-text-link" @click="selected='flowable';loadOperations()"><span>查看全部</span><UiIcon name="arrow" :size="16"/></button></div>
+         <button type="button" class="todo-row" @click="selected='flowable';loadOperations()"><span class="todo-tag">审批</span><span>待审批申请</span><strong>{{operationalSummary?.pendingApprovals ?? 0}}</strong><UiIcon name="arrow" :size="15"/></button>
+         <button type="button" class="todo-row" @click="selected='audit';loadOperations();loadSecurityAlerts()"><span class="todo-tag alert-tag">告警</span><span>待处理安全告警</span><strong>{{operationalSummary?.openAlerts ?? 0}}</strong><UiIcon name="arrow" :size="15"/></button>
+        </section>
+       </aside>
+      </div>
      </section>
      <section v-else-if="selected==='agents'" class="panel data-panel">
       <div class="panel-heading"><h3>Agent 列表 <span class="table-count">{{agents.length}}</span></h3><a-button type="primary" @click="newAgent">新增 Agent</a-button></div>
@@ -1354,4 +1408,132 @@ async function updatePassword(){
 .shell:not(.auth-shell) .account-trigger:focus-visible{outline:2px solid var(--blue9);outline-offset:2px}
 @media(max-width:1150px){.shell:not(.auth-shell) .overview{grid-template-columns:1fr}}
 @media(max-width:700px){.shell:not(.auth-shell) .content{padding:4px!important}}
+
+/* ===== MCP DataGuard international B2B dashboard visual baseline =====
+   Source: approved compact reference (Oct 23 2026). Real metrics only.
+   Colors: #087cfb / #119bf5 / #6e65f7; surfaces #fff / #f3f8ff.
+*/
+.shell:not(.auth-shell){--dg-ink:#101a33;--dg-muted:#63748e;--dg-canvas:#f2f7fd;--dg-primary:#087bfa;--dg-violet:#6c63f6;--dg-border:#e9f0fa;background:var(--dg-canvas);color:var(--dg-ink);font-family:Inter,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+.shell:not(.auth-shell) .sidebar{width:clamp(208px,15.3vw,256px);padding:20px 10px 22px;border-right:1px solid #e8eff8;background:#fff}
+.shell:not(.auth-shell) .brand{gap:11px;padding:2px 14px 36px;font-size:16px;letter-spacing:-.15px;font-weight:750;color:#111b30}
+.shell:not(.auth-shell) .brand small{font-size:12px;color:#7889a6;margin-top:2px;font-weight:400}
+.shell:not(.auth-shell) .symbol{height:44px;width:44px;flex:none;border:0;border-radius:10px;background:linear-gradient(135deg,#d8eaff,#eef7ff);color:#0b7dfe;font-size:21px}
+.shell:not(.auth-shell) .section{padding:0 17px;margin:0 0 12px;color:#899ab4;font-size:13px}
+.shell:not(.auth-shell) .nav{display:flex;align-items:center;gap:17px;min-height:52px;padding:10px 18px;margin:4px 0;font-size:15px;color:#435879;border-radius:8px;white-space:nowrap}
+.shell:not(.auth-shell) .nav svg{flex:none;color:#536a91}
+.shell:not(.auth-shell) .nav.active{background:#eaf5ff;color:#0675ed;font-weight:700}
+.shell:not(.auth-shell) .nav.active svg{color:#0675ed}
+.shell:not(.auth-shell) .nav:hover{background:#f2f8ff;color:#087cfb}
+.shell:not(.auth-shell) .foot{font-size:12px;margin:0 10px;padding:18px 6px 0;border-top:1px solid #e8eff8;color:#8191ac}
+.shell:not(.auth-shell) .main{background:radial-gradient(ellipse 60% 32% at 81% 6%,#e6f0ff 0%,transparent 78%),var(--dg-canvas)}
+.shell:not(.auth-shell) .bar{height:62px!important;min-height:62px!important;padding:0 26px!important;border-bottom:0;background:#ffffffb5}
+.shell:not(.auth-shell) .breadcrumb{font-size:15px;gap:13px;color:#7385a2}
+.shell:not(.auth-shell) .breadcrumb strong{color:#111a30;font-weight:700}
+.shell:not(.auth-shell) .bar .actions{gap:13px}
+.shell:not(.auth-shell) .alerts-trigger{position:relative;display:grid;place-items:center;width:33px;height:33px;cursor:pointer;background:transparent;border:0;color:#43577c;border-radius:50%}
+.shell:not(.auth-shell) .alerts-trigger:hover{background:#e9f4ff;color:#087bfa}
+.shell:not(.auth-shell) .notification-dot{position:absolute;width:6px;height:6px;border-radius:50%;background:#f04360;right:5px;top:3px}
+.shell:not(.auth-shell) .account-separator{height:23px;width:1px;background:#e0e8f4}
+.shell:not(.auth-shell) .account-trigger{height:38px;border:0!important;background:transparent!important;padding:2px 5px!important;gap:10px;font-size:14px;border-radius:8px;box-shadow:none!important}
+.shell:not(.auth-shell) .account-trigger:hover{background:#ecf5ff!important}
+.shell:not(.auth-shell) .account-avatar{height:36px;width:36px;background:#deefff;color:#087cfb;font-weight:700;font-size:15px}
+.shell:not(.auth-shell) .account-name{font-size:14px;font-weight:650}
+.shell:not(.auth-shell) .account-chevron{color:#6b7e9f}
+.shell:not(.auth-shell) .content{padding:0 16px 26px!important;max-width:none;margin:0}
+.dashboard-screen{width:100%;position:relative;isolation:isolate}
+.dashboard-hero{height:112px;padding:15px 12px 13px;position:relative;overflow:hidden;z-index:0}
+.dashboard-hero:before{content:"";position:absolute;z-index:-1;inset:0 -20px 0 29%;pointer-events:none;background:radial-gradient(ellipse 36% 70% at 55% 90%,#dceaffbb 0%,transparent 80%),radial-gradient(ellipse 43% 62% at 90% 78%,#e0e6ff9a 0%,transparent 85%);border-radius:0 0 36% 32%}
+.dashboard-hero h1{font-size:clamp(24px,2.3vw,32px);font-weight:760;color:#0c1529;letter-spacing:-.8px;line-height:1.35;margin:0 0 7px}
+.dashboard-hero p{color:#657999;font-size:14px;margin:0}
+.shell:not(.auth-shell) .overview{display:grid;grid-template-columns:minmax(0,1fr) minmax(305px,29%);align-items:start;gap:10px}
+.shell:not(.auth-shell) .overview-main,.shell:not(.auth-shell) .overview-aside{display:flex;flex-direction:column;min-width:0;gap:10px}
+.shell:not(.auth-shell) .overview-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;background:#fff;border-radius:10px;min-height:110px;overflow:hidden;box-shadow:0 3px 18px #42639009}
+.shell:not(.auth-shell) .metric{display:flex;flex-direction:row;align-items:center;text-align:left;justify-content:flex-start;position:relative;gap:16px;min-width:0;height:110px;padding:14px 18px;border:0;border-radius:0;cursor:pointer;background:transparent;color:var(--dg-ink)}
+.shell:not(.auth-shell) .metric:not(:last-child):after{content:"";position:absolute;right:0;top:20%;bottom:20%;width:1px;background:#e2ebf6}
+.shell:not(.auth-shell) .metric:hover{background:#f7fbff}
+.metric-symbol,.metric-token,.figure-icon{display:grid;place-items:center;flex:none;border-radius:50%}
+.metric-symbol{width:58px;height:58px}
+.metric-agent,.figure-icon.blue{background:#e8f5ff;color:#0780fe}
+.metric-db{background:#e5f9f1;color:#08bb83}
+.metric-approval{background:#f0eaff;color:#8755fd}
+.metric-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
+.metric-copy small{font-size:14px;white-space:nowrap;color:#5b6e8e}
+.shell:not(.auth-shell) .metric .metric-copy strong{font-size:29px;line-height:33px;color:#0f1930;font-weight:750}
+.metric-token{width:37px;height:37px;margin-left:auto;font-size:17px;font-weight:700}
+.metric-token.blue{background:#eaf5ff;color:#087bfa}
+.metric-token.cyan{background:#e0f8fa;color:#0aa6af}
+.metric-token.red{background:#ffebee;color:#f34b63}
+.shell:not(.auth-shell) .overview-block{border:0;border-radius:10px;background:#fff;padding:16px;margin:0;box-shadow:0 3px 18px #43628a08}
+.overview-section-head{margin:0 0 10px;min-height:0}
+.overview-section-head h2{font-size:19px;line-height:26px;font-weight:750;color:#10192b;margin:0}
+.overview-section-head p{font-size:13px;color:#7285a4;margin:2px 0 0}
+.overview-head-actions{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.overview-head-actions h2{margin-top:0}
+.overview-text-link{display:inline-flex;align-items:center;gap:7px;padding:3px 0;background:transparent;border:0;color:#087cfb;font-size:13px;white-space:nowrap;cursor:pointer}
+.overview-text-link:hover{text-decoration:underline}
+.shell:not(.auth-shell) .overview-shortcuts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.shell:not(.auth-shell) .shortcut{position:relative;min-height:162px;padding:20px 19px 18px;border:0;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;gap:0;color:#fff;text-align:left;cursor:pointer;transition:filter .2s,transform .2s}
+.shell:not(.auth-shell) .shortcut:hover{filter:brightness(1.045);transform:translateY(-1px)}
+.shortcut-agent,.shell:not(.auth-shell) .shortcut:nth-child(1){background:linear-gradient(135deg,#0675f7,#1599ff)}
+.shortcut-db,.shell:not(.auth-shell) .shortcut:nth-child(2){background:linear-gradient(135deg,#0788f5,#1bb1fb)}
+.shortcut-rules,.shell:not(.auth-shell) .shortcut:nth-child(3){background:linear-gradient(135deg,#7368ff,#6259ef)}
+.shell:not(.auth-shell) .shortcut .shortcut-icon{display:grid;place-items:center;width:48px;height:48px;flex:none;border-radius:9px;background:#eef7ff;color:#067cff;z-index:1}
+.shell:not(.auth-shell) .shortcut-rules .shortcut-icon{color:#7160f6}
+.shell:not(.auth-shell) .shortcut strong{font-size:18px;line-height:28px;margin-top:11px;z-index:1;font-weight:740}
+.shell:not(.auth-shell) .shortcut .shortcut-caption{font-size:12px;margin-top:1px;color:#f2f7ff;z-index:1;line-height:1.5}
+.shell:not(.auth-shell) .shortcut .shortcut-watermark{position:absolute;right:17px;top:30px;opacity:.15;transform:rotate(-8deg);pointer-events:none}
+.shell:not(.auth-shell) .shortcut .shortcut-arrow{position:absolute;right:15px;bottom:14px;display:grid;place-items:center;width:33px;height:33px;border-radius:50%;background:#ffffff34;color:#fff}
+.shell:not(.auth-shell) .activity-panel{min-height:315px}
+.shell:not(.auth-shell) .overview-figures{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin-top:20px;padding:0}
+.shell:not(.auth-shell) .figure{display:flex;flex-direction:row;align-items:flex-start;gap:14px;min-width:0;padding:0 12px}
+.shell:not(.auth-shell) .figure:not(:last-child){border-right:1px solid #e1e9f5}
+.shell:not(.auth-shell) .figure:first-child{padding-left:0}
+.figure-icon{width:51px;height:51px}
+.figure-icon.amber{background:#fff3e5;color:#ee9305}
+.figure-icon.rose{background:#fff0f2;color:#f53e61}
+.figure-content{display:flex;flex-direction:column;gap:3px;min-width:0}
+.figure-content small{font-size:13px;color:#6b7c98;white-space:nowrap}
+.shell:not(.auth-shell) .figure-content strong{font-size:29px;line-height:34px;font-weight:750;color:#0e1830}
+.activity-empty{height:162px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#7a8bab;font-size:13px;text-align:center}
+.activity-empty strong{font-weight:650;font-size:14px;color:#657996}
+.activity-empty-icon{width:80px;height:73px;color:#c4daf7;position:relative;display:grid;place-items:center}
+.activity-empty-icon svg:last-child{position:absolute;bottom:4px;right:1px;color:#8fb8f6;background:#fff;border-radius:50%}
+.activity-preview{margin-top:30px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 16px;border-radius:8px;background:#f6faff;color:#6a7d9c;font-size:13px}
+.activity-preview button{display:flex;align-items:center;gap:6px;border:0;background:none;color:#087cfb;cursor:pointer}
+.shell:not(.auth-shell) .security-panel{min-height:270px}
+.security-panel .overview-section-head{margin-bottom:0}
+.shell:not(.auth-shell) .security-overview{display:flex;align-items:center;justify-content:center;padding:0;height:185px}
+.shell:not(.auth-shell) .security-ring{width:175px;height:175px;display:flex;flex-direction:column;gap:0;align-items:center;justify-content:center;background:#e4e9f2;border-radius:50%;position:relative}
+.shell:not(.auth-shell) .security-ring:before{content:"";position:absolute;inset:17px;border-radius:50%;background:#fff}
+.shell:not(.auth-shell) .security-ring span,.shell:not(.auth-shell) .security-ring small{position:relative;z-index:1}
+.shell:not(.auth-shell) .security-ring span{font-size:37px;font-weight:760;line-height:46px;color:#0e1831}
+.shell:not(.auth-shell) .security-ring small{font-size:13px;color:#697d9a}
+.shell:not(.auth-shell) .security-legend{gap:22px;font-size:12px;color:#657899;margin:1px 0 0}
+.shell:not(.auth-shell) .legend-dot{width:9px;height:9px;border-radius:50%;margin-right:7px}
+.shell:not(.auth-shell) .legend-dot.blue{background:#087dfd}
+.shell:not(.auth-shell) .legend-dot.red{background:#f43e5d}
+.shell:not(.auth-shell) .risk-panel{min-height:224px}
+.risk-items{display:flex;flex-direction:column;gap:3px}
+.risk-item{display:flex;align-items:center;gap:12px;border:0;background:transparent;width:100%;text-align:left;min-height:49px;padding:5px 0;cursor:pointer;color:var(--dg-ink)}
+.risk-item:hover{background:#f6faff}
+.risk-item-icon{width:36px;height:36px;border-radius:50%;background:#ffedf0;color:#f0485c;display:grid;place-items:center;flex:none}
+.risk-item-body{min-width:0;display:flex;flex-direction:column;gap:1px;flex:1}
+.risk-item-body strong{font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.risk-item-body small{font-size:11px;color:#8596b0}
+.risk-item time{font-size:11px;color:#8a9bb5;white-space:nowrap}
+.risk-empty{min-height:143px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#8394af;font-size:12px}
+.risk-empty strong{font-size:13px;color:#5f7697}
+.risk-clear-icon{color:#27ae81;background:#e9f9f2;border-radius:50%;width:44px;height:44px;display:grid;place-items:center;margin-bottom:2px}
+.shell:not(.auth-shell) .todo-panel{min-height:166px}
+.shell:not(.auth-shell) .todo-panel .overview-section-head{margin-bottom:8px}
+.shell:not(.auth-shell) .todo-row{width:100%;display:flex;align-items:center;gap:10px;border:0;border-bottom:1px solid #e8eef7;background:transparent;text-align:left;padding:11px 0;font-size:12px;color:#202f49;cursor:pointer}
+.shell:not(.auth-shell) .todo-row:last-child{border-bottom:0}
+.shell:not(.auth-shell) .todo-row:hover{background:#f8fbff}
+.shell:not(.auth-shell) .todo-row strong{margin-left:auto;color:#111d36;font-size:14px}
+.shell:not(.auth-shell) .todo-row svg{color:#8192ad}
+.shell:not(.auth-shell) .todo-tag{border-radius:5px;background:#e9f5ff;color:#087cfb;font-size:12px;padding:6px 9px}
+.shell:not(.auth-shell) .todo-tag.alert-tag{background:#ffedf0;color:#ed4259}
+@media(max-width:1200px){.shell:not(.auth-shell) .overview{grid-template-columns:minmax(0,1fr) minmax(270px,30%)}.shell:not(.auth-shell) .metric{padding:10px;gap:9px}.metric-symbol{width:48px;height:48px}.metric-token{width:30px;height:30px}}
+@media(max-width:1050px){.shell:not(.auth-shell) .overview{grid-template-columns:1fr}.shell:not(.auth-shell) .overview-aside{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.shell:not(.auth-shell) .todo-panel{grid-column:1/-1}}
+@media(max-width:700px){.shell:not(.auth-shell) .sidebar{width:64px;padding:14px 5px}.shell:not(.auth-shell) .brand{padding:0 8px 28px}.shell:not(.auth-shell) .brand div,.shell:not(.auth-shell) .section,.shell:not(.auth-shell) .foot,.shell:not(.auth-shell) .nav span{display:none}.shell:not(.auth-shell) .nav{justify-content:center;gap:0;padding:12px 5px}.shell:not(.auth-shell) .content{padding:0 8px 18px!important}.dashboard-hero{height:92px;padding:12px 5px}.dashboard-hero h1{font-size:23px}.dashboard-hero p{font-size:12px}.shell:not(.auth-shell) .overview-stats{grid-template-columns:1fr 1fr}.shell:not(.auth-shell) .metric{height:96px}.shell:not(.auth-shell) .overview-shortcuts{grid-template-columns:1fr}.shell:not(.auth-shell) .shortcut{min-height:130px}.shell:not(.auth-shell) .overview-aside{grid-template-columns:1fr}.shell:not(.auth-shell) .overview-figures{gap:6px}.shell:not(.auth-shell) .figure{padding:0 5px;gap:7px}.figure-icon{width:36px;height:36px}.figure-content small{white-space:normal;font-size:11px}.shell:not(.auth-shell) .figure-content strong{font-size:23px}}
 </style>
