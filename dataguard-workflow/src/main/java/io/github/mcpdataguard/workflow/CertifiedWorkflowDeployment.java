@@ -1,5 +1,6 @@
 package io.github.mcpdataguard.workflow;
 
+import io.github.mcpdataguard.workflow.contract.SafeApprovalGraph;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -34,6 +35,9 @@ public class CertifiedWorkflowDeployment {
  }
  public boolean enabled(){return enabled;}
  public String start(String xml,String businessKey,String tenantId){
+  return start(xml,businessKey,tenantId,false);
+ }
+ public String start(String xml,String businessKey,String tenantId,boolean riskHigh){
   if(!enabled)throw new SecurityException("DYNAMIC_WORKFLOW_DISABLED");
   verify(xml);
   String digest=digest(xml);
@@ -46,7 +50,8 @@ public class CertifiedWorkflowDeployment {
      .addString("certified-review-"+digest+".bpmn20.xml",xml).deploy();
    var definition=repository.createProcessDefinitionQuery()
      .deploymentId(deployed.getId()).singleResult();
-   if(definition==null || !"sqlTwoLevelReview".equals(definition.getKey()))
+   if(definition==null || !("sqlTwoLevelReview".equals(definition.getKey()) ||
+       "safeWorkflowV2".equals(definition.getKey())))
     throw new SecurityException("INVALID_CERTIFIED_DEFINITION");
    definitionId=definition.getId();
   }else{
@@ -57,9 +62,14 @@ public class CertifiedWorkflowDeployment {
    definitionId=definition.getId();
   }
   return runtime.startProcessInstanceById(definitionId,businessKey,
-      Map.of("tenantId",tenantId,"sqlExecutionEnabled",false)).getId();
+      Map.of("tenantId",tenantId,"riskHigh",riskHigh,
+        "sqlExecutionEnabled",false)).getId();
  }
  public static void verify(String xml){
+  if(xml!=null&&xml.contains("id=\\\"safeWorkflowV2\\\"")){
+   SafeApprovalGraph.parseCertified(xml);
+   return;
+  }
   if(xml==null || xml.length()>12000 || xml.contains("<!DOCTYPE") ||
      xml.contains("<!ENTITY"))throw new SecurityException("UNSAFE_BPMN");
   try{
