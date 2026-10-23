@@ -212,8 +212,8 @@ const changeForm=reactive({currentPassword:'',newPassword:''});
 const agentTokenOnce=ref('');
 const maskDialog=ref(false);
 const maskTarget=ref({id:'',name:''});
-const maskForm=reactive({table:'',column:'',algorithm:'REDACT',priority:100});
-const maskRows=ref<{id:string;table:string;column:string;algorithm:string;priority:number}[]>([]);
+const maskForm=reactive({table:'',column:'',algorithm:'REDACT',priority:100,roleCode:''});
+const maskRows=ref<{id:string;table:string;column:string;algorithm:string;priority:number;roleCode:string}[]>([]);
 async function loadMaskRules(){
  if(!maskTarget.value.id)return;
  try{maskRows.value=await getData<typeof maskRows.value>(
@@ -231,7 +231,8 @@ async function saveMaskRule(){
      !/^[a-z][a-z0-9_]{0,254}$/.test(maskForm.column))
    throw new Error('请输入精确的表名和字段名');
   await requestWrite('/api/v1/mask-rules','POST',{
-   datasourceId:maskTarget.value.id,...maskForm});
+   datasourceId:maskTarget.value.id,...maskForm,
+    roleCode:maskForm.roleCode.trim()||null});
   message.success('脱敏规则已保存');await loadMaskRules();
  }catch(e){error.value=(e as Error).message;}
  finally{saving.value=false;}
@@ -836,16 +837,19 @@ async function updatePassword(){
   </main>
 
   <a-modal v-model:open="maskDialog" :title="'字段脱敏 · '+maskTarget.name" :footer="null" width="700px">
-   <a-alert type="info" show-icon message="仅允许 REDACT 和 NULLIFY；没有匹配规则时仍默认 REDACT。"/>
+   <a-alert type="info" show-icon message="REDACT/NULLIFY 默认安全；PARTIAL/HASH 必须绑定组织角色，HASH 还需要服务器配置 HMAC 密钥。未匹配字段始终 REDACT。"/>
    <a-form layout="vertical" style="margin-top:16px">
     <a-form-item label="表名"><a-input v-model:value="maskForm.table" placeholder="orders"/></a-form-item>
     <a-form-item label="字段名"><a-input v-model:value="maskForm.column" placeholder="account_number"/></a-form-item>
-    <a-form-item label="脱敏方式"><a-radio-group v-model:value="maskForm.algorithm"><a-radio value="REDACT">REDACT 替换</a-radio><a-radio value="NULLIFY">NULLIFY 置空</a-radio></a-radio-group></a-form-item>
+    <a-form-item label="脱敏方式"><a-radio-group v-model:value="maskForm.algorithm"><a-radio value="REDACT">REDACT 替换</a-radio><a-radio value="NULLIFY">NULLIFY 置空</a-radio>
+     <a-radio value="PARTIAL">PARTIAL 仅尾四位</a-radio>
+     <a-radio value="HASH">HASH 租户 HMAC</a-radio></a-radio-group></a-form-item>
+    <a-form-item label="适用角色编码"><a-input v-model:value="maskForm.roleCode" placeholder="例如 org-admin；HASH / PARTIAL 必填"/></a-form-item>
     <a-form-item label="优先级"><a-input-number v-model:value="maskForm.priority" :min="1" :max="10000"/></a-form-item>
     <a-button type="primary" :loading="saving" @click="saveMaskRule">保存字段脱敏规则</a-button>
    </a-form>
    <a-table size="small" row-key="id" :data-source="maskRows" :pagination="{pageSize:5}"
-    :columns="[{title:'表名',dataIndex:'table'},{title:'字段',dataIndex:'column'},{title:'算法',dataIndex:'algorithm'},{title:'操作',key:'actions'}]">
+    :columns="[{title:'表名',dataIndex:'table'},{title:'字段',dataIndex:'column'},{title:'算法',dataIndex:'algorithm'},{title:'适用角色',dataIndex:'roleCode'},{title:'操作',key:'actions'}]">
     <template #bodyCell="{column,record}"><a-popconfirm v-if="column.key==='actions'" title="确认停用？" @confirm="disableMaskRule(record.id)"><a-button danger type="link" size="small">停用</a-button></a-popconfirm></template>
    </a-table>
   </a-modal>
