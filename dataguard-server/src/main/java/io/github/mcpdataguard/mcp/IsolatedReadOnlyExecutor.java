@@ -78,9 +78,13 @@ public final class IsolatedReadOnlyExecutor {
                  r.rolreplication OR r.rolbypassrls)
             AND pg_has_role(current_user,r.oid,'MEMBER')
          ) AND NOT EXISTS (
-          SELECT 1 FROM information_schema.role_table_grants g
-          WHERE g.privilege_type IN ('INSERT','UPDATE','DELETE',
-            'TRUNCATE','TRIGGER')
+          SELECT 1 FROM pg_class c
+          WHERE c.relkind IN ('r','p','f','v','m')
+            AND (has_table_privilege(current_user,c.oid,'INSERT')
+              OR has_table_privilege(current_user,c.oid,'UPDATE')
+              OR has_table_privilege(current_user,c.oid,'DELETE')
+              OR has_table_privilege(current_user,c.oid,'TRUNCATE')
+              OR has_table_privilege(current_user,c.oid,'TRIGGER'))
          ) AND NOT EXISTS (
           SELECT 1 FROM pg_namespace n WHERE n.nspname NOT LIKE 'pg_%'
             AND n.nspname<>'information_schema'
