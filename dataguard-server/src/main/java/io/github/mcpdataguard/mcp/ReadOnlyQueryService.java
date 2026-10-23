@@ -25,11 +25,12 @@ public class ReadOnlyQueryService {
  private final JdbcTemplate jdbc;
  private final AgentPrincipalResolver agents;
  private final IsolatedReadOnlyExecutor executor;
+ private final ReadReceiptService receipts;
  private final boolean enabled;
  public ReadOnlyQueryService(JdbcTemplate jdbc,AgentPrincipalResolver agents,
-     IsolatedReadOnlyExecutor executor,
+     IsolatedReadOnlyExecutor executor,ReadReceiptService receipts,
      @Value("${dataguard.readonly.enabled:false}") boolean enabled){
-  this.jdbc=jdbc;this.agents=agents;this.executor=executor;this.enabled=enabled;
+  this.jdbc=jdbc;this.agents=agents;this.executor=executor;this.receipts=receipts;this.enabled=enabled;
  }
  private record Source(String host,int port,String db,String type,String provider,String ref,
    int agentRows,long agentBytes,int agentMillis){}
@@ -124,11 +125,14 @@ public class ReadOnlyQueryService {
    IsolatedReadOnlyExecutor.Result result=executor.execute(
      new IsolatedReadOnlyExecutor.Target(source.host(),source.port(),source.db(),username,password),
      new IsolatedReadOnlyExecutor.Request(sql,parameters,required,maxRows,maxBytes,timeout));
+   // A failed control-plane receipt fails closed; never disclose unlogged results.
+   receipts.record(actor.orgId(),actor.agentId(),id,database,sql,
+     result.rows().size(),result.returnedBytes());
    return Map.of("decision","ALLOW","operation","SELECT",
       "columns",result.columns(),"rows",result.rows(),
       "rowCount",result.rows().size(),"returnedBytes",result.returnedBytes(),
       "masking","TEXT_REDACTED","executionEnabled",true);
-  }catch(SecurityException|IllegalArgumentException|SQLException e){
+  }catch(RuntimeException|SQLException e){
    return deny("READ_EXECUTION_REJECTED");
   }
  }
