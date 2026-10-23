@@ -138,6 +138,33 @@ public class SqlPolicyController {
   return Map.of("revision",revision,"status","DRAFT","decision",input.decision(),
      "conditions",conditions,"executionEnabled",false);
  }
+ public record SimulateInput(String table,String environment){}
+ @PostMapping("/{policyId}/simulate")
+ public Map<String,Object> simulate(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID policyId,
+                                     @RequestBody SimulateInput input){
+  UserPrincipal u=admin(jwt);
+  if(input==null || input.table()==null || !input.table().matches("[a-z][a-z0-9_]{0,254}") ||
+      input.environment()==null || !List.of("DEV","TEST","STAGING","PROD").contains(input.environment()))
+   throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid simulation scope");
+  List<Map<String,Object>> versions=jdbc.query("""
+   SELECT v.revision,v.decision,v.priority FROM dg_sql_policy_version v
+   JOIN dg_sql_policy p ON p.org_id=v.org_id AND p.id=v.policy_id
+   WHERE v.org_id=? AND v.policy_id=? AND p.status='DRAFT'
+     AND v.revision=p.latest_version AND v.published_at IS NULL
+     AND v.rule->>'table'=? AND v.rule->>'environment'=?
+     AND v.rule->>'operation'='SELECT'
+     AND v.decision IN ('DENY','REQUIRE_APPROVAL')
+   LIMIT 1
+   """,(rs,i)->Map.<String,Object>of("revision",rs.getInt("revision"),
+       "decision",rs.getString("decision"),"priority",rs.getInt("priority")),
+       u.orgId(),policyId,input.table(),input.environment());
+  if(versions.isEmpty())return Map.of("matched",false,"decision","DENY",
+     "simulationOnly",true,"executionEnabled",false);
+  Map<String,Object> rule=versions.get(0);
+  return Map.of("matched",true,"decision",rule.get("decision"),
+     "revision",rule.get("revision"),"priority",rule.get("priority"),
+     "simulationOnly",true,"executionEnabled",false);
+ }
  private void audit(UserPrincipal u,String operation,UUID id){
   jdbc.update("""
     INSERT INTO dg_system_event(id,org_id,actor,operation,resource_type,resource_id)
