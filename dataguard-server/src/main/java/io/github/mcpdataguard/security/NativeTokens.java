@@ -9,7 +9,7 @@ import java.util.HexFormat;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 public final class NativeTokens {
- public static final String ISSUER="urn:mcp-dataguard:local";
+ public static final String ISSUER="https://mcp-dataguard.invalid/local";
  public static final String AUDIENCE="mcp-dataguard";
  private static final SecureRandom RANDOM=new SecureRandom();
  private static final BCryptPasswordEncoder ENCODER=new BCryptPasswordEncoder(12);
