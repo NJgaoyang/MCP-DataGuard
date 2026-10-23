@@ -19,6 +19,7 @@ const policyRuleDialog=ref(false);
 const policyTarget=ref({id:'',name:''});
 const policyRule=reactive({decision:'DENY',priority:100,table:'',environment:'DEV'});
 const policyVersions=ref<{revision:number;priority:number;decision:string;rule:string}[]>([]);
+const policySimulation=ref('');
 const token=ref('');
 const loginForm=reactive({organization:'dataguard',username:'',password:''});
 const mustChange=ref(false);
@@ -80,6 +81,18 @@ async function loadPolicyVersions(){
 async function openPolicyRules(row:{id:string;name:string}){
  policyTarget.value={id:row.id,name:row.name};
  policyRuleDialog.value=true;await loadPolicyVersions();
+}
+async function simulatePolicyRule(){
+ saving.value=true;error.value='';policySimulation.value='';
+ try{
+  const result=await requestWrite('/api/v1/sql-policies/'+encodeURIComponent(policyTarget.value.id)+'/simulate','POST',
+   {table:policyRule.table,environment:policyRule.environment}) as unknown as
+   {matched:boolean;decision:string;revision?:number;simulationOnly:boolean};
+  policySimulation.value=result.matched
+   ?'命中草稿版本 '+result.revision+'，模拟决策：'+result.decision
+   :'未匹配草稿规则，模拟结果：DENY（默认拒绝）';
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
 }
 async function savePolicyRule(){
  saving.value=true;error.value='';
@@ -493,6 +506,8 @@ async function updatePassword(){
     </a-form-item>
     <a-form-item label="优先级"><a-input-number v-model:value="policyRule.priority" :min="1" :max="10000"/></a-form-item>
     <a-button type="primary" :loading="saving" @click="savePolicyRule">保存新草稿版本</a-button>
+    <a-button style="margin-left:8px" :loading="saving" @click="simulatePolicyRule">模拟匹配</a-button>
+    <a-alert v-if="policySimulation" style="margin-top:12px" type="info" show-icon :message="policySimulation"/>
    </a-form>
    <h4 style="margin-top:18px">已有规则版本</h4>
    <a-table size="small" :data-source="policyVersions" row-key="revision" :pagination="{pageSize:5}"
