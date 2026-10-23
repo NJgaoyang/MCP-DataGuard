@@ -7,6 +7,9 @@ const pages=[
  ['users','用户与权限']
 ];
 const selected=ref('dashboard');
+const sqlPolicies=ref<{id:string;code:string;name:string;status:string}[]>([]);
+const policyDialog=ref(false);
+const policyForm=reactive({code:'',name:''});
 const token=ref('');
 const loginForm=reactive({organization:'dataguard',username:'',password:''});
 const mustChange=ref(false);
@@ -47,6 +50,19 @@ async function getData<T>(path:string):Promise<T>{
  const res=await fetch(path,{headers:{Authorization:'Bearer '+token.value,Accept:'application/json'},credentials:'omit'});
  if(!res.ok)throw new Error(path+' 返回 HTTP '+res.status);
  return await res.json() as T;
+}
+async function loadPolicies(){
+ try{sqlPolicies.value=await getData<typeof sqlPolicies.value>('/api/v1/sql-policies');}
+ catch(e){error.value=(e as Error).message;}
+}
+async function savePolicy(){
+ saving.value=true;error.value='';
+ try{
+  await requestWrite('/api/v1/sql-policies','POST',{...policyForm});
+  policyDialog.value=false;message.success('SQL 策略草稿创建成功');
+  await loadPolicies();
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
 }
 async function reload(){
  if(!token.value||mustChange.value)return;busy.value=true;error.value='';
@@ -305,7 +321,7 @@ async function updatePassword(){
   <aside class="sidebar">
    <div class="brand"><span class="symbol">◆</span><div>MCP DataGuard<small>AI DATABASE SECURITY</small></div></div>
    <span class="section">工作台</span>
-   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin()}">{{page[1]}}</button>
+   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies()}">{{page[1]}}</button>
    <div class="foot">● 开源研发版 · v0.5</div>
   </aside>
   <main class="main">
@@ -379,6 +395,15 @@ async function updatePassword(){
       </a-table>
      </section>
 
+     <section v-else-if="selected==='rules'" class="panel">
+      <div class="panel-heading"><h3>SQL 安全策略草稿</h3><div class="actions">
+       <a-button size="small" @click="loadPolicies">刷新</a-button>
+       <a-button type="primary" size="small" @click="policyDialog=true">创建草稿</a-button>
+      </div></div>
+      <a-alert type="info" show-icon message="仅支持草稿登记，未开放策略发布、执行授权。"/>
+      <a-table row-key="id" size="small" :data-source="sqlPolicies" :pagination="{pageSize:10}"
+       :columns="[{title:'编码',dataIndex:'code'},{title:'名称',dataIndex:'name'},{title:'状态',dataIndex:'status'}]"/>
+     </section>
      <section v-else-if="selected==='users'" class="panel">
       <div class="panel-heading">
        <h3>用户与组织角色</h3>
@@ -412,6 +437,14 @@ async function updatePassword(){
    </div>
   </main>
 
+  <a-modal v-model:open="policyDialog" title="创建 SQL 策略草稿" ok-text="创建"
+   :confirm-loading="saving" @ok="savePolicy">
+   <a-form layout="vertical">
+    <a-form-item label="策略编码"><a-input v-model:value="policyForm.code" placeholder="restrict_reports"/></a-form-item>
+    <a-form-item label="策略名称"><a-input v-model:value="policyForm.name" placeholder="报表访问限制"/></a-form-item>
+    <a-alert type="info" show-icon message="草稿不会自动发布，不会开启 SQL 执行。"/>
+   </a-form>
+  </a-modal>
   <a-modal v-model:open="userDialog" title="创建内置用户" ok-text="保存"
    :confirm-loading="saving" @ok="saveUser">
    <a-form layout="vertical">
