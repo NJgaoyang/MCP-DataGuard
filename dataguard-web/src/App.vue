@@ -7,7 +7,7 @@ const pages=[
  ['users','用户与权限']
 ];
 const selected=ref('dashboard');
-const sqlPolicies=ref<{id:string;code:string;name:string;status:string}[]>([]);
+const sqlPolicies=ref<{id:string;code:string;name:string;status:string;version:number;latestVersion:number}[]>([]);
 const policyDialog=ref(false);
 const systemEvents=ref<{id:string;actor:string;operation:string;resourceType:string|null;resourceId:string|null;createdAt:string}[]>([]);
 async function loadAuditEvents(){
@@ -64,6 +64,16 @@ async function getData<T>(path:string):Promise<T>{
 async function loadPolicies(){
  try{sqlPolicies.value=await getData<typeof sqlPolicies.value>('/api/v1/sql-policies');}
  catch(e){error.value=(e as Error).message;}
+}
+async function changePolicyState(row:{id:string;version:number},action:'publish'|'disable'){
+ saving.value=true;error.value='';
+ try{
+  await requestWrite('/api/v1/sql-policies/'+encodeURIComponent(row.id)+'/'+action,
+    'POST',{expectedVersion:row.version});
+  message.success(action==='publish'?'仅拒绝规则已发布，不授予 SQL 执行权限':'策略已停用');
+  await loadPolicies();
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
 }
 async function savePolicy(){
  saving.value=true;error.value='';
@@ -453,7 +463,17 @@ async function updatePassword(){
       <a-table row-key="id" size="small" :data-source="sqlPolicies" :pagination="{pageSize:10}"
        :columns="[{title:'编码',dataIndex:'code'},{title:'名称',dataIndex:'name'},{title:'状态',dataIndex:'status'},{title:'操作',key:'actions'}]">
        <template #bodyCell="{column,record}">
-        <a-button v-if="column.key==='actions'" size="small" type="link" @click="openPolicyRules(record)">规则版本</a-button>
+        <template v-if="column.key==='actions'">
+         <a-button size="small" type="link" @click="openPolicyRules(record)">规则版本</a-button>
+         <a-popconfirm v-if="record.status==='DRAFT' && record.latestVersion>0" title="仅允许发布 DENY 规则，不会允许 SQL 执行。继续？"
+          @confirm="changePolicyState(record,'publish')">
+          <a-button size="small" type="link">发布拒绝规则</a-button>
+         </a-popconfirm>
+         <a-popconfirm v-if="record.status==='ACTIVE'" title="确认停用这条拒绝策略？"
+          @confirm="changePolicyState(record,'disable')">
+          <a-button size="small" type="link" danger>停用</a-button>
+         </a-popconfirm>
+        </template>
        </template>
       </a-table>
      </section>
