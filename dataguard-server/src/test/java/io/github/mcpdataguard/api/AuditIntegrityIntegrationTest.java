@@ -17,7 +17,7 @@ class AuditIntegrityIntegrationTest {
  @Test void detectsTamperedAuditEventAndHonorsTenantScope(){
   String url=System.getenv("DG_OUTBOX_E2E_URL");
   Assumptions.assumeTrue(url!=null && url.startsWith("jdbc:postgresql://127.0.0.1:5432/"));
-  JdbcTemplate db=new JdbcTemplate(new DriverManagerDataSource(url,"postgres","test-only"));
+  JdbcTemplate db=new JdbcTemplate(new DriverManagerDataSource(\n    url+"?currentSchema=platform","postgres","test-only"));
   UUID org=UUID.randomUUID(),user=UUID.randomUUID(),agent=UUID.randomUUID(),
     source=UUID.randomUUID(),request=UUID.randomUUID();
   db.update("INSERT INTO platform.dg_organization(id,code,name) VALUES(?,?,?)",
@@ -45,10 +45,20 @@ class AuditIntegrityIntegrationTest {
   when(users.requireUser(jwt)).thenReturn(new UserPrincipal(org,user,
     "auditadmin","Audit Admin","issuer","subject"));
   AuditIntegrityController controller=new AuditIntegrityController(db,users);
-  // JdbcTemplate is connected to the default public schema, whereas production
-  // uses platform as search_path. Explicitly select platform for this test.
-  db.execute("SET search_path TO platform,public");
-  // DriverManagerDataSource creates a new connection for each statement, so
-  // use a wrapper JdbcTemplate for table-qualified verifier SQL below.
+  assertEquals(true,controller.verify(jwt,"mcp-denied-sql").get("verified"));
+  UUID stream=db.queryForObject("""
+    SELECT id FROM dg_audit_stream WHERE org_id=? AND stream_key='mcp-denied-sql'
+    """,UUID.class,org);
+  db.update("""
+    UPDATE dg_audit_event SET event_data=
+      jsonb_set(event_data,'{reason}','"TAMPERED"'::jsonb)
+    WHERE org_id=? AND stream_id=?
+    """,org,stream);
+  var damaged=controller.verify(jwt,"mcp-denied-sql");
+  assertEquals(false,damaged.get("verified"));
+  assertEquals("HASH_MISMATCH",damaged.get("code"));
+  when(users.requireUser(jwt)).thenReturn(new UserPrincipal(
+    UUID.randomUUID(),user,"auditadmin","Audit Admin","issuer","subject"));
+  assertEquals("STREAM_NOT_FOUND",controller.verify(jwt,"mcp-denied-sql").get("code"));
  }
 }
