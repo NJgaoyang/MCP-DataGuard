@@ -39,7 +39,7 @@ public class CertifiedWorkflowDeployment {
   String digest=digest(xml);
   String deploymentName="dg-certified-"+digest;
   var previous=repository.createDeploymentQuery().deploymentName(deploymentName)
-    .orderByDeploymenTime().desc().listPage(0,1);
+    .orderByDeploymentTime().desc().listPage(0,1);
   String definitionId;
   if(previous.isEmpty()){
    var deployed=repository.createDeployment().name(deploymentName)
