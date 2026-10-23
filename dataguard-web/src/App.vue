@@ -26,6 +26,21 @@ async function acknowledgeAlert(id:string){
  finally{saving.value=false;}
 }
 
+const approvalDialog=ref(false);
+const approving=ref({id:'',version:0});
+const approvalReason=ref('');
+async function approveTask(){
+ if(!approvalReason.value.trim()){error.value='请输入审批意见';return;}
+ saving.value=true;error.value='';
+ try{
+  await requestWrite('/api/v1/approvals/'+encodeURIComponent(approving.value.id)+'/approve','POST',
+    {reason:approvalReason.value,expectedVersion:approving.value.version});
+  approvalDialog.value=false;approvalReason.value='';
+  message.success('审批已记录，正在通过可靠事件同步到 Flowable；不会执行写 SQL');
+  await loadOperations();
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
+}
 const rejectionDialog=ref(false);
 const rejectingApproval=ref({id:'',version:0});
 const rejectionReason=ref('');
@@ -504,8 +519,10 @@ async function updatePassword(){
        :columns="[{title:'审批编号',dataIndex:'id'},{title:'审批状态',dataIndex:'approvalStatus'},
         {title:'执行状态',dataIndex:'executionStatus'},{title:'到期时间',dataIndex:'expiresAt'},{title:'操作',key:'actions'}]">
        <template #bodyCell="{column,record}">
-        <a-button v-if="column.key==='actions' && record.approvalStatus==='PENDING' && record.executionStatus==='NOT_SCHEDULED'"
-         danger type="link" size="small" @click="rejectingApproval={id:String(record.id),version:Number(record.version)};rejectionDialog=true">拒绝</a-button>
+        <template v-if="column.key==='actions' && record.approvalStatus==='PENDING' && record.executionStatus==='NOT_SCHEDULED'">
+         <a-button type="link" size="small" @click="approving={id:String(record.id),version:Number(record.version)};approvalDialog=true">审核通过</a-button>
+         <a-button danger type="link" size="small" @click="rejectingApproval={id:String(record.id),version:Number(record.version)};rejectionDialog=true">拒绝</a-button>
+        </template>
        </template>
       </a-table>"/>
      </section>
@@ -597,6 +614,13 @@ async function updatePassword(){
    </div>
   </main>
 
+  <a-modal v-model:open="approvalDialog" title="审核 SQL 变更申请" ok-text="确认审核通过"
+   :confirm-loading="saving" @ok="approveTask">
+   <a-alert type="warning" show-icon message="必须由两名不同审核人完成两级审批；审批通过也不会自动执行写 SQL。"/>
+   <a-form-item label="审核意见" style="margin-top:14px">
+    <a-textarea v-model:value="approvalReason" :maxlength="1000" :rows="3"/>
+   </a-form-item>
+  </a-modal>
   <a-modal v-model:open="rejectionDialog" title="拒绝审批工单" ok-text="确认拒绝" :confirm-loading="saving" @ok="rejectApproval">
    <a-alert type="warning" show-icon message="拒绝后不会启动 SQL 执行；审批人不能拒绝自己的申请。"/>
    <a-form-item label="拒绝原因" style="margin-top:14px"><a-textarea v-model:value="rejectionReason" :maxlength="1000" :rows="3"/></a-form-item>
