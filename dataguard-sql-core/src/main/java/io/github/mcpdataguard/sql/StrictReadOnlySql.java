@@ -36,7 +36,8 @@ public final class StrictReadOnlySql {
      "MYSQL".equalsIgnoreCase(dialect)?"MySQL":"PostgreSQL",
      new CacheOption(128,1024L));
    // Parse into a concrete dialect AST, not merely a syntax-success flag.
-   var statement=new org.apache.shardingsphere.sql.parser.engine.api.SQLStatementVisitorEngine(\n     "MYSQL".equalsIgnoreCase(dialect)?"MySQL":"PostgreSQL").visit(parser.parse(sql,false));
+   var statement=new org.apache.shardingsphere.sql.parser.engine.api.SQLStatementVisitorEngine(
+     "MYSQL".equalsIgnoreCase(dialect)?"MySQL":"PostgreSQL").visit(parser.parse(sql,false));
    if(!(statement instanceof org.apache.shardingsphere.sql.parser.statement.core.statement.type.dml.SelectStatement select))
     return SqlVerdict.deny("NOT_A_SELECT_AST");
    if(select.getWith().isPresent() || select.getInto().isPresent() ||
