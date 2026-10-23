@@ -33,10 +33,10 @@ class NativeHttpSmokeTest {
   int key=json.indexOf("token");
   assertTrue(key>=0);
   int colon=json.indexOf(':',key);
-  int first=json.indexOf('"',colon);
-  int end=json.indexOf('"',first+1);
-  assertTrue(first>colon && end>first);
-  return json.substring(first+1,end);
+  int start=json.indexOf('"',colon);
+  int end=json.indexOf('"',start+1);
+  assertTrue(end>start);
+  return json.substring(start+1,end);
  }
  @Test void realFirstLoginPasswordRotationAuthorizationMcpAndConsoleHttp()throws Exception{
   String base=System.getenv("DG_HTTP_E2E_URL"),web=System.getenv("DG_WEB_E2E_URL"),
