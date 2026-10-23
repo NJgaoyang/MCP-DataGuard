@@ -1,5 +1,6 @@
 package io.github.mcpdataguard.mcp;
 
+import io.github.mcpdataguard.workflow.contract.SafeApprovalGraph;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
@@ -27,7 +28,8 @@ public class CertifiedWriteWorker {
  private record Task(UUID task,UUID org,UUID approval,UUID request,
     String fingerprint,String hmac,String ticket,String operation,
     String host,int port,String database,UUID datasource,
-    byte[] encryptedSql,byte[] encryptedParams){}
+    byte[] encryptedSql,byte[] encryptedParams,
+    String bpmn,String bpmnDigest,String risk){}
  public CertifiedWriteWorker(JdbcTemplate jdbc,TransactionTemplate transactions,
      ExecutionTicketSigner signer,ApprovalPayloadCrypto crypto,
      CertifiedWriteJdbcExecutor executor,
@@ -114,10 +116,12 @@ public class CertifiedWriteWorker {
   List<Task> rows=jdbc.query("""
     SELECT t.id,t.org_id,t.approval_id,r.id,r.sql_fingerprint,
        p.canonical_payload_hmac,t.authorization_digest,r.operation,
-       d.host,d.port,d.database_name,d.id,p.encrypted_sql,p.encrypted_parameters
+       d.host,d.port,d.database_name,d.id,p.encrypted_sql,p.encrypted_parameters,
+       v.bpmn_xml,v.bpmn_digest,r.risk_level
     FROM dg_execution_task t
     JOIN dg_sql_approval a ON a.org_id=t.org_id AND a.id=t.approval_id
     JOIN dg_sql_request r ON r.org_id=a.org_id AND r.id=a.request_id
+    JOIN dg_workflow_version v ON v.org_id=a.org_id AND v.id=a.workflow_version_id
     JOIN dg_sql_request_payload p ON p.org_id=r.org_id AND p.request_id=r.id
     JOIN dg_datasource d ON d.org_id=r.org_id AND d.id=r.datasource_id
     JOIN dg_datasource_capability cap ON cap.org_id=d.org_id
@@ -138,9 +142,25 @@ public class CertifiedWriteWorker {
       )
       AND (SELECT count(*) FROM dg_sql_approval_action ac
            WHERE ac.org_id=a.org_id AND ac.approval_id=a.id AND ac.action='APPROVE'
-             AND ac.flowable_task_id NOT LIKE 'platform:%')=2
+             AND ac.flowable_task_id NOT LIKE 'platform:%')=(CASE WHEN v.flowable_definition_key='safeWorkflowV2'
+        THEN regexp_count(v.bpmn_xml,'<userTask') -
+          (CASE WHEN v.bpmn_xml LIKE '%exclusiveGateway%'
+                 AND r.risk_level NOT IN ('HIGH','CRITICAL') THEN 1 ELSE 0 END)
+        ELSE 2 END)
       AND (SELECT count(DISTINCT ac.reviewer_user_id) FROM dg_sql_approval_action ac
-           WHERE ac.org_id=a.org_id AND ac.approval_id=a.id AND ac.action='APPROVE')=2
+           WHERE ac.org_id=a.org_id AND ac.approval_id=a.id AND ac.action='APPROVE')=(CASE WHEN v.flowable_definition_key='safeWorkflowV2'
+        THEN regexp_count(v.bpmn_xml,'<userTask') -
+          (CASE WHEN v.bpmn_xml LIKE '%exclusiveGateway%'
+                 AND r.risk_level NOT IN ('HIGH','CRITICAL') THEN 1 ELSE 0 END)
+        ELSE 2 END)
+      AND (SELECT count(*) FROM dg_outbox_event e WHERE e.org_id=a.org_id
+           AND e.aggregate_id=a.id AND e.event_type='APPROVAL_STEP_APPROVED'
+           AND e.state='PUBLISHED')=(CASE WHEN v.flowable_definition_key='safeWorkflowV2'
+        THEN regexp_count(v.bpmn_xml,'<userTask') -
+          (CASE WHEN v.bpmn_xml LIKE '%exclusiveGateway%'
+                 AND r.risk_level NOT IN ('HIGH','CRITICAL') THEN 1 ELSE 0 END)
+        ELSE 2 END)
+      AND v.status IN ('PUBLISHED','RETIRED')
       AND d.tls_mode='VERIFY_FULL'
     ORDER BY t.enqueued_at,t.id LIMIT 1 FOR UPDATE OF t SKIP LOCKED
     """,(rs,i)->new Task(
@@ -148,12 +168,23 @@ public class CertifiedWriteWorker {
        rs.getObject(3,UUID.class),rs.getObject(4,UUID.class),
        rs.getString(5),rs.getString(6),rs.getString(7),rs.getString(8),
        rs.getString(9),rs.getInt(10),rs.getString(11),
-       rs.getObject(12,UUID.class),rs.getBytes(13),rs.getBytes(14)));
+       rs.getObject(12,UUID.class),rs.getBytes(13),rs.getBytes(14),
+       rs.getString(15),rs.getString(16),rs.getString(17)));
   if(rows.size()!=1)return null;
   Task t=rows.get(0);
   if(!signer.verify(t.org(),t.approval(),t.request(),t.fingerprint(),
        t.hmac(),t.task(),t.ticket()))
    throw new SecurityException("QUEUED_WRITE_TICKET_INVALID");
+  try{
+   String digest=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+     .digest(t.bpmn().getBytes(StandardCharsets.UTF_8)));
+   if(!MessageDigest.isEqual(digest.getBytes(StandardCharsets.US_ASCII),
+       t.bpmnDigest().getBytes(StandardCharsets.US_ASCII)))
+    throw new SecurityException("EXECUTION_WORKFLOW_TAMPERED");
+   SafeApprovalGraph.requiredReviewers(t.bpmn(),
+      List.of("HIGH","CRITICAL").contains(t.risk()));
+  }catch(SecurityException e){throw e;}
+   catch(Exception e){throw new SecurityException("UNCERTIFIED_EXECUTION_WORKFLOW");}
   int updated=jdbc.update("""
     UPDATE dg_execution_task SET task_state='EXECUTING',
       started_at=now(),lease_owner='certified-write-worker',
