@@ -50,14 +50,15 @@ public class OperationsReadController {
   UserPrincipal u=admin(jwt);page(limit,offset);
   return jdbc.query("""
     SELECT a.id,a.request_id,a.approval_status,a.execution_status,a.expires_at,
-      a.created_at FROM dg_sql_approval a WHERE a.org_id=?
+      a.created_at,a.version FROM dg_sql_approval a WHERE a.org_id=?
     ORDER BY a.created_at DESC,a.id DESC LIMIT ? OFFSET ?
     """,(rs,i)->Map.<String,Object>of(
       "id",rs.getString("id"),"requestId",rs.getString("request_id"),
       "approvalStatus",rs.getString("approval_status"),
       "executionStatus",rs.getString("execution_status"),
       "expiresAt",rs.getTimestamp("expires_at").toInstant().toString(),
-      "createdAt",rs.getTimestamp("created_at").toInstant().toString()),
+      "createdAt",rs.getTimestamp("created_at").toInstant().toString(),
+      "version",rs.getLong("version")),
       u.orgId(),limit,offset);
  }
  @GetMapping("/summary")
