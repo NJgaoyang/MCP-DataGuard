@@ -99,7 +99,7 @@ public class SqlPolicyController {
    SELECT v.revision,v.priority,v.decision,v.rule::text AS rule,\n    (v.published_at IS NOT NULL) AS published
    FROM dg_sql_policy_version v JOIN dg_sql_policy p
       ON p.org_id=v.org_id AND p.id=v.policy_id
-   WHERE v.org_id=? AND v.policy_id=? AND p.status='DRAFT'
+   WHERE v.org_id=? AND v.policy_id=?
    ORDER BY v.revision DESC LIMIT 100
    """,(rs,i)->Map.<String,Object>of("revision",rs.getInt("revision"),
      "priority",rs.getInt("priority"),"decision",rs.getString("decision"),
@@ -164,6 +164,43 @@ public class SqlPolicyController {
   return Map.of("matched",true,"decision",rule.get("decision"),
      "revision",rule.get("revision"),"priority",rule.get("priority"),
      "simulationOnly",true,"executionEnabled",false);
+ }
+ public record EffectiveInput(String table,String environment){}
+ /**
+  * Deterministic precedence across active published policies:
+  * priority ascending, then DENY before REQUIRE_APPROVAL, then stable policy ID.
+  * This is a policy inspection endpoint, never an execution grant.
+  */
+ @PostMapping("/effective-decision")
+ public Map<String,Object> effectiveDecision(@AuthenticationPrincipal Jwt jwt,
+                                               @RequestBody EffectiveInput input){
+  UserPrincipal u=admin(jwt);
+  if(input==null||input.table()==null||
+     !input.table().matches("[a-z][a-z0-9_]{0,254}")||
+     input.environment()==null||
+     !List.of("DEV","TEST","STAGING","PROD").contains(input.environment()))
+   throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid evaluation scope");
+  List<Map<String,Object>> ordered=jdbc.query("""
+    SELECT p.id AS policy_id,p.code,v.revision,v.priority,v.decision
+    FROM dg_sql_policy p JOIN dg_sql_policy_version v
+      ON v.org_id=p.org_id AND v.policy_id=p.id AND v.revision=p.latest_version
+    WHERE p.org_id=? AND p.status='ACTIVE' AND v.published_at IS NOT NULL
+      AND v.decision IN ('DENY','REQUIRE_APPROVAL')
+      AND v.rule->>'operation'='SELECT'
+      AND v.rule->>'environment'=? AND v.rule->>'table'=?
+    ORDER BY v.priority ASC,
+       CASE WHEN v.decision='DENY' THEN 0 ELSE 1 END ASC,p.id ASC LIMIT 100
+    """,(rs,i)->Map.<String,Object>of(
+      "policyId",rs.getString("policy_id"),"code",rs.getString("code"),
+      "revision",rs.getInt("revision"),"priority",rs.getInt("priority"),
+      "decision",rs.getString("decision")),
+      u.orgId(),input.environment(),input.table());
+  boolean denied=ordered.stream().anyMatch(row->"DENY".equals(row.get("decision")));
+  // A single published DENY overrides weaker rules regardless of priority.
+  String decision=denied?"DENY":ordered.isEmpty()?"DENY":"REQUIRE_APPROVAL";
+  return Map.of("decision",decision,"matched",!ordered.isEmpty(),
+    "matchedRules",ordered,"evaluatedRuleCount",ordered.size(),
+    "simulationOnly",true,"executionEnabled",false);
  }
  public record LifecycleInput(long expectedVersion){}
  /** Publishing never enables SQL execution: only DENY rules can be activated. */
