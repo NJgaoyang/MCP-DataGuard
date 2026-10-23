@@ -20,15 +20,17 @@ public class ApprovedExecutionQueue {
  private final JdbcTemplate jdbc;
  private final ExecutionEligibilityService eligibility;
  private final boolean enabled;
+ private final ExecutionTicketSigner signer;
  public ApprovedExecutionQueue(JdbcTemplate jdbc,ExecutionEligibilityService eligibility,
-     @Value("${dataguard.write.queue.enabled:false}") boolean enabled){
-  this.jdbc=jdbc;this.eligibility=eligibility;this.enabled=enabled;
+     ExecutionTicketSigner signer,@Value("${dataguard.write.queue.enabled:false}") boolean enabled){
+  this.jdbc=jdbc;this.eligibility=eligibility;this.signer=signer;this.enabled=enabled;
  }
  public record QueueResult(boolean queued,String code,UUID taskId){}
  @Transactional
  public QueueResult enqueue(UUID organization,UUID approval,String fingerprint,
                             String payloadHmac){
   if(!enabled)return new QueueResult(false,"WRITE_QUEUE_DISABLED",null);
+  if(!signer.configured())return new QueueResult(false,"EXECUTION_SIGNING_UNAVAILABLE",null);
   if(organization==null||approval==null)return new QueueResult(false,"INVALID_APPROVAL",null);
   // Serialize competing submissions with the same approval; any competing
   // state change will be rechecked after acquiring this lock.
@@ -42,13 +44,9 @@ public class ApprovedExecutionQueue {
   if(!verified.eligible())return new QueueResult(false,verified.reason(),null);
   // The authorization digest commits to tenant, approval, immutable SQL
   // fingerprint, encrypted payload HMAC and a random one-time nonce.
-  UUID task=UUID.randomUUID(),nonce=UUID.randomUUID();
-  String binding=organization+"|"+approval+"|"+verified.requestId()+"|"+
-    fingerprint+"|"+payloadHmac+"|"+nonce;
-  String digest;
-  try{digest=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-       .digest(binding.getBytes(StandardCharsets.UTF_8)));}
-  catch(Exception e){throw new IllegalStateException("Unable to bind authorization");}
+  UUID task=UUID.randomUUID();
+  String digest=signer.sign(organization,approval,verified.requestId(),
+    fingerprint,payloadHmac,task);
   int updated=jdbc.update("""
    UPDATE dg_sql_approval SET execution_status='QUEUED',
       updated_at=now(),version=version+1
