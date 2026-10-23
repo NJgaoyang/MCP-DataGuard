@@ -205,7 +205,7 @@ async function evaluateEffectivePolicies(){
 }
 
 const token=ref('');
-const loginForm=reactive({organization:'dataguard',username:'',password:''});
+const loginForm=reactive({username:'',password:''});
 const mustChange=ref(false);
 const forcedPasswordChange=ref(false);
 const changeForm=reactive({currentPassword:'',newPassword:''});
@@ -616,7 +616,6 @@ async function updatePassword(){
      <h3>MCP DataGuard 登录</h3>
      <p>统一使用内置账号认证，无需 Keycloak。</p>
      <a-form :model="loginForm" layout="vertical" @finish="login">
-      <a-form-item label="组织编码" name="organization"><a-input v-model:value="loginForm.organization" autocomplete="organization"/></a-form-item>
       <a-form-item label="用户名" name="username"><a-input v-model:value="loginForm.username" autocomplete="username"/></a-form-item>
       <a-form-item label="密码" name="password"><a-input-password v-model:value="loginForm.password" autocomplete="current-password"/></a-form-item>
       <a-button html-type="submit" type="primary" block :loading="busy">登录</a-button>
@@ -641,7 +640,7 @@ async function updatePassword(){
        <article><small>Agent 数量（当前页）</small><strong>{{agents.length}}</strong><span>真实授权数据</span></article>
        <article><small>数据源数量（当前页）</small><strong>{{datasources.length}}</strong><span>真实授权数据</span></article>
       </div>
-      <div class="panel"><h3>欢迎使用 MCP DataGuard</h3><p>你属于组织 {{profile.orgId}}。当前仅实现 Agent 和数据源的只读查询；其他业务模块仍在开发中。所有危险 SQL 操作默认拒绝。</p></div>
+      <div class="panel"><h3>欢迎使用 MCP DataGuard</h3><p>公司内部安全管理平台。SQL 写入能力默认关闭，敏感操作须经独立审批与授权。</p></div>
      </section>
      <section v-else-if="selected==='agents'" class="panel">
       <div class="panel-heading"><h3>Agent 列表</h3><a-button size="small" type="primary" @click="newAgent">新增 Agent</a-button></div>
@@ -805,14 +804,14 @@ async function updatePassword(){
      </section>
      <section v-else-if="selected==='users'" class="panel">
       <div class="panel-heading">
-       <h3>用户与组织角色</h3>
+       <h3>用户与角色</h3>
        <div class="actions"><a-button size="small" @click="loadAdmin">刷新</a-button>
         <a-button size="small" @click="userDialog=true">创建用户</a-button>
         <a-button size="small" type="primary" @click="roleDialog=true">创建角色</a-button>
        </div>
       </div>
       <a-alert type="info" show-icon message="只允许委派基础管理权限；不能通过此页面授予 SQL 执行权限。"/>
-      <h4 style="margin-top:24px">组织用户</h4>
+      <h4 style="margin-top:24px">内部用户</h4>
       <a-table :data-source="usersList" row-key="id" size="small"
        :columns="[{title:'用户名',dataIndex:'username'},{title:'显示名称',dataIndex:'displayName'},{title:'状态',dataIndex:'status'}]"/>
       <h4>基础角色</h4>
@@ -955,7 +954,7 @@ async function updatePassword(){
     <a-alert type="info" show-icon message="创建后用户首次登录必须修改密码；密码以 BCrypt 哈希保存。"/>
    </a-form>
   </a-modal>
-  <a-modal v-model:open="roleDialog" title="创建组织角色" ok-text="保存"
+  <a-modal v-model:open="roleDialog" title="创建角色" ok-text="保存"
    :confirm-loading="saving" @ok="saveRole">
    <a-form layout="vertical">
     <a-form-item label="角色编码"><a-input v-model:value="roleForm.code" placeholder="operator_read"/></a-form-item>
