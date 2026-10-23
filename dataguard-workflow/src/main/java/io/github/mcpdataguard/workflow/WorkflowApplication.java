@@ -1,6 +1,7 @@
 package io.github.mcpdataguard.workflow;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-@SpringBootApplication public class WorkflowApplication {
+import org.springframework.scheduling.annotation.EnableScheduling;
+@SpringBootApplication @EnableScheduling public class WorkflowApplication {
  public static void main(String[] args) { SpringApplication.run(WorkflowApplication.class, args); }
 }
