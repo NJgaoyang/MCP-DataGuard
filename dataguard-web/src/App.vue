@@ -610,9 +610,25 @@ async function updatePassword(){
   </aside>
   <main class="main">
    <header class="bar"><div class="breadcrumb">工作台 <span>/</span> <strong>{{title}}</strong></div>
-    <div class="actions"><a-button size="small" :disabled="!token||mustChange" :loading="busy" @click="reload">刷新</a-button>
-     <a-button v-if="token&&!mustChange" size="small" @click="mustChange=true;error=''">修改密码</a-button>
-     <a-button v-else size="small" @click="logout">退出</a-button>
+    <div class="actions">
+     <template v-if="token">
+      <a-button size="small" :disabled="mustChange" :loading="busy" @click="reload">刷新</a-button>
+      <a-popover placement="bottomRight" trigger="click">
+       <template #content>
+        <div class="account-detail">
+         <strong>{{profile?.displayName || profile?.username || '当前用户'}}</strong>
+         <span>账号：{{profile?.username || '未获取'}}</span>
+         <a-button size="small" :disabled="mustChange" @click="mustChange=true;error=''">修改密码</a-button>
+        </div>
+       </template>
+       <button class="account-trigger" type="button" aria-label="查看当前登录用户">
+        <span class="account-avatar">{{(profile?.displayName || profile?.username || '用').slice(0,1)}}</span>
+        <span class="account-name">{{profile?.displayName || profile?.username || '当前用户'}}</span>
+        <span class="account-chevron">⌄</span>
+       </button>
+      </a-popover>
+      <a-button size="small" @click="logout">退出登录</a-button>
+     </template>
     </div></header>
    <div class="content">
     
@@ -1232,4 +1248,17 @@ async function updatePassword(){
 .user-table :deep(.ant-pagination),.user-roles :deep(.ant-pagination){margin-top:18px}
 @media(max-width:1150px){.overview{grid-template-columns:1fr}.overview-aside{display:grid;grid-template-columns:1fr 1fr}.overview-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.overview-aside{grid-template-columns:1fr}.overview-shortcuts{grid-template-columns:1fr}.overview-stats{grid-template-columns:1fr 1fr}.filter-panel{align-items:stretch}}
+
+/* Remove redundant top band on every authenticated page. */
+.content{padding-top:0!important}
+.content>section{margin-top:0}
+.bar{height:44px!important;min-height:44px!important;padding-top:0;padding-bottom:0}
+.bar .actions{gap:10px}
+.account-trigger{display:inline-flex;align-items:center;gap:7px;padding:2px 7px 2px 2px;border:0;background:transparent;color:var(--slate12);font-size:12px;cursor:pointer;border-radius:5px;max-width:200px}
+.account-trigger:hover{background:var(--slate3)}
+.account-avatar{display:grid;place-items:center;width:25px;height:25px;flex:none;border-radius:50%;background:var(--blue3);color:var(--blue11);font-size:12px;font-weight:650}
+.account-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;max-width:120px}
+.account-chevron{font-size:14px;color:var(--slate10)}
+.account-detail{display:flex;flex-direction:column;gap:10px;min-width:175px;font-size:12px;color:var(--slate11)}
+.account-detail strong{font-size:14px;color:var(--slate12)}
 </style>
