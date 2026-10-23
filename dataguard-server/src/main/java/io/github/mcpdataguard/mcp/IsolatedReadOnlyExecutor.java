@@ -36,7 +36,12 @@ public final class IsolatedReadOnlyExecutor {
  }
  public record Target(String host,int port,String database,String username,String password){}
  public record Request(String sql,List<Object> parameters,Set<String> exactAllowedColumns,
-    int maxRows,int maxBytes,int timeoutSeconds){}
+    int maxRows,int maxBytes,int timeoutSeconds,Map<String,String> columnMasks){
+  public Request(String sql,List<Object> parameters,Set<String> columns,
+      int rows,int bytes,int timeout){
+   this(sql,parameters,columns,rows,bytes,timeout,Map.of());
+  }
+ }
  public record Result(List<String> columns,List<List<Object>> rows,int returnedBytes){}
 
  public Result execute(Target target,Request request) throws SQLException {
@@ -123,7 +128,8 @@ public final class IsolatedReadOnlyExecutor {
        Object value=rs.getObject(i);
        // Conservative result policy: redact all non-null fields by default.
        // A certified masking engine is needed before plaintext output is enabled.
-       Object output=maskValue(value);
+       Object output=maskValue(value,request.columnMasks()==null?"REDACT":
+          request.columnMasks().getOrDefault(columns.get(i-1),"REDACT"));
        bytes+=String.valueOf(output).getBytes(StandardCharsets.UTF_8).length;
        if(bytes>request.maxBytes())throw new SecurityException("RESULT_BYTES_EXCEEDED");
        row.add(output);
@@ -137,7 +143,13 @@ public final class IsolatedReadOnlyExecutor {
   }
  }
  static Object maskValue(Object value){
-  return value==null?null:"[REDACTED]";
+  return maskValue(value,"REDACT");
+ }
+ static Object maskValue(Object value,String algorithm){
+  if(value==null)return null;
+  if("NULLIFY".equals(algorithm))return null;
+  if("REDACT".equals(algorithm))return "[REDACTED]";
+  throw new SecurityException("UNSUPPORTED_MASK_ALGORITHM");
  }
  private static void validate(Target target,Request r){
   if(target==null || r==null ||
