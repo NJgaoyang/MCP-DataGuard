@@ -252,7 +252,7 @@ async function reload(){
  finally{busy.value=false;}
 }
 
-async function requestWrite(path:string,method:'POST'|'PUT',payload?:unknown){
+async function requestWrite(path:string,method:'POST'|'PUT'|'DELETE',payload?:unknown){
  const response=await fetch(path,{
   method,headers:{Authorization:'Bearer '+token.value,Accept:'application/json',
    ...(payload?{'Content-Type':'application/json'}:{})},
