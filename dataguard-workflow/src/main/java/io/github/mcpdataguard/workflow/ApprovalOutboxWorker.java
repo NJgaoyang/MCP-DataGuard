@@ -85,7 +85,7 @@ public class ApprovalOutboxWorker {
           SELECT v.bpmn_xml,v.bpmn_digest,r.risk_level FROM platform.dg_sql_approval a
           JOIN platform.dg_workflow_version v ON v.org_id=a.org_id AND v.id=a.workflow_version_id
           JOIN platform.dg_sql_request r ON r.org_id=a.org_id AND r.id=a.request_id
-          WHERE a.org_id=? AND a.id=? AND v.status='PUBLISHED'
+          WHERE a.org_id=? AND a.id=? AND v.status IN ('PUBLISHED','RETIRED')
           """)){
          definition.setObject(1,org);definition.setObject(2,approval);
          try(ResultSet version=definition.executeQuery()){
