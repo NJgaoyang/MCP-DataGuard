@@ -1339,4 +1339,19 @@ async function updatePassword(){
 .shell:not(.auth-shell) .content{max-width:none;margin:0;padding:14px 14px 36px}
 @media(max-width:900px){.auth-layout{grid-template-columns:minmax(290px,42%) minmax(0,1fr)}.auth-brand-panel{padding:30px}.auth-brand-body h1{font-size:28px}}
 @media(max-width:700px){.auth-layout{display:block}.auth-brand-panel{display:none}.auth-form-panel{padding:32px 24px;min-height:100vh}.auth-mobile-brand{display:flex;align-items:center;gap:10px;margin-bottom:50px;font-size:17px;font-weight:700;color:#192d42}.auth-login-card{margin:auto 0}.auth-login-heading h2{font-size:24px}}
+
+/* Compact dashboard density baseline (2026-10-23) */
+.shell:not(.auth-shell) .content{padding:2px 2px 22px!important;max-width:none;margin:0}
+.shell:not(.auth-shell) .overview{gap:3px;grid-template-columns:minmax(0,1fr) 268px}
+.shell:not(.auth-shell) .overview-main,.shell:not(.auth-shell) .overview-aside{gap:3px}
+.shell:not(.auth-shell) .overview-stats{gap:3px}
+.shell:not(.auth-shell) .overview-shortcuts{gap:8px}
+.shell:not(.auth-shell) .overview-block{padding:14px}
+.shell:not(.auth-shell) .metric{border-radius:5px}
+.shell:not(.auth-shell) .overview-block{border-radius:5px}
+.shell:not(.auth-shell) .account-trigger{border:0!important;box-shadow:none!important;background:transparent!important;padding:2px 4px!important}
+.shell:not(.auth-shell) .account-trigger:hover{background:var(--slate3)!important}
+.shell:not(.auth-shell) .account-trigger:focus-visible{outline:2px solid var(--blue9);outline-offset:2px}
+@media(max-width:1150px){.shell:not(.auth-shell) .overview{grid-template-columns:1fr}}
+@media(max-width:700px){.shell:not(.auth-shell) .content{padding:4px!important}}
 </style>
