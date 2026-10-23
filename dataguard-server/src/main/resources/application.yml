@@ -29,6 +29,8 @@ dataguard:
     mode: native
   connection-test:
     allowed-hosts: ${DG_CONNECT_TEST_ALLOW_HOSTS:}
+  readonly:
+    allowed-hosts: ${DG_CONNECT_TEST_ALLOW_HOSTS:}
   sql:
     allow-read-execution: ${DG_ENABLE_READ_EXECUTION:false}
     max-rows: 100
