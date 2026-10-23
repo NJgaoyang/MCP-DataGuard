@@ -29,21 +29,32 @@ import org.springframework.stereotype.Service;
 @Service
 public final class IsolatedReadOnlyExecutor {
  private final Set<String> allowedHosts;
- public IsolatedReadOnlyExecutor(@Value("${dataguard.readonly.allowed-hosts:}") String hosts){
+ private final CertifiedMasker masker;
+ public IsolatedReadOnlyExecutor(String hosts){this(hosts,new CertifiedMasker(""));}
+ @org.springframework.beans.factory.annotation.Autowired
+ public IsolatedReadOnlyExecutor(@Value("${dataguard.readonly.allowed-hosts:}") String hosts,
+     CertifiedMasker masker){
+  this.masker=masker;
   allowedHosts=Arrays.stream(hosts.split(",")).map(String::strip)
    .map(v->v.toLowerCase(Locale.ROOT)).filter(v->!v.isEmpty())
    .collect(java.util.stream.Collectors.toUnmodifiableSet());
  }
  public record Target(String host,int port,String database,String username,String password){}
  public record Request(String sql,List<Object> parameters,Set<String> exactAllowedColumns,
-    int maxRows,int maxBytes,int timeoutSeconds,Map<String,String> columnMasks){
+    int maxRows,int maxBytes,int timeoutSeconds,Map<String,String> columnMasks,
+    String maskDomain){
   public Request(String sql,List<Object> parameters,Set<String> columns,
       int rows,int bytes,int timeout){
-   this(sql,parameters,columns,rows,bytes,timeout,Map.of());
+   this(sql,parameters,columns,rows,bytes,timeout,Map.of(),"");
+  }
+  public Request(String sql,List<Object> parameters,Set<String> columns,
+      int rows,int bytes,int timeout,Map<String,String> masks){
+   this(sql,parameters,columns,rows,bytes,timeout,masks,"");
   }
  }
  public record Result(List<String> columns,List<List<Object>> rows,int returnedBytes){}
 
+ public boolean hashMaskConfigured(){return masker.hashEnabled();}
  public Result execute(Target target,Request request) throws SQLException {
   validate(target,request);
   if(!allowedHosts.contains(target.host().toLowerCase(Locale.ROOT)))
@@ -128,8 +139,9 @@ public final class IsolatedReadOnlyExecutor {
        Object value=rs.getObject(i);
        // Conservative result policy: redact all non-null fields by default.
        // A certified masking engine is needed before plaintext output is enabled.
-       Object output=maskValue(value,request.columnMasks()==null?"REDACT":
-          request.columnMasks().getOrDefault(columns.get(i-1),"REDACT"));
+       Object output=masker.mask(value,request.columnMasks()==null?"REDACT":
+          request.columnMasks().getOrDefault(columns.get(i-1),"REDACT"),
+          request.maskDomain());
        bytes+=String.valueOf(output).getBytes(StandardCharsets.UTF_8).length;
        if(bytes>request.maxBytes())throw new SecurityException("RESULT_BYTES_EXCEEDED");
        row.add(output);
