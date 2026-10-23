@@ -98,7 +98,7 @@ public class ExecutionReconciliationController {
   jdbc.update("""
     INSERT INTO dg_system_event(id,org_id,actor,operation,resource_type,resource_id,detail)
     VALUES(?,?,?,'WRITE_RECONCILIATION_ATTESTED','EXECUTION_RECONCILIATION',?,
-      jsonb_build_object('outcome',?::text,'evidenceRef',?::text,'taskVersion',?::bigint))
+      jsonb_build_object('outcome',CAST(? AS text),'evidenceRef',CAST(? AS text),'taskVersion',CAST(? AS bigint)))
     """,UUID.randomUUID(),u.orgId(),u.userId().toString(),taskId.toString(),
     input.outcome(),input.evidenceRef(),task.version());
   List<String> previous=jdbc.query("""
