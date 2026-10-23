@@ -10,6 +10,17 @@ const selected=ref('dashboard');
 const sqlPolicies=ref<{id:string;code:string;name:string;status:string;version:number;latestVersion:number}[]>([]);
 const policyDialog=ref(false);
 const operationalSummary=ref<{deniedRequests:number;pendingApprovals:number;openAlerts:number}|null>(null);
+type DailyTrend={day:string;requests:number;denied:number;completed:number;approvals:number;approved:number;alerts:number};
+const dailyTrends=ref<DailyTrend[]>([]);
+function trendPercent(value:number){
+ const top=Math.max(1,...dailyTrends.value.map(day=>day.requests));
+ return Math.max(2,Math.min(100,Math.round(value/top*100)))+'%';
+}
+async function loadTrends(){
+ try{dailyTrends.value=await getData<DailyTrend[]>('/api/v1/operations/trends');}
+ catch(e){error.value='查询监控趋势失败：'+(e as Error).message;}
+}
+
 const sqlRequestRows=ref<Record<string,unknown>[]>([]);
 const approvalRows=ref<Record<string,unknown>[]>([]);
 const workflowDesigns=ref<{id:string;code:string;name:string;version:number;revision:number;publishedRevision:number}[]>([]);
@@ -549,7 +560,7 @@ async function updatePassword(){
   <aside class="sidebar">
    <div class="brand"><span class="symbol">◆</span><div>MCP DataGuard<small>AI DATABASE SECURITY</small></div></div>
    <span class="section">工作台</span>
-   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations();loadSecurityAlerts()};if(page[0]==='flowable'){loadOperations();loadDeadLetters();loadWorkflowDesigns()}}">{{page[1]}}</button>
+   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations();loadSecurityAlerts();loadTrends()};if(page[0]==='flowable'){loadOperations();loadDeadLetters();loadWorkflowDesigns()}}">{{page[1]}}</button>
    <div class="foot">● 开源研发版 · v0.5</div>
   </aside>
   <main class="main">
@@ -672,6 +683,21 @@ async function updatePassword(){
        <article><small>被拒绝请求</small><strong>{{operationalSummary.deniedRequests}}</strong></article>
        <article><small>待审批工单</small><strong>{{operationalSummary.pendingApprovals}}</strong></article>
        <article><small>未处理安全告警</small><strong>{{operationalSummary.openAlerts}}</strong></article>
+      </div>
+      <h4>近 14 天 · SQL 请求和拒绝趋势</h4>
+      <div style="display:flex;gap:8px;align-items:end;height:165px;margin:16px 0 6px">
+       <div v-for="day in dailyTrends" :key="day.day" :title="day.day+' 请求：'+day.requests+'；拒绝：'+day.denied+'；告警：'+day.alerts"
+         style="display:flex;flex:1;min-width:0;height:100%;align-items:end;gap:2px">
+        <div style="flex:1;background:#5b8ff9;border-radius:4px 4px 0 0;min-height:2px"
+          :style="{height:trendPercent(day.requests)}"></div>
+        <div style="flex:1;background:#e47e7e;border-radius:4px 4px 0 0;min-height:2px"
+          :style="{height:trendPercent(day.denied)}"></div>
+       </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#888">
+       <span>{{dailyTrends[0]?.day ?? '无数据'}}</span>
+       <span>蓝色：请求 · 红色：拒绝（每日数量）</span>
+       <span>{{dailyTrends[dailyTrends.length-1]?.day ?? ''}}</span>
       </div>
       <h4>SQL 请求安全记录</h4>
       <a-table row-key="id" size="small" :data-source="sqlRequestRows" :pagination="{pageSize:10}"
