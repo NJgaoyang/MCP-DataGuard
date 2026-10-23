@@ -95,6 +95,35 @@ public class WorkflowDesignController {
        "version",rs.getLong("version"),"revision",rs.getInt("revision"),
        "publishedRevision",rs.getInt("published")),u.orgId());
  }
+ @GetMapping("/{id}/versions")
+ public List<Map<String,Object>> versions(@AuthenticationPrincipal Jwt jwt,
+                                           @PathVariable UUID id){
+  UserPrincipal u=admin(jwt);
+  return jdbc.query("""
+    SELECT v.revision,v.status,v.bpmn_xml,v.bpmn_digest,
+      v.flowable_definition_key,v.published_at
+    FROM dg_workflow_version v
+    JOIN dg_workflow_template w ON w.org_id=v.org_id AND w.id=v.workflow_id
+    WHERE v.org_id=? AND v.workflow_id=? AND w.state='ACTIVE'
+    ORDER BY v.revision DESC LIMIT 30
+    """,(rs,i)->{
+      String content=rs.getString("bpmn_xml");
+      String digest=rs.getString("bpmn_digest");
+      if(!java.security.MessageDigest.isEqual(digest(content).getBytes(StandardCharsets.US_ASCII),
+           digest.getBytes(StandardCharsets.US_ASCII)))
+       throw new ResponseStatusException(HttpStatus.CONFLICT,"Published workflow version altered");
+      boolean modern="safeWorkflowV2".equals(rs.getString("flowable_definition_key"));
+      var graph=modern?SafeApprovalGraph.parseCertified(content):null;
+      return Map.<String,Object>of(
+       "revision",rs.getInt("revision"),"status",rs.getString("status"),
+       "processKey",rs.getString("flowable_definition_key"),
+       "steps",modern?graph.steps():List.of(
+          new SafeApprovalGraph.Step("db-owner","Data Owner"),
+          new SafeApprovalGraph.Step("dba","DBA Review")),
+       "highRiskOnlyLast",modern&&graph.highRiskOnlyLast()
+      );
+    },u.orgId(),id);
+ }
  @PostMapping
  @Transactional
  public Map<String,Object> create(@AuthenticationPrincipal Jwt jwt,@RequestBody DesignInput input){
