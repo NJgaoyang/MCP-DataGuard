@@ -83,6 +83,61 @@ public class SqlPolicyController {
   audit(u,"SQL_POLICY_DRAFT_RENAMED",policyId);
   return Map.of("id",policyId.toString(),"status","DRAFT","version",input.expectedVersion()+1);
  }
+ public record RuleInput(String decision,int priority,String table,String environment){}
+ private static Map<String,Object> validate(RuleInput input){
+  if(input==null || !List.of("DENY","REQUIRE_APPROVAL").contains(input.decision()) ||
+     input.priority()<1 || input.priority()>10000 ||
+     input.table()==null || !input.table().matches("[a-z][a-z0-9_]{0,254}") ||
+     input.environment()==null || !List.of("DEV","TEST","STAGING","PROD").contains(input.environment()))
+   throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid draft rule");
+  return Map.of("table",input.table(),"environment",input.environment(),"operation","SELECT");
+ }
+ @GetMapping("/{policyId}/versions")
+ public List<Map<String,Object>> versions(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID policyId){
+  UserPrincipal u=admin(jwt);
+  return jdbc.query("""
+   SELECT v.revision,v.priority,v.decision,v.rule::text AS rule
+   FROM dg_sql_policy_version v JOIN dg_sql_policy p
+      ON p.org_id=v.org_id AND p.id=v.policy_id
+   WHERE v.org_id=? AND v.policy_id=? AND p.status='DRAFT'
+   ORDER BY v.revision DESC LIMIT 100
+   """,(rs,i)->Map.<String,Object>of("revision",rs.getInt("revision"),
+     "priority",rs.getInt("priority"),"decision",rs.getString("decision"),
+     "rule",rs.getString("rule")),u.orgId(),policyId);
+ }
+ @PostMapping("/{policyId}/versions")
+ @Transactional
+ public Map<String,Object> newVersion(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID policyId,
+                                       @RequestBody RuleInput input){
+  UserPrincipal u=admin(jwt);
+  Map<String,Object> conditions=validate(input);
+  List<Integer> current=jdbc.query("""
+   SELECT latest_version FROM dg_sql_policy
+   WHERE org_id=? AND id=? AND status='DRAFT' FOR UPDATE
+   """,(rs,i)->rs.getInt(1),u.orgId(),policyId);
+  if(current.size()!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Draft unavailable");
+  int revision=current.get(0)+1;
+  String json="{\"environment\":\""+input.environment()+"\",\"table\":\""+input.table()+"\",\"operation\":\"SELECT\"}";
+  String digest;
+  try{
+   byte[] hash=java.security.MessageDigest.getInstance("SHA-256")
+     .digest(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+   digest=java.util.HexFormat.of().formatHex(hash);
+  }catch(java.security.NoSuchAlgorithmException ex){throw new IllegalStateException(ex);}
+  jdbc.update("""
+   INSERT INTO dg_sql_policy_version
+     (id,org_id,policy_id,revision,priority,decision,rule,rule_digest)
+   VALUES(?,?,?,?,?,?,CAST(? AS jsonb),?)
+   """,UUID.randomUUID(),u.orgId(),policyId,revision,input.priority(),
+    input.decision(),json,digest);
+  jdbc.update("""
+   UPDATE dg_sql_policy SET latest_version=?,version=version+1,updated_at=now()
+   WHERE org_id=? AND id=?
+   """,revision,u.orgId(),policyId);
+  audit(u,"SQL_POLICY_DRAFT_VERSION_CREATED",policyId);
+  return Map.of("revision",revision,"status","DRAFT","decision",input.decision(),
+     "conditions",conditions,"executionEnabled",false);
+ }
  private void audit(UserPrincipal u,String operation,UUID id){
   jdbc.update("""
     INSERT INTO dg_system_event(id,org_id,actor,operation,resource_type,resource_id)
