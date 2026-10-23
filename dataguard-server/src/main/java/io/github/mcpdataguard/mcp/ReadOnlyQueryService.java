@@ -152,7 +152,7 @@ public class ReadOnlyQueryService {
    return Map.of("decision","ALLOW","operation","SELECT",
       "columns",result.columns(),"rows",result.rows(),
       "rowCount",result.rows().size(),"returnedBytes",result.returnedBytes(),
-      "masking","ALL_NON_NULL_VALUES_REDACTED","executionEnabled",true);
+      "masking","REDACT_OR_NULLIFY","executionEnabled",true);
   }catch(RuntimeException|SQLException e){
    return deny("READ_EXECUTION_REJECTED");
   }
