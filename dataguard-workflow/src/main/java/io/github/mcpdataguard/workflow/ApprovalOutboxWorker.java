@@ -82,8 +82,9 @@ public class ApprovalOutboxWorker {
        }else if(dynamic!=null && dynamic.enabled()){
         // The version is resolved through this approval's immutable workflow binding.
         try(PreparedStatement definition=c.prepareStatement("""
-          SELECT v.bpmn_xml,v.bpmn_digest FROM platform.dg_sql_approval a
+          SELECT v.bpmn_xml,v.bpmn_digest,r.risk_level FROM platform.dg_sql_approval a
           JOIN platform.dg_workflow_version v ON v.org_id=a.org_id AND v.id=a.workflow_version_id
+          JOIN platform.dg_sql_request r ON r.org_id=a.org_id AND r.id=a.request_id
           WHERE a.org_id=? AND a.id=? AND v.status='PUBLISHED'
           """)){
          definition.setObject(1,org);definition.setObject(2,approval);
@@ -98,7 +99,8 @@ public class ApprovalOutboxWorker {
              actualDigest.getBytes(java.nio.charset.StandardCharsets.US_ASCII),
              expectedDigest.getBytes(java.nio.charset.StandardCharsets.US_ASCII)))
            throw new SecurityException("PUBLISHED_BPMN_DIGEST_MISMATCH");
-          instanceId=dynamic.start(xml,approval.toString(),org.toString());
+          instanceId=dynamic.start(xml,approval.toString(),org.toString(),
+             List.of("HIGH","CRITICAL").contains(version.getString(3)));
          }
         }
        }else{
@@ -230,7 +232,7 @@ public class ApprovalOutboxWorker {
                       String action,String reviewer,String stage)throws Exception{
   if(instance==null||action==null||reviewer==null||stage==null ||
      !action.matches("[0-9a-f-]{36}")||!reviewer.matches("[0-9a-f-]{36}") ||
-     !List.of("1","2").contains(stage))
+     !stage.matches("[1-6]"))
    throw new SecurityException("Invalid approval action");
   UUID actionId=UUID.fromString(action),reviewerId=UUID.fromString(reviewer);
   try(PreparedStatement p=c.prepareStatement("""
@@ -247,7 +249,8 @@ public class ApprovalOutboxWorker {
   var active=runtime.createProcessInstanceQuery().processInstanceId(instance).singleResult();
   if(active!=null)verifyTenant(instance,org);
   List<Task> pending=active==null?List.of():tasks.createTaskQuery().processInstanceId(instance).list();
-  String expected="1".equals(stage)?"ownerReview":"dbaReview";
+  boolean flexible=active!=null&&active.getProcessDefinitionId().startsWith("safeWorkflowV2:");
+  String expected=flexible?"review"+stage:("1".equals(stage)?"ownerReview":"dbaReview");
   if(pending.size()==1&&expected.equals(pending.get(0).getTaskDefinitionKey())){
    Task task=pending.get(0);
    if(task.getAssignee()==null)tasks.claim(task.getId(),reviewer);
@@ -261,10 +264,12 @@ public class ApprovalOutboxWorker {
     u.setObject(3,approval);u.setObject(4,actionId);
     if(u.executeUpdate()!=1)throw new IllegalStateException("Action update conflict");
    }
-  }else if("1".equals(stage) && pending.size()==1 &&
-       "dbaReview".equals(pending.get(0).getTaskDefinitionKey())){
+  }else if(active!=null && pending.size()==1 &&
+       (flexible?("review"+(Integer.parseInt(stage)+1))
+         :("1".equals(stage)?"dbaReview":"__no_next__"))
+        .equals(pending.get(0).getTaskDefinitionKey())){
    // The previous completion succeeded but the outbox commit was interrupted.
-  }else if("2".equals(stage)&&active==null){
+  }else if(active==null&&Integer.parseInt(stage)>=2){
    // A completed Flowable instance is no longer in the runtime table.
   }else throw new IllegalStateException("Review stage not ready");
  }
