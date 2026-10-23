@@ -270,6 +270,17 @@ const assignment=reactive({userId:'',roleId:''});
 const datasources=ref<Record<string,unknown>[]>([]);
 const busy=ref(false),error=ref('');
 const title=computed(()=>pages.find(p=>p[0]===selected.value)?.[1]||'总览仪表盘');
+const statusLabels:Record<string,string>={ACTIVE:'启用',DISABLED:'停用',REVOKED:'已撤销',DRAFT:'草稿',OPEN:'待处理',PENDING:'待审核',CLOSED:'已关闭',ACKNOWLEDGED:'已确认',APPROVED:'已通过',REJECTED:'已拒绝',LOCKED:'已锁定'};
+function localizedStatus(value:unknown){const status=String(value??'');return statusLabels[status]||status||'—';}
+function localizedDisplayName(value:unknown){const name=String(value??'');return ({'Test Administrator':'测试管理员','Organization administrators':'组织管理员'} as Record<string,string>)[name]||name;}
+const permissionNameMap:Record<string,string>={'agent:read':'查看 Agent','agent:write':'管理 Agent','datasource:read':'查看数据源','datasource:write':'管理数据源','datasource:test':'测试数据源','datasource:secret:write':'管理数据源凭据','identity:admin':'身份与用户管理','agent:identity:write':'管理 Agent 身份','agent:permission:write':'管理 Agent 权限','sql:read':'查看 SQL','sql:write':'SQL 策略管理','approval:read':'查看审批','approval:write':'处理审批','audit:read':'查看审计','security:alert:read':'查看告警'};
+function localizedPermissions(value:unknown):string{
+ let items:unknown=value;
+ if(typeof items==='string'){try{items=JSON.parse(items);}catch{return items;}}
+ if(!Array.isArray(items))return String(items??'—');
+ return items.map(item=>permissionNameMap[String(item)]||String(item)).join('、')||'无';
+}
+const accountMenuOpen=ref(false);
 const dayGreeting=computed(()=>{
  const hour=new Date().getHours();
  return hour<11?'上午好':hour<14?'中午好':hour<19?'下午好':'晚上好';
@@ -625,15 +636,17 @@ async function updatePassword(){
      <button type="button" class="alerts-trigger" aria-label="查看安全告警" title="查看安全告警" @click="selected='audit';loadOperations();loadSecurityAlerts()"><UiIcon name="bell" :size="19"/><i v-if="(operationalSummary?.openAlerts??0)>0" class="notification-dot"></i></button>
      <span class="account-separator" aria-hidden="true"></span>
      <template v-if="token">
-      <a-popover placement="bottomRight" trigger="click">
+      <a-popover v-model:open="accountMenuOpen" placement="bottomRight" trigger="click" overlay-class-name="dg-account-popover" :arrow="false">
        <template #content>
         <div class="account-detail">
-         <strong>{{profile?.displayName || profile?.username || '当前用户'}}</strong>
-         <span>账号：{{profile?.username || '未获取'}}</span>
-         
-         <a-button size="small" :disabled="mustChange" @click="mustChange=true;error=''">修改密码</a-button>
-         <a-button size="small" danger @click="logout">退出登录</a-button>
-        </div>
+          <div class="account-summary">
+           <span class="account-summary-avatar">{{(profile?.displayName || profile?.username || '用').slice(0,1)}}</span>
+           <span class="account-summary-info"><strong>{{profile?.displayName || profile?.username || '当前用户'}}</strong><small>账号：{{profile?.username || '未获取'}}</small></span>
+          </div>
+          <div class="account-menu-divider"></div>
+          <button type="button" class="account-menu-item" @click="accountMenuOpen=false;mustChange=true;error=''"><span>修改密码</span><span class="menu-item-arrow">›</span></button>
+          <button type="button" class="account-menu-item account-menu-danger" @click="accountMenuOpen=false;logout()"><span>退出登录</span><span class="menu-item-arrow">›</span></button>
+         </div>
        </template>
        <button class="account-trigger" type="button" aria-label="查看当前登录用户">
         <span class="account-avatar">{{(profile?.displayName || profile?.username || '用').slice(0,1)}}</span>
@@ -778,7 +791,7 @@ async function updatePassword(){
      </section>
      <section v-else-if="selected==='agents'" class="panel data-panel">
       <div class="panel-heading"><h3>Agent 列表 <span class="table-count">{{agents.length}}</span></h3><a-button type="primary" @click="newAgent">新增 Agent</a-button></div>
-      <div v-if="!busy && !agents.length" class="empty-state"><div class="empty-icon">＋</div><strong>暂无 Agent</strong><a-button type="primary" @click="newAgent">创建第一个 Agent</a-button></div>
+      <div v-if="!busy && !agents.length" class="empty-state"><div class="empty-icon"><UiIcon name="agents" :size="25"/></div><strong>暂无 Agent</strong><span class="empty-description">点击右上角“新增 Agent”，开始创建并管理 Agent</span></div><strong>暂无 Agent</strong><a-button type="primary" @click="newAgent">创建第一个 Agent</a-button></div>
       <a-table v-if="busy || agents.length" row-key="id" :columns="columnsAgents" :data-source="agents" size="small" :loading="busy" :pagination="{pageSize:10}">
        <template #bodyCell="{column,record}">
         <template v-if="column.key==='actions'">
@@ -794,7 +807,7 @@ async function updatePassword(){
      </section>
      <section v-else-if="selected==='datasources'" class="panel data-panel">
       <div class="panel-heading"><h3>数据源列表 <span class="table-count">{{datasources.length}}</span></h3><a-button type="primary" @click="newDatasource">新增数据源</a-button></div>
-      <div v-if="!busy && !datasources.length" class="empty-state"><div class="empty-icon">＋</div><strong>暂无数据源</strong><a-button type="primary" @click="newDatasource">添加数据源</a-button></div>
+      <div v-if="!busy && !datasources.length" class="empty-state"><div class="empty-icon"><UiIcon name="datasources" :size="25"/></div><strong>暂无数据源</strong><span class="empty-description">点击右上角“新增数据源”，配置数据库连接</span></div><strong>暂无数据源</strong><a-button type="primary" @click="newDatasource">添加数据源</a-button></div>
       <a-table v-if="busy || datasources.length" row-key="id" :columns="columnsSources" :data-source="datasources" size="small" :loading="busy" :pagination="{pageSize:10}">
        <template #bodyCell="{column,record}">
         <template v-if="column.key==='actions'">
@@ -854,11 +867,11 @@ async function updatePassword(){
      <section v-else-if="selected==='audit'" class="panel">
       <div class="panel-heading"><h3>管理操作审计</h3><a-button size="small" @click="loadAuditEvents">刷新</a-button></div>
       
-      <div v-if="operationalSummary" class="cards" style="margin-top:16px">
-       <article><small>被拒绝请求</small><strong>{{operationalSummary.deniedRequests}}</strong></article>
-       <article><small>待审批工单</small><strong>{{operationalSummary.pendingApprovals}}</strong></article>
-       <article><small>未处理安全告警</small><strong>{{operationalSummary.openAlerts}}</strong></article>
-      </div>
+      <div v-if="operationalSummary" class="audit-summary">
+        <div class="audit-kpi"><span class="audit-kpi-icon audit-blue"><UiIcon name="document" :size="19"/></span><span><small>被拒绝请求</small><strong>{{operationalSummary.deniedRequests}}</strong></span></div>
+        <div class="audit-kpi"><span class="audit-kpi-icon audit-amber"><UiIcon name="clock" :size="19"/></span><span><small>待审批工单</small><strong>{{operationalSummary.pendingApprovals}}</strong></span></div>
+        <div class="audit-kpi"><span class="audit-kpi-icon audit-rose"><UiIcon name="warning" :size="19"/></span><span><small>未处理安全告警</small><strong>{{operationalSummary.openAlerts}}</strong></span></div>
+       </div>
       <h4>近 14 天 SQL 请求和拒绝趋势</h4>
       <div style="display:flex;gap:8px;align-items:end;height:165px;margin:16px 0 6px">
        <div v-for="day in dailyTrends" :key="day.day" :title="day.day+' 请求：'+day.requests+'；拒绝：'+day.denied+'；告警：'+day.alerts"
@@ -903,13 +916,13 @@ async function updatePassword(){
         {title:'操作者',dataIndex:'actor'},{title:'资源类型',dataIndex:'resourceType'},
         {title:'资源编号',dataIndex:'resourceId'}]"/>
      </section>
-     <section v-else-if="selected==='rules'" class="panel">
+     <section v-else-if="selected==='rules'" class="panel rules-panel">
       <div class="panel-heading"><h3>SQL 安全策略草稿</h3><div class="actions">
        <a-button size="small" @click="loadPolicies">刷新</a-button>
        <a-button type="primary" size="small" @click="policyDialog=true">创建草稿</a-button>
       </div></div>
       
-      <a-card size="small" style="margin:16px 0" title="已发布策略 多规则决策预览">
+      <a-card class="rules-preview" size="small" title="已发布策略 · 多规则决策预览">
        <a-space wrap>
         <a-input v-model:value="effectivePolicyScope.table" placeholder="数据库表名" style="width:190px"/>
         <a-select v-model:value="effectivePolicyScope.environment" style="width:145px"
@@ -948,18 +961,28 @@ async function updatePassword(){
       <div class="user-actions"><a-button type="primary" @click="userDialog=true">新增用户</a-button><a-button @click="roleDialog=true">新增角色</a-button></div>
       <div class="panel user-table">
        <a-table :data-source="filteredUsers" row-key="id" size="small" :pagination="{pageSize:10,showSizeChanger:true,pageSizeOptions:['10','20','50'],showTotal:(total:number)=>'共 '+total+' 条'}"
-        :columns="[{title:'用户名',dataIndex:'username'},{title:'显示名称',dataIndex:'displayName'},{title:'状态',dataIndex:'status'}]"/>
+        :columns="[{title:'用户名',dataIndex:'username'},{title:'显示名称',dataIndex:'displayName'},{title:'状态',dataIndex:'status'}]">
+         <template #bodyCell="{column,record}">
+          <template v-if="column.dataIndex==='displayName'">{{localizedDisplayName(record.displayName)}}</template>
+          <template v-else-if="column.dataIndex==='status'"><span class="status-label" :class="{'is-active':record.status==='ACTIVE'}">{{localizedStatus(record.status)}}</span></template>
+         </template>
+        </a-table>
       </div>
       <div class="panel user-roles">
        <div class="panel-heading"><h3>角色管理</h3></div>
        <a-table :data-source="rolesList" row-key="id" size="small" :pagination="{pageSize:10}"
-        :columns="[{title:'角色编码',dataIndex:'code'},{title:'角色名称',dataIndex:'name'},{title:'权限',dataIndex:'permissions'}]"/>
+        :columns="[{title:'角色编码',dataIndex:'code'},{title:'角色名称',dataIndex:'name'},{title:'权限',dataIndex:'permissions'}]">
+         <template #bodyCell="{column,record}">
+          <template v-if="column.dataIndex==='name'">{{localizedDisplayName(record.name)}}</template>
+          <template v-else-if="column.dataIndex==='permissions'"><span class="permission-summary" :title="localizedPermissions(record.permissions)">{{localizedPermissions(record.permissions)}}</span></template>
+         </template>
+        </a-table>
        <div class="assignment">
         <a-select v-model:value="assignment.userId" placeholder="选择用户" style="min-width:170px">
          <a-select-option v-for="u in usersList" :key="String(u.id)" :value="String(u.id)">{{u.username}}</a-select-option>
         </a-select>
         <a-select v-model:value="assignment.roleId" placeholder="选择角色" style="min-width:170px">
-         <a-select-option v-for="r in rolesList.filter(x=>!x.systemRole)" :key="r.id" :value="r.id">{{r.name}}</a-select-option>
+         <a-select-option v-for="r in rolesList.filter(x=>!x.systemRole)" :key="r.id" :value="r.id">{{localizedDisplayName(r.name)}}</a-select-option>
         </a-select>
         <a-button type="primary" :disabled="!assignment.userId||!assignment.roleId" @click="assignRole">分配角色</a-button>
        </div>
@@ -972,7 +995,7 @@ async function updatePassword(){
    </div>
   </main>
 
-  <a-modal v-model:open="maskDialog" :title="'字段脱敏 '+maskTarget.name" :footer="null" width="700px">
+  <a-modal cancel-text="返回" v-model:open="maskDialog" :title="'字段脱敏 '+maskTarget.name" :footer="null" width="700px">
    
    <a-form layout="vertical" style="margin-top:16px">
     <a-form-item label="表名"><a-input v-model:value="maskForm.table" placeholder="orders"/></a-form-item>
@@ -989,7 +1012,7 @@ async function updatePassword(){
     <template #bodyCell="{column,record}"><a-popconfirm v-if="column.key==='actions'" title="确认停用？" @confirm="disableMaskRule(record.id)"><a-button danger type="link" size="small">停用</a-button></a-popconfirm></template>
    </a-table>
   </a-modal>
-  <a-modal v-model:open="workflowDesignerOpen" title="通用流程编排 安全审批节点" width="880px" :footer="null">
+  <a-modal cancel-text="返回" v-model:open="workflowDesignerOpen" title="通用流程编排 安全审批节点" width="880px" :footer="null">
    
    <a-form layout="vertical" style="margin-top:16px">
     <a-form-item label="流程编码"><a-input v-model:value="workflowDesignForm.code" :disabled="!!workflowDesignTarget" placeholder="sql_review"/></a-form-item>
@@ -1024,18 +1047,18 @@ async function updatePassword(){
    </a-space>
    <div><a-button type="primary" :loading="saving" @click="saveWorkflowDesign">保存新修订</a-button></div>
   </a-modal>
-  <a-modal v-model:open="approvalDialog" title="审核 SQL 变更申请" ok-text="确认审核通过"
+  <a-modal cancel-text="返回" v-model:open="approvalDialog" title="审核 SQL 变更申请" ok-text="确认审核通过"
    :confirm-loading="saving" @ok="approveTask">
    
    <a-form-item label="审核意见" style="margin-top:14px">
     <a-textarea v-model:value="approvalReason" :maxlength="1000" :rows="3"/>
    </a-form-item>
   </a-modal>
-  <a-modal v-model:open="rejectionDialog" title="拒绝审批工单" ok-text="确认拒绝" :confirm-loading="saving" @ok="rejectApproval">
+  <a-modal cancel-text="返回" v-model:open="rejectionDialog" title="拒绝审批工单" ok-text="确认拒绝" :confirm-loading="saving" @ok="rejectApproval">
    
    <a-form-item label="拒绝原因" style="margin-top:14px"><a-textarea v-model:value="rejectionReason" :maxlength="1000" :rows="3"/></a-form-item>
   </a-modal>
-  <a-modal v-model:open="policyRuleDialog" :title="'规则草稿版本 '+policyTarget.name" :footer="null" width="760px">
+  <a-modal cancel-text="返回" v-model:open="policyRuleDialog" :title="'规则草稿版本 '+policyTarget.name" :footer="null" width="760px">
    
    <a-form layout="vertical" style="margin-top:16px">
     <a-form-item label="表名"><a-input v-model:value="policyRule.table" placeholder="orders"/></a-form-item>
@@ -1073,7 +1096,7 @@ async function updatePassword(){
     </template>
    </a-table>
   </a-modal>
-  <a-modal v-model:open="policyDialog" title="创建 SQL 策略草稿" ok-text="创建"
+  <a-modal cancel-text="返回" v-model:open="policyDialog" title="创建 SQL 策略草稿" ok-text="创建"
    :confirm-loading="saving" @ok="savePolicy">
    <a-form layout="vertical">
     <a-form-item label="策略编码"><a-input v-model:value="policyForm.code" placeholder="restrict_reports"/></a-form-item>
@@ -1081,7 +1104,7 @@ async function updatePassword(){
     
    </a-form>
   </a-modal>
-  <a-modal v-model:open="userDialog" title="创建内置用户" ok-text="保存"
+  <a-modal cancel-text="返回" v-model:open="userDialog" title="创建内置用户" ok-text="保存"
    :confirm-loading="saving" @ok="saveUser">
    <a-form layout="vertical">
 
@@ -1091,7 +1114,7 @@ async function updatePassword(){
     
    </a-form>
   </a-modal>
-  <a-modal v-model:open="roleDialog" title="创建角色" ok-text="保存"
+  <a-modal cancel-text="返回" v-model:open="roleDialog" title="创建角色" ok-text="保存"
    :confirm-loading="saving" @ok="saveRole">
    <a-form layout="vertical">
     <a-form-item label="角色编码"><a-input v-model:value="roleForm.code" placeholder="operator_read"/></a-form-item>
@@ -1106,13 +1129,13 @@ async function updatePassword(){
     </a-form-item>
    </a-form>
   </a-modal>
-  <a-modal v-model:open="enrollDialog" title="生成 Agent 访问令牌" ok-text="生成或轮换"
+  <a-modal cancel-text="返回" v-model:open="enrollDialog" title="生成 Agent 访问令牌" ok-text="生成或轮换"
    :confirm-loading="saving" @ok="saveEnroll" @cancel="agentTokenOnce=''">
    <p>新令牌仅显示一次，生成新令牌会立即撤销旧令牌。</p>
    <a-textarea v-if="agentTokenOnce" :value="agentTokenOnce" :rows="3" readonly/>
    
   </a-modal>
-  <a-modal v-model:open="grantDialog" :title="'Agent 权限配置 '+grantAgent.name" :footer="null" width="720px">
+  <a-modal cancel-text="返回" v-model:open="grantDialog" :title="'Agent 权限配置 '+grantAgent.name" :footer="null" width="720px">
    
    <a-form layout="vertical" style="margin-top:18px">
     <a-form-item label="目标数据源">
@@ -1139,7 +1162,7 @@ async function updatePassword(){
    <a-table size="small" :loading="grantLoading" :pagination="{pageSize:5}" :data-source="columnGrants"
     :columns="[{title:'表名',dataIndex:'table'},{title:'字段',dataIndex:'column'},{title:'决策',dataIndex:'action'}]"/>
   </a-modal>
-  <a-modal v-model:open="credentialDialog" title="配置服务端只读凭据引用" ok-text="保存"
+  <a-modal cancel-text="返回" v-model:open="credentialDialog" title="配置服务端只读凭据引用" ok-text="保存"
    :confirm-loading="saving" @ok="saveCredentials">
    <a-form layout="vertical">
     <a-form-item label="环境变量前缀"><a-input v-model:value="credentialForm.secretRef"
@@ -1147,7 +1170,7 @@ async function updatePassword(){
     
    </a-form>
   </a-modal>
-  <a-modal v-model:open="agentDialog" :title="agentForm.id?'编辑 Agent':'新增 Agent'"
+  <a-modal cancel-text="返回" v-model:open="agentDialog" :title="agentForm.id?'编辑 Agent':'新增 Agent'"
    :confirm-loading="saving" ok-text="保存" @ok="saveAgent">
    <a-form layout="vertical">
     <a-form-item label="唯一编码"><a-input v-model:value="agentForm.code" :disabled="!!agentForm.id" placeholder="agent_sales" maxlength="80"/></a-form-item>
@@ -1162,7 +1185,7 @@ async function updatePassword(){
     
    </a-form>
   </a-modal>
-  <a-modal v-model:open="sourceDialog" :title="sourceForm.id?'编辑数据源':'新增数据源'"
+  <a-modal cancel-text="返回" v-model:open="sourceDialog" :title="sourceForm.id?'编辑数据源':'新增数据源'"
    :confirm-loading="saving" ok-text="保存" @ok="saveDatasource">
    <a-form layout="vertical">
     <a-form-item label="唯一编码"><a-input v-model:value="sourceForm.code" :disabled="!!sourceForm.id" placeholder="pg_reporting"/></a-form-item>
