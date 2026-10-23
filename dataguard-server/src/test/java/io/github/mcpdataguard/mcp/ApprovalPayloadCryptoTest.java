@@ -25,6 +25,20 @@ class ApprovalPayloadCryptoTest {
   assertNotEquals(a.hmac(),service.seal(sql,List.of("FAILED",42),"approved for correction").hmac());
   assertNotEquals(a.hmac(),service.seal(sql,List.of("PAID",42),"another reason").hmac());
  }
+ @Test void decryptsOnlyUntamperedBoundSqlAndParameters(){
+  var service=crypto();
+  String sql="DELETE FROM ledger WHERE id=?";
+  var sealed=service.seal(sql,List.of(17),"approved");
+  var opened=service.open(sealed.encryptedSql(),sealed.encryptedParams(),sealed.hmac());
+  assertEquals(sql,opened.sql());
+  assertEquals(List.of(17),opened.parameters());
+  assertEquals("approved",opened.reason());
+  assertThrows(SecurityException.class,()->
+    service.open(sealed.encryptedSql(),sealed.encryptedParams(),"0".repeat(64)));
+  byte[] modified=sealed.encryptedSql().clone();modified[15]^=1;
+  assertThrows(SecurityException.class,()->
+    service.open(modified,sealed.encryptedParams(),sealed.hmac()));
+ }
  @Test void failsClosedWithoutEncryptionKey(){
   var crypto=new ApprovalPayloadCrypto("");
   assertFalse(crypto.configured());
