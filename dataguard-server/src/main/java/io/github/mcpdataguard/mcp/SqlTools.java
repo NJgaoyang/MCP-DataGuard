@@ -17,10 +17,11 @@ public final class SqlTools {
  private final AuthorizedSchemaService schemas;
  private final SqlRequestAuditService audit;
  private final ChangeRequestService changes;
+ private final ReadOnlyQueryService readOnly;
  public SqlTools(AuthorizedDatasourceService datasources,SqlPreflightService preflight,
                  AgentPrincipalResolver agents,AuthorizedSchemaService schemas,SqlRequestAuditService audit,
-                 ChangeRequestService changes){
-  this.datasources=datasources;this.preflight=preflight;this.agents=agents;this.schemas=schemas;this.audit=audit;this.changes=changes;
+                 ChangeRequestService changes,ReadOnlyQueryService readOnly){
+  this.datasources=datasources;this.preflight=preflight;this.agents=agents;this.schemas=schemas;this.audit=audit;this.changes=changes;this.readOnly=readOnly;
  }
 
  private static Map<String,Object> deny(String code) {
@@ -43,7 +44,7 @@ public final class SqlTools {
   @McpToolParam(description="Page size",required=false) Integer pageSize){
   return schemas.get(datasourceId,schema,table,cursor,pageSize);
  }
- @McpTool(name="execute_readonly",description="Execute a verified safe query (disabled)")
+ @McpTool(name="execute_readonly",description="Run strictly scoped read-only SQL only when certified and explicitly enabled")
  public Map<String,Object> executeReadonly(
   @McpToolParam(description="Datasource ID",required=true) String datasourceId,
   @McpToolParam(description="Database name",required=true) String database,
@@ -51,8 +52,7 @@ public final class SqlTools {
   @McpToolParam(description="Bind parameters",required=false) List<Object> parameters,
   @McpToolParam(description="Maximum rows",required=false) Integer pageSize,
   @McpToolParam(description="Request reference",required=false) String requestId){
-  agents.requireActiveAgent();
-  return deny("READ_EXECUTOR_NOT_CERTIFIED");
+  return readOnly.run(datasourceId,database,sql,parameters,pageSize,requestId);
  }
  @McpTool(name="check_sql",description="Check a SQL statement without execution (not enabled)")
  public Map<String,Object> checkSql(
