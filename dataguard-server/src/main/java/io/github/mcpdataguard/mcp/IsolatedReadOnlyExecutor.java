@@ -68,6 +68,28 @@ public final class IsolatedReadOnlyExecutor {
     if(!status.next() || !"on".equalsIgnoreCase(status.getString(1)))
      throw new SecurityException("PHYSICAL_READ_ONLY_REQUIRED");
    }
+   // JDBC readOnly is only a transaction hint. Refuse powerful or writable
+   // server identities, including privileges inherited through member roles.
+   try(Statement rights=connection.createStatement();
+       ResultSet verified=rights.executeQuery("""
+         SELECT NOT EXISTS (
+          SELECT 1 FROM pg_roles r
+          WHERE (r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR
+                 r.rolreplication OR r.rolbypassrls)
+            AND pg_has_role(current_user,r.oid,'MEMBER')
+         ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.role_table_grants g
+          WHERE g.privilege_type IN ('INSERT','UPDATE','DELETE',
+            'TRUNCATE','TRIGGER')
+         ) AND NOT EXISTS (
+          SELECT 1 FROM pg_namespace n WHERE n.nspname NOT LIKE 'pg_%'
+            AND n.nspname<>'information_schema'
+            AND has_schema_privilege(current_user,n.oid,'CREATE')
+         ) AND NOT has_database_privilege(current_user,current_database(),'CREATE')
+         """)){
+    if(!verified.next() || !verified.getBoolean(1))
+     throw new SecurityException("PHYSICAL_ROLE_NOT_READ_ONLY");
+   }
    // A server-side read-only role is still required: JDBC flags are not an ACL.
    try(PreparedStatement statement=connection.prepareStatement(request.sql(),
         ResultSet.TYPE_FORWARD_ONLY,ResultSet.CONCUR_READ_ONLY)){
