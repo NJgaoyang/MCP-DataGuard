@@ -115,7 +115,7 @@ if [[ "${DG_RUN_WRITE_TLS_E2E:-false}" == "true" ]]; then
  docker exec -u postgres "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d dataguard -c "ALTER SYSTEM SET ssl='on'" >/dev/null
  docker exec -u postgres "$NAME" pg_ctl -D /var/lib/postgresql/data reload >/dev/null
  docker exec -u postgres "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d dataguard \
-   -c 'CREATE ROLE dg_test_write_role LOGIN; CREATE TABLE public.write_probe(id integer PRIMARY KEY,amount integer); INSERT INTO public.write_probe VALUES(1,200),(2,300); GRANT UPDATE ON public.write_probe TO dg_test_write_role;' >/dev/null
+   -c 'CREATE ROLE dg_test_write_role LOGIN; CREATE TABLE public.write_probe(id integer PRIMARY KEY,amount integer); INSERT INTO public.write_probe VALUES(1,200),(2,300); GRANT UPDATE ON public.write_probe TO dg_test_write_role; GRANT SELECT(id) ON public.write_probe TO dg_test_write_role;' >/dev/null
  docker cp "$NAME:/var/lib/postgresql/data/server.crt" "$WRITE_TLS_TMP/root.crt" >/dev/null
  CACHE="${DG_M2_CACHE:-$HOME/.cache/mcp-dataguard/m2}"
  mkdir -p "$CACHE"
