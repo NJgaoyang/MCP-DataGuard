@@ -126,6 +126,7 @@ public class CertifiedWriteWorker {
     JOIN dg_datasource_secret secret ON secret.org_id=d.org_id
       AND secret.datasource_id=d.id AND secret.purpose='WRITE'
       AND secret.provider='ENV'
+      AND secret.secret_ref=('DG_TARGET_' || upper(replace(d.id::text,'-','')) || '_WRITE')
     WHERE t.task_state='QUEUED' AND t.authorization_expires_at>now()
       AND a.approval_status='APPROVED' AND a.execution_status='QUEUED'
       AND a.expires_at>now() AND d.status='ACTIVE' AND d.db_type='POSTGRESQL'
