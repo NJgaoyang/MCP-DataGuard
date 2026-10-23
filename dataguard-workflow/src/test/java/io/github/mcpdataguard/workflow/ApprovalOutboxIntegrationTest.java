@@ -1,0 +1,113 @@
+package io.github.mcpdataguard.workflow;
+
+import java.util.UUID;
+import org.flowable.engine.ProcessEngine;
+import org.flowable.engine.ProcessEngineConfiguration;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assumptions;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Explicit opt-in PostgreSQL + live Flowable cross-database event test.
+ * Runs only inside an isolated ephemeral PostgreSQL container network.
+ */
+class ApprovalOutboxIntegrationTest {
+ @Test void platformOutboxStartsAndCompletesTwoLevelProcess(){
+  String url=System.getenv("DG_OUTBOX_E2E_URL");
+  Assumptions.assumeTrue(url!=null && url.startsWith("jdbc:postgresql://127.0.0.1:5432/"));
+  JdbcTemplate db=new JdbcTemplate(new DriverManagerDataSource(url,"postgres","test-only"));
+  UUID org=UUID.randomUUID(),owner=UUID.randomUUID(),first=UUID.randomUUID(),
+    second=UUID.randomUUID(),agent=UUID.randomUUID(),source=UUID.randomUUID(),
+    workflowTemplate=UUID.randomUUID(),workflowVersion=UUID.randomUUID(),
+    request=UUID.randomUUID(),approval=UUID.randomUUID(),event=UUID.randomUUID();
+  String orgCode="e2e_"+org.toString().replace("-","");
+  db.update("INSERT INTO platform.dg_organization(id,code,name) VALUES(?,?,?)",
+    org,orgCode,"E2E isolated org");
+  for(UUID user:new UUID[]{owner,first,second})
+   db.update("INSERT INTO platform.dg_user(id,org_id,username,display_name) VALUES(?,?,?,?)",
+     user,org,"user_"+user.toString().replace("-",""),"E2E reviewer");
+  db.update("""
+    INSERT INTO platform.dg_agent(id,org_id,owner_user_id,code,name)
+    VALUES(?,?,?,?,?)
+    """,agent,org,owner,"e2e_agent","E2E Agent");
+  db.update("""
+    INSERT INTO platform.dg_datasource
+      (id,org_id,owner_user_id,code,name,db_type,environment,host,port,database_name,status)
+    VALUES(?,?,?,?,?,'POSTGRESQL','TEST','localhost',5432,'dataguard','ACTIVE')
+    """,source,org,owner,"e2e_db","E2E database");
+  db.update("""
+    INSERT INTO platform.dg_workflow_template(id,org_id,code,name,created_by)
+    VALUES(?,?,?,?,?)
+    """,workflowTemplate,org,"two_stage_review","Two-stage review",owner);
+  db.update("""
+    INSERT INTO platform.dg_workflow_version
+      (id,org_id,workflow_id,revision,bpmn_xml,bpmn_digest,flowable_definition_key,status)
+    VALUES(?,?,?,1,'test fixture',?,'sqlTwoLevelReview','PUBLISHED')
+    """,workflowVersion,org,workflowTemplate,"0".repeat(64));
+  db.update("""
+    INSERT INTO platform.dg_sql_request
+      (id,org_id,agent_id,datasource_id,tool_name,decision,request_status)
+    VALUES(?,?,?,?,'submit_change','REQUIRE_APPROVAL','PENDING_APPROVAL')
+    """,request,org,agent,source);
+  db.update("""
+    INSERT INTO platform.dg_sql_approval
+      (id,org_id,request_id,workflow_version_id,approval_status,execution_status,expires_at)
+    VALUES(?,?,?,?,'PENDING','NOT_SCHEDULED',now()+interval '1 day')
+    """,approval,org,request,workflowVersion);
+  db.update("""
+    INSERT INTO platform.dg_outbox_event
+      (id,org_id,aggregate_type,aggregate_id,event_type,payload)
+    VALUES(?,?,'SQL_APPROVAL',?,'APPROVAL_REQUESTED','{}'::jsonb)
+    """,event,org,approval);
+  ProcessEngine engine=ProcessEngineConfiguration.createStandaloneInMemProcessEngineConfiguration()
+   .setDatabaseSchemaUpdate(ProcessEngineConfiguration.DB_SCHEMA_UPDATE_TRUE)
+   .buildProcessEngine();
+  try{
+   engine.getRepositoryService().createDeployment()
+     .addClasspathResource("processes/two-level-review.bpmn20.xml").deploy();
+   ReviewProcessService service=new ReviewProcessService(
+     engine.getRuntimeService(),engine.getTaskService());
+   ApprovalOutboxWorker worker=new ApprovalOutboxWorker(url,"postgres","test-only",
+     service,engine.getRuntimeService(),engine.getTaskService());
+   worker.poll();
+   String instance=db.queryForObject("""
+     SELECT process_instance_id FROM platform.dg_sql_approval WHERE org_id=? AND id=?
+     """,String.class,org,approval);
+   assertNotNull(instance,"Worker must start a Flowable instance");
+   assertEquals("PUBLISHED",db.queryForObject(
+     "SELECT state FROM platform.dg_outbox_event WHERE id=?",String.class,event));
+   assertEquals("ownerReview",service.pending(instance,org.toString()).get(0).stage());
+   submitStage(db,org,approval,first,1);
+   worker.poll();
+   assertEquals("dbaReview",service.pending(instance,org.toString()).get(0).stage());
+   submitStage(db,org,approval,second,2);
+   worker.poll();
+   assertTrue(engine.getRuntimeService().createProcessInstanceQuery()
+     .processInstanceId(instance).list().isEmpty());
+   assertEquals("NOT_SCHEDULED",db.queryForObject("""
+      SELECT execution_status FROM platform.dg_sql_approval WHERE id=?
+      """,String.class,approval),"Approval may not trigger SQL execution");
+   assertEquals(0L,db.queryForObject("""
+     SELECT count(*) FROM platform.dg_outbox_event
+      WHERE org_id=? AND state='PENDING'
+     """,Long.class,org));
+  }finally{engine.close();}
+ }
+ private static void submitStage(JdbcTemplate db,UUID org,UUID approval,UUID reviewer,int stage){
+  UUID action=UUID.randomUUID();
+  db.update("""
+    INSERT INTO platform.dg_sql_approval_action
+      (id,org_id,approval_id,reviewer_user_id,flowable_task_id,action,comment_text)
+    VALUES(?,?,?,?,'platform:awaiting-flowable','APPROVE','approved in isolated test')
+    """,action,org,approval,reviewer);
+  String json="{\"actionId\":\""+action+"\",\"reviewerId\":\""+reviewer+
+    "\",\"stage\":"+stage+"}";
+  db.update("""
+    INSERT INTO platform.dg_outbox_event
+      (id,org_id,aggregate_type,aggregate_id,event_type,payload)
+    VALUES(?,?,'SQL_APPROVAL',?,'APPROVAL_STEP_APPROVED',CAST(? AS jsonb))
+    """,UUID.randomUUID(),org,approval,json);
+ }
+}
