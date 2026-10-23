@@ -1536,4 +1536,25 @@ async function updatePassword(){
 @media(max-width:1200px){.shell:not(.auth-shell) .overview{grid-template-columns:minmax(0,1fr) minmax(270px,30%)}.shell:not(.auth-shell) .metric{padding:10px;gap:9px}.metric-symbol{width:48px;height:48px}.metric-token{width:30px;height:30px}}
 @media(max-width:1050px){.shell:not(.auth-shell) .overview{grid-template-columns:1fr}.shell:not(.auth-shell) .overview-aside{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.shell:not(.auth-shell) .todo-panel{grid-column:1/-1}}
 @media(max-width:700px){.shell:not(.auth-shell) .sidebar{width:64px;padding:14px 5px}.shell:not(.auth-shell) .brand{padding:0 8px 28px}.shell:not(.auth-shell) .brand div,.shell:not(.auth-shell) .section,.shell:not(.auth-shell) .foot,.shell:not(.auth-shell) .nav span{display:none}.shell:not(.auth-shell) .nav{justify-content:center;gap:0;padding:12px 5px}.shell:not(.auth-shell) .content{padding:0 8px 18px!important}.dashboard-hero{height:92px;padding:12px 5px}.dashboard-hero h1{font-size:23px}.dashboard-hero p{font-size:12px}.shell:not(.auth-shell) .overview-stats{grid-template-columns:1fr 1fr}.shell:not(.auth-shell) .metric{height:96px}.shell:not(.auth-shell) .overview-shortcuts{grid-template-columns:1fr}.shell:not(.auth-shell) .shortcut{min-height:130px}.shell:not(.auth-shell) .overview-aside{grid-template-columns:1fr}.shell:not(.auth-shell) .overview-figures{gap:6px}.shell:not(.auth-shell) .figure{padding:0 5px;gap:7px}.figure-icon{width:36px;height:36px}.figure-content small{white-space:normal;font-size:11px}.shell:not(.auth-shell) .figure-content strong{font-size:23px}}
+
+/*
+ * Global authenticated-page gutters
+ * Keep the first-level page panels nearly flush with the sidebar and
+ * the right viewport edge. Applies to every page, not only dashboard.
+ */
+.shell:not(.auth-shell) .content{
+  width:100%;
+  max-width:none;
+  margin:0;
+  padding:0 2px 22px!important;
+}
+.shell:not(.auth-shell) .content>section,
+.shell:not(.auth-shell) .content>template{
+  max-width:100%;
+}
+@media(max-width:700px){
+  .shell:not(.auth-shell) .content{
+    padding:0 4px 18px!important;
+  }
+}
 </style>
