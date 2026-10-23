@@ -211,6 +211,49 @@ public class SqlPolicyController {
   audit(u,"SQL_POLICY_DISABLED",policyId);
   return Map.of("status","DISABLED","executionEnabled",false);
  }
+ public record RollbackInput(int revision,long expectedVersion){}
+ /**
+  * Rollback is a NEW published DENY revision, keeping immutable history.
+  * No ALLOW or REQUIRE_APPROVAL rule can be activated by rollback.
+  */
+ @PostMapping("/{policyId}/rollback")
+ @Transactional
+ public Map<String,Object> rollback(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID policyId,
+                                    @RequestBody RollbackInput input){
+  UserPrincipal u=admin(jwt);
+  if(input==null || input.revision()<1 || input.expectedVersion()<0)
+   throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid rollback revision");
+  List<Integer> versions=jdbc.query("""
+    SELECT latest_version FROM dg_sql_policy
+    WHERE org_id=? AND id=? AND status IN ('ACTIVE','DISABLED')
+      AND version=? FOR UPDATE
+    """,(rs,i)->rs.getInt(1),u.orgId(),policyId,input.expectedVersion());
+  if(versions.size()!=1)
+   throw new ResponseStatusException(HttpStatus.CONFLICT,"Policy unavailable or stale");
+  if(input.revision()>versions.get(0))
+   throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Future revision unavailable");
+  int newRevision=versions.get(0)+1;
+  int inserted=jdbc.update("""
+    INSERT INTO dg_sql_policy_version
+      (id,org_id,policy_id,revision,priority,decision,rule,rule_digest,
+       published_by,published_at)
+    SELECT ?,v.org_id,v.policy_id,?,v.priority,v.decision,v.rule,v.rule_digest,?,now()
+    FROM dg_sql_policy_version v
+    WHERE v.org_id=? AND v.policy_id=? AND v.revision=?
+      AND v.decision='DENY' AND v.published_at IS NOT NULL
+    """,UUID.randomUUID(),newRevision,u.userId(),u.orgId(),policyId,input.revision());
+  if(inserted!=1)
+   throw new ResponseStatusException(HttpStatus.CONFLICT,"Only published DENY revisions can be restored");
+  int updated=jdbc.update("""
+    UPDATE dg_sql_policy SET latest_version=?,status='ACTIVE',
+       version=version+1,updated_at=now()
+    WHERE org_id=? AND id=? AND version=?
+    """,newRevision,u.orgId(),policyId,input.expectedVersion());
+  if(updated!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Concurrent rollback");
+  audit(u,"SQL_POLICY_DENY_ROLLED_BACK",policyId);
+  return Map.of("status","ACTIVE","revision",newRevision,
+    "restoredFromRevision",input.revision(),"executionEnabled",false);
+ }
  private void audit(UserPrincipal u,String operation,UUID id){
   jdbc.update("""
     INSERT INTO dg_system_event(id,org_id,actor,operation,resource_type,resource_id)
