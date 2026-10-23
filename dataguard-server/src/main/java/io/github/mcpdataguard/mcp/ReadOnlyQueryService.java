@@ -128,7 +128,37 @@ public class ReadOnlyQueryService {
    SELECT column_pattern,algorithm FROM dg_mask_rule
    WHERE org_id=? AND datasource_id=? AND enabled=true
      AND schema_pattern IN ('*','public') AND table_pattern IN ('*',?)
-     AND column_pattern IN ('*',?)
+     AND (column_pattern='*' OR column_pattern ~ '^[a-z][a-z0-9_]*
+   """,(rs,i)->Map.entry(rs.getString(1),rs.getString(2)),
+       actor.orgId(),id,table);
+  for(String column:required){
+   String selected="REDACT";
+   for(Map.Entry<String,String> rule:configured){
+    if(rule.getKey().equals("*")||rule.getKey().equals(column)){
+     selected=rule.getValue();break;
+    }
+   }
+   if(!"REDACT".equals(selected)&&!"NULLIFY".equals(selected))
+    return deny("MASK_ALGORITHM_NOT_CERTIFIED");
+   masks.put(column,selected);
+  }
+  try{
+   IsolatedReadOnlyExecutor.Result result=executor.execute(
+     new IsolatedReadOnlyExecutor.Target(source.host(),source.port(),source.db(),username,password),
+     new IsolatedReadOnlyExecutor.Request(sql,parameters,required,maxRows,maxBytes,timeout,masks));
+   // A failed control-plane receipt fails closed; never disclose unlogged results.
+   receipts.record(actor.orgId(),actor.agentId(),id,database,sql,
+     result.rows().size(),result.returnedBytes());
+   return Map.of("decision","ALLOW","operation","SELECT",
+      "columns",result.columns(),"rows",result.rows(),
+      "rowCount",result.rows().size(),"returnedBytes",result.returnedBytes(),
+      "masking","ALL_NON_NULL_VALUES_REDACTED","executionEnabled",true);
+  }catch(RuntimeException|SQLException e){
+   return deny("READ_EXECUTION_REJECTED");
+  }
+ }
+}
+)
    ORDER BY priority ASC,id ASC
    """,(rs,i)->Map.entry(rs.getString(1),rs.getString(2)),
        actor.orgId(),id,table,"*");
