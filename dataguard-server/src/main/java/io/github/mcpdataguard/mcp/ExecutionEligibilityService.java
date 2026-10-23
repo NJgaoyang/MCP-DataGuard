@@ -79,7 +79,7 @@ public class ExecutionEligibilityService {
       row.workflowDigest().getBytes(StandardCharsets.US_ASCII)))
     return new Eligibility(false,"WORKFLOW_VERSION_DIGEST_MISMATCH",row.requestId());
    needed=SafeApprovalGraph.requiredReviewers(row.workflowXml(),
-      List.of("HIGH","CRITICAL").contains(row.risk()));
+      ("HIGH".equals(row.risk()) || "CRITICAL".equals(row.risk())));
   }catch(Exception e){
    return new Eligibility(false,"WORKFLOW_VERSION_NOT_CERTIFIED",row.requestId());
   }
