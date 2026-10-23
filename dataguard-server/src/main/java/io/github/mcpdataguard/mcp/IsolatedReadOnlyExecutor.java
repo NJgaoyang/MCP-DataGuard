@@ -68,7 +68,7 @@ public final class IsolatedReadOnlyExecutor {
     if(!status.next() || !"on".equalsIgnoreCase(status.getString(1)))
      throw new SecurityException("PHYSICAL_READ_ONLY_REQUIRED");
    }
-   try(PreparedStatement statement=connection.prepareStatement(request.sql(),
+   // A server-side read-only role is still required: JDBC flags are not an ACL.\n   try(PreparedStatement statement=connection.prepareStatement(request.sql(),
         ResultSet.TYPE_FORWARD_ONLY,ResultSet.CONCUR_READ_ONLY)){
     statement.setQueryTimeout(request.timeoutSeconds());
     statement.setMaxRows(request.maxRows());
@@ -94,7 +94,7 @@ public final class IsolatedReadOnlyExecutor {
        Object value=rs.getObject(i);
        // Conservative result policy: redact text-like fields by default.
        // A certified masking engine is needed before plaintext output is enabled.
-       Object output=value instanceof CharSequence?"[REDACTED]":value;
+       Object output=value==null?null:"[REDACTED]";
        bytes+=String.valueOf(output).getBytes(StandardCharsets.UTF_8).length;
        if(bytes>request.maxBytes())throw new SecurityException("RESULT_BYTES_EXCEEDED");
        row.add(output);
@@ -102,7 +102,7 @@ public final class IsolatedReadOnlyExecutor {
       rows.add(java.util.Collections.unmodifiableList(new ArrayList<>(row)));
      }
      connection.rollback();
-     return new Result(List.copyOf(columns),List.copyOf(rows),bytes);
+     return new Result(List.copyOf(columns),java.util.Collections.unmodifiableList(rows),bytes);
     }
    }finally{connection.rollback();}
   }
