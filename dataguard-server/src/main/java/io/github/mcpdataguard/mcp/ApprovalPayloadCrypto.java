@@ -20,9 +20,8 @@ public class ApprovalPayloadCrypto {
  public static final String KEY_REF="ENV:DG_APPROVAL_MASTER_KEY_BASE64";
  private final byte[] key;
  private final SecureRandom random=new SecureRandom();
- private final ObjectMapper mapper;
- public ApprovalPayloadCrypto(@Value("${DG_APPROVAL_MASTER_KEY_BASE64:}") String encoded,ObjectMapper mapper){
-  this.mapper=mapper;
+ private final ObjectMapper mapper=new ObjectMapper();
+ public ApprovalPayloadCrypto(@Value("${DG_APPROVAL_MASTER_KEY_BASE64:}") String encoded){
   if(encoded==null||encoded.isBlank()){key=null;return;}
   byte[] raw=Base64.getDecoder().decode(encoded);
   if(raw.length!=32)throw new IllegalArgumentException("Approval key must be 32 bytes");
