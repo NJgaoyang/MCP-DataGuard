@@ -17,3 +17,12 @@ management:
     web:
       exposure:
         include: health,info
+
+dataguard:
+  workflow:
+    outbox:
+      enabled: ${FLOWABLE_OUTBOX_ENABLED:false}
+      jdbc-url: ${PLATFORM_JDBC_URL:}
+      user: ${PG_PLATFORM_USER:}
+      password: ${PG_PLATFORM_PASSWORD:}
+      poll-ms: ${FLOWABLE_OUTBOX_POLL_MS:10000}
