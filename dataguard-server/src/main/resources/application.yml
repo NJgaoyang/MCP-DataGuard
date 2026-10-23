@@ -25,6 +25,16 @@ spring:
         streamable-http:
           mcp-endpoint: /mcp
 dataguard:
+  write:
+    queue:
+      enabled: ${DG_WRITE_QUEUE_ENABLED:false}
+    execution:
+      enabled: ${DG_ENABLE_WRITE_EXECUTION:false}
+      poll-ms: ${DG_WRITE_POLL_MS:15000}
+    recovery:
+      enabled: ${DG_WRITE_RECOVERY_ENABLED:false}
+      poll-ms: ${DG_WRITE_RECOVERY_POLL_MS:30000}
+    allowed-hosts: ${DG_WRITE_ALLOWED_HOSTS:}
   security:
     mode: native
   connection-test:
