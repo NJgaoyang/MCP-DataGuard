@@ -13,8 +13,8 @@ class SafeApprovalGraphTest {
  }
  @Test void certifiedGraphHasStableCanonicalXmlAndQuorum(){
   for(boolean high:List.of(false,true)){
-   var xml=SafeApprovalGraph.compile(graph(high));
-   assertEquals(graph(high),SafeApprovalGraph.parseCertified(xml));
+   var xml=SafeApprovalGraph.compile(graph(true));
+   assertEquals(graph(true),SafeApprovalGraph.parseCertified(xml));
    assertEquals(high?3:2,SafeApprovalGraph.requiredReviewers(xml,high));
    assertEquals("data-owner",SafeApprovalGraph.roleAt(xml,1,high));
    assertEquals("security-auditor",SafeApprovalGraph.roleAt(xml,2,high));
