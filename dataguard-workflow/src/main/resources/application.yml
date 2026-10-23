@@ -20,6 +20,8 @@ management:
 
 dataguard:
   workflow:
+    dynamic-deployment:
+      enabled: ${FLOWABLE_DYNAMIC_DEPLOYMENT_ENABLED:false}
     outbox:
       enabled: ${FLOWABLE_OUTBOX_ENABLED:false}
       jdbc-url: ${PLATFORM_JDBC_URL:}
