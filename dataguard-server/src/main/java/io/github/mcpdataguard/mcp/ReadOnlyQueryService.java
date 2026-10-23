@@ -121,10 +121,32 @@ public class ReadOnlyQueryService {
   int maxBytes=(int)Math.min(1048576L,source.agentBytes());
   int timeout=Math.max(1,Math.min(10,source.agentMillis()/1000));
   if(maxRows<1||maxBytes<1)return deny("INVALID_AGENT_BUDGET");
+  // Only explicit REDACT or NULLIFY rules are honored; every unspecified
+  // column is still REDACT. PARTIAL/HASH are not safe without key management.
+  Map<String,String> masks=new java.util.HashMap<>();
+  List<Map.Entry<String,String>> configured=jdbc.query("""
+   SELECT column_pattern,algorithm FROM dg_mask_rule
+   WHERE org_id=? AND datasource_id=? AND enabled=true
+     AND schema_pattern IN ('*','public') AND table_pattern IN ('*',?)
+     AND column_pattern IN ('*',?)
+   ORDER BY priority ASC,id ASC
+   """,(rs,i)->Map.entry(rs.getString(1),rs.getString(2)),
+       actor.orgId(),id,table,"*");
+  for(String column:required){
+   String selected="REDACT";
+   for(Map.Entry<String,String> rule:configured){
+    if(rule.getKey().equals("*")||rule.getKey().equals(column)){
+     selected=rule.getValue();break;
+    }
+   }
+   if(!"REDACT".equals(selected)&&!"NULLIFY".equals(selected))
+    return deny("MASK_ALGORITHM_NOT_CERTIFIED");
+   masks.put(column,selected);
+  }
   try{
    IsolatedReadOnlyExecutor.Result result=executor.execute(
      new IsolatedReadOnlyExecutor.Target(source.host(),source.port(),source.db(),username,password),
-     new IsolatedReadOnlyExecutor.Request(sql,parameters,required,maxRows,maxBytes,timeout));
+     new IsolatedReadOnlyExecutor.Request(sql,parameters,required,maxRows,maxBytes,timeout,masks));
    // A failed control-plane receipt fails closed; never disclose unlogged results.
    receipts.record(actor.orgId(),actor.agentId(),id,database,sql,
      result.rows().size(),result.returnedBytes());
