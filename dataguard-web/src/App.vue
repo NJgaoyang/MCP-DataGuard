@@ -932,42 +932,44 @@ async function updatePassword(){
   <a-alert v-if="auditVerification" style="margin-top:12px" :type="auditVerification.startsWith('完整性验证通过')?'success':'error'" :message="auditVerification" show-icon/>
  </section>
 </section>
-      <section v-else-if="selected==='rules'" class="panel rules-panel">
-      <div class="panel-heading"><h3>SQL 安全策略草稿</h3><div class="actions">
-       <a-button size="small" @click="loadPolicies">刷新</a-button>
-       <a-button type="primary" size="small" @click="policyDialog=true">创建草稿</a-button>
-      </div></div>
-      
-      <a-card class="rules-preview" size="small" title="已发布策略 · 多规则决策预览">
-       <a-space wrap>
-        <a-input v-model:value="effectivePolicyScope.table" placeholder="数据库表名" style="width:190px"/>
-        <a-select v-model:value="effectivePolicyScope.environment" style="width:145px"
-          :options="['DEV','TEST','STAGING','PROD'].map(x=>({label:x,value:x}))"/>
-        <a-select v-model:value="effectivePolicyScope.operation" style="width:145px"
-          :options="['SELECT','UPDATE','DELETE','INSERT'].map(x=>({label:x,value:x}))"/>
-        <a-button :loading="saving" @click="evaluateEffectivePolicies">模拟跨策略优先级</a-button>
-       </a-space>
-       <a-alert v-if="effectivePolicyResult" style="margin-top:12px" type="info" show-icon
-        :message="effectivePolicyResult"/>
-      </a-card>
-      <a-table row-key="id" size="small" :data-source="sqlPolicies" :pagination="{pageSize:10}"
-       :columns="[{title:'编码',dataIndex:'code'},{title:'名称',dataIndex:'name'},{title:'状态',dataIndex:'status'},{title:'操作',key:'actions'}]">
-       <template #bodyCell="{column,record}">
-        <template v-if="column.key==='actions'">
-         <a-button size="small" type="link" @click="openPolicyRules(record)">规则版本</a-button>
-         <a-popconfirm v-if="record.status==='DRAFT' && record.latestVersion>0" title="仅允许发布 DENY 规则，不会允许 SQL 执行。继续？"
-          @confirm="changePolicyState(record,'publish')">
-          <a-button size="small" type="link">发布拒绝规则</a-button>
-         </a-popconfirm>
-         <a-popconfirm v-if="record.status==='ACTIVE'" title="确认停用这条拒绝策略？"
-          @confirm="changePolicyState(record,'disable')">
-          <a-button size="small" type="link" danger>停用</a-button>
-         </a-popconfirm>
-        </template>
-       </template>
-      </a-table>
-     </section>
-     <section v-else-if="selected==='users'" class="users-workspace">
+      <section v-else-if="selected==='rules'" class="rules-workspace b2b-workspace">
+ <header class="workspace-heading">
+  <div><h2>SQL 安全规则</h2><p>集中管理策略草稿、发布状态，并模拟多规则优先级决策</p></div>
+  <div class="workspace-heading-actions"><a-button @click="loadPolicies">刷新列表</a-button><a-button type="primary" @click="policyDialog=true">创建策略草稿</a-button></div>
+ </header>
+ <div class="rule-metrics">
+  <div><span>策略总数</span><strong>{{policyCount}}</strong></div>
+  <div><span>已发布</span><strong>{{publishedPolicyCount}}</strong></div>
+  <div><span>草稿及其他状态</span><strong>{{policyCount-publishedPolicyCount}}</strong></div>
+ </div>
+ <section class="workspace-surface simulator-panel">
+  <div class="workspace-section-title"><div><h3>决策模拟</h3><p>预览指定表、环境和操作的规则决策，不会实际执行 SQL</p></div></div>
+  <div class="simulator-controls">
+   <label><span>数据库表名</span><a-input v-model:value="effectivePolicyScope.table" placeholder="例如 orders"/></label>
+   <label><span>运行环境</span><a-select v-model:value="effectivePolicyScope.environment" :options="[{label:'开发环境',value:'DEV'},{label:'测试环境',value:'TEST'},{label:'预发布环境',value:'STAGING'},{label:'生产环境',value:'PROD'}]"/></label>
+   <label><span>SQL 操作</span><a-select v-model:value="effectivePolicyScope.operation" :options="['SELECT','UPDATE','DELETE','INSERT'].map(x=>({label:x,value:x}))"/></label>
+   <a-button type="primary" :loading="saving" @click="evaluateEffectivePolicies">模拟决策</a-button>
+  </div>
+  <a-alert v-if="effectivePolicyResult" style="margin-top:12px" type="info" show-icon :message="effectivePolicyResult"/>
+ </section>
+ <section class="workspace-surface policies-panel">
+  <div class="workspace-section-title"><div><h3>策略列表</h3><p>管理规则版本，已发布策略支持停用</p></div><span class="workspace-count">共 {{sqlPolicies.length}} 条</span></div>
+  <a-table row-key="id" size="small" :data-source="sqlPolicies" :pagination="{pageSize:10}" :scroll="{x:670}"
+   :columns="[{title:'策略编码',dataIndex:'code'},{title:'策略名称',dataIndex:'name'},{title:'发布状态',dataIndex:'status'},{title:'操作',key:'actions'}]">
+   <template #bodyCell="{column,record}">
+    <template v-if="column.dataIndex==='status'"><span class="status-label" :class="{'is-active':record.status==='ACTIVE'}">{{localizedStatus(record.status)}}</span></template>
+    <template v-else-if="column.key==='actions'">
+     <div class="table-actions">
+      <a-button type="link" size="small" @click="openPolicyRules(record)">规则版本</a-button>
+      <a-popconfirm v-if="record.status==='DRAFT'&&record.latestVersion>0" title="仅发布拒绝规则，不授予 SQL 执行权限。确认发布？" ok-text="发布" cancel-text="返回" @confirm="changePolicyState(record,'publish')"><a-button type="link" size="small">发布</a-button></a-popconfirm>
+      <a-popconfirm v-if="record.status==='ACTIVE'" title="确认停用该 SQL 策略？" ok-text="停用" cancel-text="返回" @confirm="changePolicyState(record,'disable')"><a-button type="link" danger size="small">停用</a-button></a-popconfirm>
+     </div>
+    </template>
+   </template>
+  </a-table>
+ </section>
+</section>
+      <section v-else-if="selected==='users'" class="users-workspace">
       <div class="filter-panel">
        <label>用户名称</label><a-input v-model:value="userSearch" placeholder="搜索用户名" allow-clear style="width:220px"/>
        <label>状态</label><a-select v-model:value="userStatusFilter" style="width:150px" :options="[{label:'全部',value:'ALL'},{label:'启用',value:'ACTIVE'},{label:'停用',value:'DISABLED'}]"/>
