@@ -9,6 +9,19 @@ const pages=[
 const selected=ref('dashboard');
 const sqlPolicies=ref<{id:string;code:string;name:string;status:string;version:number;latestVersion:number}[]>([]);
 const policyDialog=ref(false);
+const operationalSummary=ref<{deniedRequests:number;pendingApprovals:number;openAlerts:number}|null>(null);
+const sqlRequestRows=ref<Record<string,unknown>[]>([]);
+const approvalRows=ref<Record<string,unknown>[]>([]);
+async function loadOperations(){
+ try{
+  const [summary,requests,approvals]=await Promise.all([
+   getData<{deniedRequests:number;pendingApprovals:number;openAlerts:number}>('/api/v1/operations/summary'),
+   getData<Record<string,unknown>[]>('/api/v1/operations/requests'),
+   getData<Record<string,unknown>[]>('/api/v1/operations/approvals')
+  ]);
+  operationalSummary.value=summary;sqlRequestRows.value=requests;approvalRows.value=approvals;
+ }catch(e){error.value='读取安全监控失败：'+(e as Error).message;}
+}
 const systemEvents=ref<{id:string;actor:string;operation:string;resourceType:string|null;resourceId:string|null;createdAt:string}[]>([]);
 async function loadAuditEvents(){
  try{systemEvents.value=await getData<typeof systemEvents.value>('/api/v1/system-events?limit=100');}
@@ -371,7 +384,7 @@ async function updatePassword(){
   <aside class="sidebar">
    <div class="brand"><span class="symbol">◆</span><div>MCP DataGuard<small>AI DATABASE SECURITY</small></div></div>
    <span class="section">工作台</span>
-   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit')loadAuditEvents()}">{{page[1]}}</button>
+   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations()};if(page[0]==='flowable')loadOperations()}">{{page[1]}}</button>
    <div class="foot">● 开源研发版 · v0.5</div>
   </aside>
   <main class="main">
@@ -445,9 +458,27 @@ async function updatePassword(){
       </a-table>
      </section>
 
+     <section v-else-if="selected==='flowable'" class="panel">
+      <div class="panel-heading"><h3>审批实例状态</h3><a-button size="small" @click="loadOperations">刷新</a-button></div>
+      <a-alert type="info" show-icon message="仅显示审批记录，不开放审批执行操作；Flowable 任务闭环仍待验收。"/>
+      <a-table style="margin-top:16px" row-key="id" size="small" :data-source="approvalRows"
+       :columns="[{title:'审批编号',dataIndex:'id'},{title:'审批状态',dataIndex:'approvalStatus'},
+        {title:'执行状态',dataIndex:'executionStatus'},{title:'到期时间',dataIndex:'expiresAt'}]"/>
+     </section>
      <section v-else-if="selected==='audit'" class="panel">
       <div class="panel-heading"><h3>管理操作审计</h3><a-button size="small" @click="loadAuditEvents">刷新</a-button></div>
-      <a-alert type="info" show-icon message="当前仅展示管理操作事件；完整 SQL 调用审计、监控和告警仍待实现。"/>
+      <a-alert type="info" show-icon message="查看 SQL 请求元数据及管理操作历史；请求明文和凭据不会返回。"/>
+      <div v-if="operationalSummary" class="cards" style="margin-top:16px">
+       <article><small>被拒绝请求</small><strong>{{operationalSummary.deniedRequests}}</strong></article>
+       <article><small>待审批工单</small><strong>{{operationalSummary.pendingApprovals}}</strong></article>
+       <article><small>未处理安全告警</small><strong>{{operationalSummary.openAlerts}}</strong></article>
+      </div>
+      <h4>SQL 请求安全记录</h4>
+      <a-table row-key="id" size="small" :data-source="sqlRequestRows" :pagination="{pageSize:10}"
+       :columns="[{title:'请求编号',dataIndex:'id'},{title:'工具',dataIndex:'tool_name'},
+        {title:'决策',dataIndex:'decision'},{title:'状态',dataIndex:'request_status'},
+        {title:'指纹',dataIndex:'sql_fingerprint'},{title:'接收时间',dataIndex:'receivedAt'}]"/>
+      <h4>管理操作历史</h4>
       <a-table style="margin-top:16px" row-key="id" size="small" :data-source="systemEvents"
        :pagination="{pageSize:10}"
        :columns="[{title:'时间',dataIndex:'createdAt'},{title:'操作',dataIndex:'operation'},
