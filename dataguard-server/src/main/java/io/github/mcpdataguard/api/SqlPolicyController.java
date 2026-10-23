@@ -148,13 +148,19 @@ public class SqlPolicyController {
   return Map.of("revision",revision,"status","DRAFT","decision",input.decision(),
      "conditions",conditions,"executionEnabled",false);
  }
- public record SimulateInput(String table,String environment){}
+ public record SimulateInput(String table,String environment,String operation){
+  public SimulateInput(String table,String environment){
+   this(table,environment,"SELECT");
+  }
+ }
  @PostMapping("/{policyId}/simulate")
  public Map<String,Object> simulate(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID policyId,
                                      @RequestBody SimulateInput input){
   UserPrincipal u=admin(jwt);
   if(input==null || input.table()==null || !input.table().matches("[a-z][a-z0-9_]{0,254}") ||
-      input.environment()==null || !List.of("DEV","TEST","STAGING","PROD").contains(input.environment()))
+      input.environment()==null || !List.of("DEV","TEST","STAGING","PROD").contains(input.environment()) ||
+      !List.of("SELECT","UPDATE","DELETE","INSERT").contains(
+          input.operation()==null?"SELECT":input.operation()))
    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid simulation scope");
   List<Map<String,Object>> versions=jdbc.query("""
    SELECT v.revision,v.decision,v.priority FROM dg_sql_policy_version v
@@ -162,12 +168,13 @@ public class SqlPolicyController {
    WHERE v.org_id=? AND v.policy_id=? AND p.status='DRAFT'
      AND v.revision=p.latest_version AND v.published_at IS NULL
      AND v.rule->>'table'=? AND v.rule->>'environment'=?
-     AND v.rule->>'operation'='SELECT'
+     AND v.rule->>'operation'=?
      AND v.decision IN ('DENY','REQUIRE_APPROVAL')
    LIMIT 1
    """,(rs,i)->Map.<String,Object>of("revision",rs.getInt("revision"),
        "decision",rs.getString("decision"),"priority",rs.getInt("priority")),
-       u.orgId(),policyId,input.table(),input.environment());
+       u.orgId(),policyId,input.table(),input.environment(),
+         input.operation()==null?"SELECT":input.operation());
   if(versions.isEmpty())return Map.of("matched",false,"decision","DENY",
      "simulationOnly",true,"executionEnabled",false);
   Map<String,Object> rule=versions.get(0);
