@@ -182,7 +182,7 @@ public class CertifiedWriteWorker {
        t.bpmnDigest().getBytes(StandardCharsets.US_ASCII)))
     throw new SecurityException("EXECUTION_WORKFLOW_TAMPERED");
    SafeApprovalGraph.requiredReviewers(t.bpmn(),
-      List.of("HIGH","CRITICAL").contains(t.risk()));
+      ("HIGH".equals(t.risk()) || "CRITICAL".equals(t.risk())));
   }catch(SecurityException e){throw e;}
    catch(Exception e){throw new SecurityException("UNCERTIFIED_EXECUTION_WORKFLOW");}
   int updated=jdbc.update("""
