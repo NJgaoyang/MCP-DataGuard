@@ -59,10 +59,19 @@ public class NativeAgentTokensController {
  @Transactional
  public Map<String,String> revoke(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID agentId){
   UserPrincipal actor=actor(jwt);
+  Boolean exists=jdbc.queryForObject("""
+   SELECT EXISTS(SELECT 1 FROM dg_agent WHERE org_id=? AND id=?)
+   """,Boolean.class,actor.orgId(),agentId);
+  if(!Boolean.TRUE.equals(exists))
+   throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Agent not available");
   int count=jdbc.update("""
    UPDATE dg_native_agent_token SET revoked_at=now()
    WHERE org_id=? AND agent_id=? AND revoked_at IS NULL
    """,actor.orgId(),agentId);
+  jdbc.update("""
+   INSERT INTO dg_system_event(id,org_id,actor,operation,resource_type,resource_id)
+   VALUES (?,?,?,'NATIVE_AGENT_TOKEN_REVOKED','AGENT',?)
+   """,UUID.randomUUID(),actor.orgId(),actor.userId().toString(),agentId.toString());
   return Map.of("status","REVOKED","revoked",Integer.toString(count));
  }
 }
