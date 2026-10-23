@@ -612,13 +612,14 @@ async function updatePassword(){
    <header class="bar"><div class="breadcrumb">工作台 <span>/</span> <strong>{{title}}</strong></div>
     <div class="actions">
      <template v-if="token">
-      <a-button size="small" :disabled="mustChange" :loading="busy" @click="reload">刷新</a-button>
       <a-popover placement="bottomRight" trigger="click">
        <template #content>
         <div class="account-detail">
          <strong>{{profile?.displayName || profile?.username || '当前用户'}}</strong>
-         <span>登录账号：{{profile?.username || '未获取'}}</span>
+         <span>账号：{{profile?.username || '未获取'}}</span>
+         <a-button size="small" @click="reload" :loading="busy" :disabled="mustChange">刷新数据</a-button>
          <a-button size="small" :disabled="mustChange" @click="mustChange=true;error=''">修改密码</a-button>
+         <a-button size="small" danger @click="logout">退出登录</a-button>
         </div>
        </template>
        <button class="account-trigger" type="button" aria-label="查看当前登录用户">
@@ -627,7 +628,6 @@ async function updatePassword(){
         <span class="account-chevron">⌄</span>
        </button>
       </a-popover>
-      <a-button class="logout-action" size="small" @click="logout">退出登录</a-button>
      </template>
     </div></header>
    <div class="content">
@@ -1269,4 +1269,9 @@ async function updatePassword(){
 .shell .account-name{font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .shell .logout-action{height:28px}
 @media(max-width:650px){.shell .bar{padding:0 12px}.shell .bar .actions{gap:4px}.shell .account-name{max-width:65px}}
+.bar{height:42px!important;min-height:42px;padding-inline:20px!important}
+.account-trigger{min-height:32px;padding:2px 8px 2px 2px;gap:6px}
+.account-avatar{width:24px;height:24px}
+.account-detail{min-width:205px;gap:9px;padding:4px 2px}
+.breadcrumb{font-size:12px}
 </style>
