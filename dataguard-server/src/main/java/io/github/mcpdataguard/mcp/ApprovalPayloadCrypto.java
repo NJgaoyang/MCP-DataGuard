@@ -28,11 +28,14 @@ public class ApprovalPayloadCrypto {
   key=raw.clone();
  }
  public boolean configured(){return key!=null;}
- public Payload seal(String sql,List<Object> parameters){
+ public Payload seal(String sql,List<Object> parameters,String reason){
   if(key==null)throw new IllegalStateException("Approval encryption unavailable");
   try{
    byte[] raw=sql.getBytes(StandardCharsets.UTF_8);
-   byte[] params=mapper.writeValueAsBytes(parameters==null?List.of():parameters);
+   java.util.Map<String,Object> payload=new java.util.LinkedHashMap<>();
+   payload.put("parameters",parameters==null?List.of():parameters);
+   payload.put("reason",reason);
+   byte[] params=mapper.writeValueAsBytes(payload);
    byte[] data=ByteBuffer.allocate(4+raw.length+params.length)
      .putInt(raw.length).put(raw).put(params).array();
    Mac mac=Mac.getInstance("HmacSHA256");
