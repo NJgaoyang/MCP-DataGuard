@@ -71,17 +71,12 @@ public final class SqlPreflightService {
        agent.orgId(),agent.agentId(),id,table);
   if(!ColumnGrantPolicy.allows(table,required,grants))
     return denied("COLUMN_GRANT_NOT_AVAILABLE_OR_DENIED");
-  // Active hard-deny rules are enforceable even while the executor stays disabled.
-  Boolean hardDeny=jdbc.queryForObject("""
-   SELECT EXISTS(SELECT 1 FROM dg_sql_policy p
-      JOIN dg_sql_policy_version v ON v.org_id=p.org_id AND v.policy_id=p.id
-       AND v.revision=p.latest_version
-     WHERE p.org_id=? AND p.status='ACTIVE'
-       AND v.published_at IS NOT NULL AND v.decision='DENY'
-       AND v.rule->>'table'=? AND v.rule->>'environment'=?
-       AND v.rule->>'operation'='SELECT')
-   """,Boolean.class,agent.orgId(),table,source.environment());
-  if(Boolean.TRUE.equals(hardDeny))return denied("SQL_POLICY_HARD_DENY");
+  // The same active, published evaluator also gates actual read execution
+  // and submitted write requests. Inspection NEVER grants execution.
+  RuntimeSqlPolicyService.Verdict policy=new RuntimeSqlPolicyService(jdbc)
+    .evaluate(agent.orgId(),source.environment(),table,"SELECT");
+  if(policy.denied())return denied("SQL_POLICY_HARD_DENY");
+  if(policy.approvalRequired())return denied("SQL_POLICY_REQUIRES_APPROVAL");
   // Deliberately deny even if an ACL record exists: syntax regex is not an AST.
   return Map.of("code","AST_AND_EXECUTOR_NOT_CERTIFIED","decision","DENY",
    "retryable",false,"operation","SELECT","object",table,
