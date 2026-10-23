@@ -1,0 +1,181 @@
+/* Security/identity workspaces. Consistent visual language, shared responsive behavior. */
+.shell:not(.auth-shell) .b2b-workspace{
+ --ws-ink:#19283f;--ws-muted:#75849a;--ws-line:#e7edf5;
+ --ws-bg:#fff;--ws-blue:#087bfa;
+ padding:14px 14px 26px;display:flex;flex-direction:column;gap:12px;
+ color:var(--ws-ink);min-width:0;
+}
+.b2b-workspace *{box-sizing:border-box}
+.b2b-workspace .workspace-heading{
+ display:flex;align-items:center;justify-content:space-between;gap:16px;
+ padding:10px 4px 13px;margin:0;min-height:67px;
+ border-bottom:1px solid var(--ws-line);
+}
+.b2b-workspace .workspace-heading>div:first-child{min-width:0}
+.b2b-workspace .workspace-heading h2{
+ font-size:21px;line-height:1.35;letter-spacing:-.4px;font-weight:720;
+ margin:0 0 5px;color:#17253e;
+}
+.b2b-workspace .workspace-heading p{
+ font-size:12px;line-height:1.6;color:var(--ws-muted);margin:0;
+}
+.b2b-workspace .workspace-heading-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;flex:none}
+.b2b-workspace .workspace-heading-actions .ant-btn{height:32px;border-radius:6px}
+.b2b-workspace .workspace-surface{
+ min-width:0;padding:17px 18px 12px;
+ background:var(--ws-bg);border:1px solid var(--ws-line);
+ border-radius:9px;box-shadow:0 2px 12px #25477806;
+}
+.b2b-workspace .workspace-section-title{
+ display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+ margin:0 0 15px;
+}
+.b2b-workspace .workspace-section-title h3{
+ font-size:14px;line-height:1.5;font-weight:680;margin:0;
+ color:#1e304b;
+}
+.b2b-workspace .workspace-section-title p{
+ font-size:12px;line-height:1.6;color:#8290a5;margin:3px 0 0;
+}
+.b2b-workspace .workspace-count{
+ display:inline-flex;align-items:center;white-space:nowrap;
+ font-size:12px;color:#7f91aa;background:#f3f7fc;
+ border-radius:5px;padding:4px 9px;
+}
+.b2b-workspace .ant-table-wrapper{min-width:0}
+.b2b-workspace .ant-table{background:transparent}
+.b2b-workspace .ant-table-thead>tr>th{
+ background:#f6f8fc!important;color:#607087!important;
+ font-size:12px;font-weight:630!important;
+}
+.b2b-workspace .ant-table-tbody>tr>td{font-size:12px;color:#344761;padding:11px 12px}
+.b2b-workspace .ant-table-tbody>tr:hover>td{background:#f6faff!important}
+.b2b-workspace .ant-table-placeholder .ant-table-cell{height:128px}
+.b2b-workspace .ant-btn-link{padding-inline:5px}
+.b2b-workspace .table-actions{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.b2b-workspace .muted-cell{color:#a3b0c0}
+.b2b-workspace .status-label{font-weight:580}
+.b2b-workspace .workspace-empty{
+ display:flex;gap:9px;justify-content:center;align-items:center;color:#97a5b9;font-size:12px;
+ background:#fbfdff;border-radius:7px;
+}
+.b2b-workspace .compact-empty{min-height:88px}
+.b2b-workspace .compact-empty svg{color:#bad3ef}
+.b2b-workspace .audit-summary{margin:0}
+.b2b-workspace .audit-kpi{
+ background:#fff;min-height:76px;border:1px solid var(--ws-line);
+ box-shadow:none;border-radius:9px;
+}
+.b2b-workspace .audit-kpi small{color:#7388a2}
+.b2b-workspace .audit-kpi strong{font-size:24px;color:#182944}
+.b2b-workspace .trend-plot{
+ height:150px;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);
+ gap:8px;align-items:stretch;padding:6px 4px 0;
+ border-bottom:1px solid #e3ebf6;
+}
+.b2b-workspace .trend-bar{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-width:0}
+.b2b-workspace .trend-bars{
+ width:100%;height:115px;display:flex;align-items:flex-end;justify-content:center;gap:3px;
+}
+.b2b-workspace .trend-bars i{width:min(19px,42%);display:block;border-radius:3px 3px 0 0;min-height:2px}
+.b2b-workspace .trend-request{background:#1485fb}
+.b2b-workspace .trend-denied{background:#e95565}
+.b2b-workspace .trend-bar>span{padding:7px 0;color:#8f9db1;font-size:10px;white-space:nowrap}
+.b2b-workspace .integrity-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.b2b-workspace .integrity-actions .ant-btn{height:32px;border-radius:6px}
+/* Rule management: unified metric strip, horizontal simulator form. */
+.b2b-workspace .rule-metrics,
+.b2b-workspace .identity-stats{
+ display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+ gap:0;border:1px solid var(--ws-line);border-radius:9px;
+ overflow:hidden;background:#fff;min-height:80px;
+}
+.b2b-workspace .rule-metrics>div,
+.b2b-workspace .identity-stats>div{
+ display:flex;flex-direction:column;justify-content:center;gap:3px;
+ padding:13px 22px;position:relative;min-width:0;
+}
+.b2b-workspace .rule-metrics>div:not(:last-child):after,
+.b2b-workspace .identity-stats>div:not(:last-child):after{
+ content:"";position:absolute;right:0;top:22%;height:56%;width:1px;background:var(--ws-line);
+}
+.b2b-workspace .rule-metrics span,.b2b-workspace .identity-stats small{
+ font-size:12px;color:#8090a8;
+}
+.b2b-workspace .rule-metrics strong,.b2b-workspace .identity-stats strong{
+ color:#172944;font-size:24px;line-height:30px;font-weight:730;
+}
+.b2b-workspace .simulator-controls{
+ display:grid;grid-template-columns:minmax(180px,1.5fr) minmax(130px,1fr) minmax(130px,1fr) auto;
+ align-items:end;gap:12px;
+}
+.b2b-workspace .simulator-controls>label{
+ display:flex;min-width:0;flex-direction:column;gap:7px;
+ color:#51647f;font-size:12px;font-weight:550;
+}
+.b2b-workspace .simulator-controls .ant-select,
+.b2b-workspace .simulator-controls .ant-input{width:100%;min-width:0}
+.b2b-workspace .simulator-controls .ant-btn{height:32px;padding-inline:19px}
+.b2b-workspace .policies-panel{min-height:280px}
+/* Identity management: one focused table per tab, one secondary action. */
+.b2b-workspace .identity-content{padding:0 18px 16px;min-height:300px}
+.b2b-workspace .identity-tabs{
+ display:flex;align-items:center;gap:23px;min-height:54px;
+ border-bottom:1px solid var(--ws-line);margin-bottom:14px;
+}
+.b2b-workspace .identity-tabs button{
+ height:54px;display:inline-flex;align-items:center;gap:7px;position:relative;
+ border:0;background:transparent;padding:0 6px;cursor:pointer;
+ color:#7b8ba1;font-size:13px;font-weight:590;
+}
+.b2b-workspace .identity-tabs button.active{color:#087bfa;font-weight:680}
+.b2b-workspace .identity-tabs button.active:after{
+ content:"";height:2px;position:absolute;bottom:-1px;left:0;right:0;background:#087bfa;border-radius:2px;
+}
+.b2b-workspace .identity-tabs button:focus-visible{outline:2px solid #8fc5ff;outline-offset:-3px}
+.b2b-workspace .identity-tabs span{background:#f0f5fa;color:#7790ad;padding:1px 6px;border-radius:4px;font-size:11px}
+.b2b-workspace .identity-toolbar{
+ display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0 0 16px;
+}
+.b2b-workspace .identity-toolbar .identity-search{width:min(100%,240px)}
+.b2b-workspace .identity-toolbar .identity-status-select{width:145px}
+.b2b-workspace .identity-toolbar>.ant-btn{height:32px}
+.b2b-workspace .identity-section-description{color:#8391a8;font-size:12px;margin-bottom:13px;line-height:1.5}
+.b2b-workspace .permission-summary{font-size:12px;line-height:1.7;display:inline-block;max-width:100%;color:#526781}
+.b2b-workspace .role-assignment-panel{
+ margin-top:18px;padding:18px 0 0;border-top:1px solid var(--ws-line);
+ display:flex;align-items:end;justify-content:space-between;gap:15px;flex-wrap:wrap;
+}
+.b2b-workspace .role-assignment-panel h3{font-size:14px;margin:0 0 5px;color:#20324a}
+.b2b-workspace .role-assignment-panel p{color:#8190a8;font-size:12px;margin:0}
+.b2b-workspace .role-assignment-controls{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.b2b-workspace .role-assignment-controls>.ant-select{width:168px}
+.b2b-workspace .role-assignment-controls>.ant-btn{height:32px}
+@media(max-width:1080px){
+ .b2b-workspace .simulator-controls{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+ .b2b-workspace .simulator-controls .ant-btn{justify-self:start}
+ .b2b-workspace .role-assignment-panel{align-items:flex-start}
+}
+@media(max-width:760px){
+ .shell:not(.auth-shell) .b2b-workspace{padding:10px 7px 18px;gap:9px}
+ .b2b-workspace .workspace-heading{align-items:flex-start;flex-wrap:wrap;padding:7px 3px 12px;gap:10px}
+ .b2b-workspace .workspace-heading h2{font-size:18px}
+ .b2b-workspace .workspace-heading-actions{justify-content:flex-start}
+ .b2b-workspace .workspace-surface{padding:13px 10px}
+ .b2b-workspace .identity-content{padding:0 10px 13px}
+ .b2b-workspace .rule-metrics>div,.b2b-workspace .identity-stats>div{padding:11px 9px}
+ .b2b-workspace .rule-metrics span,.b2b-workspace .identity-stats small{font-size:11px}
+ .b2b-workspace .rule-metrics strong,.b2b-workspace .identity-stats strong{font-size:21px}
+ .b2b-workspace .audit-summary{grid-template-columns:1fr}
+ .b2b-workspace .audit-kpi{min-height:62px}
+ .b2b-workspace .trend-plot{gap:3px}
+ .b2b-workspace .trend-bar>span{font-size:9px}
+ .b2b-workspace .simulator-controls{grid-template-columns:1fr;gap:9px}
+ .b2b-workspace .simulator-controls .ant-btn{justify-self:stretch}
+ .b2b-workspace .identity-toolbar{gap:7px}
+ .b2b-workspace .identity-toolbar .identity-search{flex:1 1 100%;width:100%}
+ .b2b-workspace .identity-toolbar .identity-status-select{width:min(100%,150px)}
+ .b2b-workspace .role-assignment-controls{width:100%}
+ .b2b-workspace .role-assignment-controls>.ant-select{width:100%}
+ .b2b-workspace .role-assignment-controls>.ant-btn{width:100%}
+}
