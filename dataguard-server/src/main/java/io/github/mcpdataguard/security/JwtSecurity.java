@@ -21,7 +21,7 @@ public class JwtSecurity {
    .authorizeHttpRequests(a->a.requestMatchers("/api/v1/auth/login","/actuator/health","/actuator/health/**")
        .permitAll().anyRequest().authenticated())
    .exceptionHandling(e->e.authenticationEntryPoint((req,res,ex)->res.sendError(401)))
-   .addFilterAfter(filter,org.springframework.security.web.context.SecurityContextHolderFilter.class)
+   .addFilterBefore(filter,org.springframework.security.web.access.intercept.AuthorizationFilter.class)
    .build();
  }
 }
