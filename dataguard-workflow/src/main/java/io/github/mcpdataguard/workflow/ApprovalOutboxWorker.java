@@ -141,6 +141,29 @@ public class ApprovalOutboxWorker {
         audit.setString(3,eventId.toString());
         audit.executeUpdate();
        }
+       try(PreparedStatement rule=c.prepareStatement("""
+        INSERT INTO platform.dg_alert_rule(id,org_id,code,rule,enabled,severity)
+        VALUES(?,?,'APPROVAL_OUTBOX_DEAD_LETTER',
+          '{"kind":"APPROVAL_OUTBOX_FAILURE"}'::jsonb,true,'HIGH')
+        ON CONFLICT(org_id,code) DO NOTHING
+        """)){
+        rule.setObject(1,UUID.randomUUID());rule.setObject(2,organization);
+        rule.executeUpdate();
+       }
+       try(PreparedStatement alert=c.prepareStatement("""
+        INSERT INTO platform.dg_alert_event
+           (id,org_id,rule_id,fingerprint,event_state,details)
+        SELECT ?,?,r.id,?,'OPEN',jsonb_build_object('attempts',?)
+        FROM platform.dg_alert_rule r
+        WHERE r.org_id=? AND r.code='APPROVAL_OUTBOX_DEAD_LETTER'
+        """)){
+        byte[] bytes=java.security.MessageDigest.getInstance("SHA-256")
+           .digest(eventId.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        alert.setObject(1,UUID.randomUUID());alert.setObject(2,organization);
+        alert.setString(3,java.util.HexFormat.of().formatHex(bytes));
+        alert.setInt(4,attempts);alert.setObject(5,organization);
+        if(alert.executeUpdate()!=1)throw new IllegalStateException("Missing alert rule");
+       }
       }
      }
     }
