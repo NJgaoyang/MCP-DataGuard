@@ -12,6 +12,47 @@ const policyDialog=ref(false);
 const operationalSummary=ref<{deniedRequests:number;pendingApprovals:number;openAlerts:number}|null>(null);
 const sqlRequestRows=ref<Record<string,unknown>[]>([]);
 const approvalRows=ref<Record<string,unknown>[]>([]);
+const workflowDesigns=ref<{id:string;code:string;name:string;version:number;revision:number;publishedRevision:number}[]>([]);
+const workflowDesignerOpen=ref(false);
+const workflowDesignTarget=ref<{id:string;version:number}|null>(null);
+const workflowDesignForm=reactive({code:'',name:'SQL 双级审批',ownerLabel:'数据源负责人审核',dbaLabel:'DBA 审核'});
+async function loadWorkflowDesigns(){
+ try{workflowDesigns.value=await getData<typeof workflowDesigns.value>('/api/v1/workflow-designs');}
+ catch(e){error.value='读取流程设计失败：'+(e as Error).message;}
+}
+async function saveWorkflowDesign(){
+ saving.value=true;error.value='';
+ try{
+  if(workflowDesignTarget.value){
+   await requestWrite('/api/v1/workflow-designs/'+encodeURIComponent(workflowDesignTarget.value.id)+'/draft',
+      'POST',workflowDesignForm);
+  }else{
+   await requestWrite('/api/v1/workflow-designs','POST',workflowDesignForm);
+  }
+  message.success('工作流草稿已保存；未启用任何 SQL 执行');
+  workflowDesignerOpen.value=false;await loadWorkflowDesigns();
+ }catch(e){error.value=(e as Error).message;}finally{saving.value=false;}
+}
+async function publishWorkflowDesign(row:{id:string;revision:number;version:number}){
+ saving.value=true;error.value='';
+ try{
+  await requestWrite('/api/v1/workflow-designs/'+encodeURIComponent(row.id)+'/publish','POST',
+    {revision:row.revision,expectedVersion:row.version});
+  message.success('已发布流程元数据，Flowable 动态部署仍保持关闭');
+  await loadWorkflowDesigns();
+ }catch(e){error.value=(e as Error).message;}finally{saving.value=false;}
+}
+function workflowDesignOpenReset(){
+ workflowDesignForm.code='';workflowDesignForm.name='SQL 双级审批';
+ workflowDesignForm.ownerLabel='数据源负责人审核';workflowDesignForm.dbaLabel='DBA 审核';
+ workflowDesignerOpen.value=true;
+}
+function editWorkflowDesign(row:{id:string;code:string;name:string;version:number}){
+ workflowDesignTarget.value={id:row.id,version:row.version};
+ workflowDesignForm.code=row.code;workflowDesignForm.name=row.name;
+ workflowDesignerOpen.value=true;
+}
+
 const deadLetters=ref<{id:string;type:string;approvalId:string;attempts:number;createdAt:string}[]>([]);
 async function loadDeadLetters(){
  try{deadLetters.value=await getData<typeof deadLetters.value>('/api/v1/workflow-events/dead-letters');}
@@ -494,7 +535,7 @@ async function updatePassword(){
   <aside class="sidebar">
    <div class="brand"><span class="symbol">◆</span><div>MCP DataGuard<small>AI DATABASE SECURITY</small></div></div>
    <span class="section">工作台</span>
-   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations();loadSecurityAlerts()};if(page[0]==='flowable'){loadOperations();loadDeadLetters()}}">{{page[1]}}</button>
+   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations();loadSecurityAlerts()};if(page[0]==='flowable'){loadOperations();loadDeadLetters();loadWorkflowDesigns()}}">{{page[1]}}</button>
    <div class="foot">● 开源研发版 · v0.5</div>
   </aside>
   <main class="main">
@@ -570,7 +611,23 @@ async function updatePassword(){
      </section>
 
      <section v-else-if="selected==='flowable'" class="panel">
-      <div class="panel-heading"><h3>审批实例状态</h3><a-button size="small" @click="loadOperations">刷新</a-button></div>
+      <div class="panel-heading"><h3>审批实例状态</h3><a-button size="small" @click="loadOperations();loadWorkflowDesigns()">刷新</a-button></div>
+      <div class="panel-heading" style="margin-top:16px"><h3>可视化流程设计</h3>
+       <a-button type="primary" @click="workflowDesignTarget=null;workflowDesignOpenReset()">新建两级审批流程</a-button>
+      </div>
+      <a-table row-key="id" size="small" :data-source="workflowDesigns" :pagination="{pageSize:5}"
+       :columns="[{title:'名称',dataIndex:'name'},{title:'编码',dataIndex:'code'},
+        {title:'草稿修订',dataIndex:'revision'},{title:'已发布修订',dataIndex:'publishedRevision'},
+        {title:'操作',key:'actions'}]">
+       <template #bodyCell="{column,record}">
+        <template v-if="column.key==='actions'">
+         <a-button type="link" size="small" @click="editWorkflowDesign(record)">设计下一修订</a-button>
+         <a-popconfirm title="只发布流程元数据，不自动启动流程或执行 SQL。确认？" @confirm="publishWorkflowDesign(record)">
+          <a-button type="link" size="small">发布</a-button>
+         </a-popconfirm>
+        </template>
+       </template>
+      </a-table>
       <a-alert type="info" show-icon message="仅显示审批记录，不开放审批执行操作；Flowable 任务闭环仍待验收。"/>
       <a-table style="margin-top:16px" row-key="id" size="small" :data-source="approvalRows"
        :columns="[{title:'审批编号',dataIndex:'id'},{title:'审批状态',dataIndex:'approvalStatus'},
@@ -700,6 +757,22 @@ async function updatePassword(){
     :columns="[{title:'表名',dataIndex:'table'},{title:'字段',dataIndex:'column'},{title:'算法',dataIndex:'algorithm'},{title:'操作',key:'actions'}]">
     <template #bodyCell="{column,record}"><a-popconfirm v-if="column.key==='actions'" title="确认停用？" @confirm="disableMaskRule(record.id)"><a-button danger type="link" size="small">停用</a-button></a-popconfirm></template>
    </a-table>
+  </a-modal>
+  <a-modal v-model:open="workflowDesignerOpen" title="工作流可视化设计 · 安全双级审批" width="780px" :footer="null">
+   <a-alert type="info" show-icon message="目前仅支持经认证的固定双人审批拓扑；不允许脚本、任意 BPMN 或自动执行 SQL。"/>
+   <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:22px 0">
+    <a-card size="small" style="width:22%;text-align:center">开始</a-card><span>→</span>
+    <a-card size="small" style="width:30%;text-align:center">{{workflowDesignForm.ownerLabel}}</a-card><span>→</span>
+    <a-card size="small" style="width:30%;text-align:center">{{workflowDesignForm.dbaLabel}}</a-card><span>→</span>
+    <a-card size="small" style="width:16%;text-align:center">结束</a-card>
+   </div>
+   <a-form layout="vertical">
+    <a-form-item label="流程编码"><a-input v-model:value="workflowDesignForm.code" :disabled="!!workflowDesignTarget" placeholder="sql_review"/></a-form-item>
+    <a-form-item label="流程名称"><a-input v-model:value="workflowDesignForm.name"/></a-form-item>
+    <a-form-item label="第一审批节点"><a-input v-model:value="workflowDesignForm.ownerLabel"/></a-form-item>
+    <a-form-item label="第二审批节点"><a-input v-model:value="workflowDesignForm.dbaLabel"/></a-form-item>
+    <a-button type="primary" :loading="saving" @click="saveWorkflowDesign">保存流程草稿</a-button>
+   </a-form>
   </a-modal>
   <a-modal v-model:open="approvalDialog" title="审核 SQL 变更申请" ok-text="确认审核通过"
    :confirm-loading="saving" @ok="approveTask">
