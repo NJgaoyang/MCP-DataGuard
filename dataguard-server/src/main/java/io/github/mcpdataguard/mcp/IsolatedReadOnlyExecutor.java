@@ -121,7 +121,7 @@ public final class IsolatedReadOnlyExecutor {
        Object value=rs.getObject(i);
        // Conservative result policy: redact all non-null fields by default.
        // A certified masking engine is needed before plaintext output is enabled.
-       Object output=value==null?null:"[REDACTED]";
+       Object output=maskValue(value);
        bytes+=String.valueOf(output).getBytes(StandardCharsets.UTF_8).length;
        if(bytes>request.maxBytes())throw new SecurityException("RESULT_BYTES_EXCEEDED");
        row.add(output);
@@ -133,6 +133,9 @@ public final class IsolatedReadOnlyExecutor {
     }
    }finally{connection.rollback();}
   }
+ }
+ static Object maskValue(Object value){
+  return value==null?null:"[REDACTED]";
  }
  private static void validate(Target target,Request r){
   if(target==null || r==null ||
