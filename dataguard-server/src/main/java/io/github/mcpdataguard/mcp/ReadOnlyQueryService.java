@@ -29,7 +29,7 @@ public class ReadOnlyQueryService {
  private final boolean enabled;
  public ReadOnlyQueryService(JdbcTemplate jdbc,AgentPrincipalResolver agents,
      IsolatedReadOnlyExecutor executor,ReadReceiptService receipts,
-     @Value("${dataguard.readonly.enabled:false}") boolean enabled){
+     @Value("${dataguard.sql.allow-read-execution:false}") boolean enabled){
   this.jdbc=jdbc;this.agents=agents;this.executor=executor;this.receipts=receipts;this.enabled=enabled;
  }
  private record Source(String host,int port,String db,String type,String provider,String ref,
