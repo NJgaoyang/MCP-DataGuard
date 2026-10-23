@@ -11,7 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** Commits a read receipt and its audit-chain entry before rows can leave the gateway. */
 @Service
-public final class ReadReceiptService {
+public class ReadReceiptService {
  private final JdbcTemplate jdbc;
  private final DeniedSqlAuditChain audit;
  public ReadReceiptService(JdbcTemplate jdbc,DeniedSqlAuditChain audit){
