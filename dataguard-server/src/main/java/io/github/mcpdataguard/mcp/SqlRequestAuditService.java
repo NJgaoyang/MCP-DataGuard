@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Records non-sensitive metadata of denied check_sql calls; never stores SQL text,
@@ -19,9 +20,11 @@ import org.springframework.stereotype.Service;
 public final class SqlRequestAuditService {
  private final JdbcTemplate jdbc;
  private final AgentPrincipalResolver agents;
- public SqlRequestAuditService(JdbcTemplate jdbc,AgentPrincipalResolver agents){
-  this.jdbc=jdbc;this.agents=agents;
+ private final DeniedSqlAuditChain chain;
+ public SqlRequestAuditService(JdbcTemplate jdbc,AgentPrincipalResolver agents,DeniedSqlAuditChain chain){
+  this.jdbc=jdbc;this.agents=agents;this.chain=chain;
  }
+ @Transactional
  public void recordDeniedCheck(String datasourceId,String database,String sql,Map<String,Object> verdict){
   AgentPrincipal a=agents.requireActiveAgent();
   UUID datasource;
@@ -34,11 +37,17 @@ public final class SqlRequestAuditService {
   }catch(NoSuchAlgorithmException e){throw new IllegalStateException(e);}
   // Tenant scoped INSERT SELECT ensures the foreign key can only reference a
   // datasource actually owned by this Agent's organization.
-  jdbc.update("""
+  UUID requestId=UUID.randomUUID();
+  int inserted=jdbc.update("""
     INSERT INTO dg_sql_request(id,org_id,agent_id,datasource_id,tool_name,
        database_name,sql_fingerprint,decision,request_status,finished_at)
     SELECT ?,d.org_id,?,?, 'check_sql', ?,?,'DENY','DENIED',now()
     FROM dg_datasource d WHERE d.org_id=? AND d.id=?
-    """,UUID.randomUUID(),a.agentId(),datasource,database,fingerprint,a.orgId(),datasource);
+    """,requestId,a.agentId(),datasource,database,fingerprint,a.orgId(),datasource);
+  if(inserted==1){
+   String reason=String.valueOf(verdict.getOrDefault("code","UNKNOWN"));
+   if(!reason.matches("[A-Z0-9_]{1,100}"))reason="UNKNOWN";
+   chain.append(a.orgId(),a.agentId(),requestId,fingerprint,reason);
+  }
  }
 }
