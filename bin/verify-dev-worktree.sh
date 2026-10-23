@@ -13,10 +13,10 @@ else
 fi
 if command -v npm >/dev/null && command -v node >/dev/null; then
   cd "$ROOT/dataguard-web"
-  if test -f package-lock.json; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+  if test -f package-lock.json; then npm ci --no-audit --no-fund; else npm install --no-package-lock --no-audit --no-fund; fi
   npm run build
 else
   docker run --rm -v "$ROOT/dataguard-web:/workspace" -w /workspace node:22-alpine \
-    sh -c 'npm install --no-audit --no-fund && npm run build'
+    sh -c 'npm install --no-package-lock --no-audit --no-fund && npm run build'
 fi
 echo "Backend and frontend build verification passed."
