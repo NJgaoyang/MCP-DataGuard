@@ -13,6 +13,12 @@ const mustChange=ref(false);
 const forcedPasswordChange=ref(false);
 const changeForm=reactive({currentPassword:'',newPassword:''});
 const agentTokenOnce=ref('');
+const grantDialog=ref(false);
+const grantAgent=ref({id:'',name:''});
+const grantForm=reactive({datasourceId:'',table:'',column:'',action:'ALLOW' as 'ALLOW'|'DENY'});
+const schemaGrants=ref<{datasourceId:string;table:string;action:string}[]>([]);
+const columnGrants=ref<{table:string;column:string;action:string}[]>([]);
+const grantLoading=ref(false);
 const profile=ref<{orgId:string;userId:string;username:string;displayName:string}|null>(null);
 const agents=ref<Record<string,unknown>[]>([]);
 const usersList=ref<Record<string,unknown>[]>([]);
@@ -181,6 +187,44 @@ async function saveEnroll(){
  }catch(e){error.value=(e as Error).message;}
  finally{saving.value=false;}
 }
+async function loadGrants(){
+ if(!grantAgent.value.id||!grantForm.datasourceId)return;
+ grantLoading.value=true;
+ try{
+  const base='/api/v1/agents/'+encodeURIComponent(grantAgent.value.id);
+  const results=await Promise.all([
+   getData<typeof schemaGrants.value>(base+'/schema-permissions'),
+   getData<typeof columnGrants.value>(base+'/column-grants?datasourceId='+encodeURIComponent(grantForm.datasourceId))
+  ]);
+  schemaGrants.value=results[0].filter(x=>x.datasourceId===grantForm.datasourceId);
+  columnGrants.value=results[1];
+ }catch(e){error.value='读取授权失败：'+(e as Error).message;}
+ finally{grantLoading.value=false;}
+}
+async function openGrants(record:Record<string,unknown>){
+ grantAgent.value={id:String(record.id),name:String(record.name)};
+ Object.assign(grantForm,{datasourceId:'',table:'',column:'',action:'ALLOW'});
+ schemaGrants.value=[];columnGrants.value=[];grantDialog.value=true;
+}
+async function saveGrant(scope:'table'|'column'){
+ if(!grantForm.datasourceId||!grantForm.table||!/^[a-z][a-z0-9_]{0,254}$/.test(grantForm.table) ||
+    (scope==='column'&&!/^[a-z][a-z0-9_]{0,254}$/.test(grantForm.column))){
+  error.value='请选择数据源并填写符合规范的表名、字段名。';return;
+ }
+ saving.value=true;error.value='';
+ try{
+  const base='/api/v1/agents/'+encodeURIComponent(grantAgent.value.id);
+  if(scope==='table')await requestWrite(base+'/schema-permissions','POST',{
+   datasourceId:grantForm.datasourceId,table:grantForm.table,action:grantForm.action
+  });
+  else await requestWrite(base+'/column-grants','POST',{
+   datasourceId:grantForm.datasourceId,table:grantForm.table,column:grantForm.column,action:grantForm.action
+  });
+  message.success(scope==='table'?'表级授权已保存':'字段级授权已保存');
+  await loadGrants();
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
+}
 function openCredentials(record:Record<string,unknown>){
  Object.assign(credentialForm,{datasourceId:String(record.id),secretRef:''});
  credentialDialog.value=true;
@@ -310,6 +354,7 @@ async function updatePassword(){
        <template #bodyCell="{column,record}">
         <template v-if="column.key==='actions'">
          <a-button size="small" type="link" @click="editAgent(record)">编辑</a-button>
+         <a-button v-if="record.status==='ACTIVE'" size="small" type="link" @click="openGrants(record)">权限配置</a-button>
          <a-button v-if="record.status==='DISABLED'" size="small" type="link" @click="openEnroll(record)">绑定身份</a-button>
          <a-popconfirm v-if="record.status!=='REVOKED'" title="确认永久撤销这个 Agent？" ok-text="撤销" cancel-text="取消" @confirm="revokeAgent(record)">
           <a-button size="small" type="link" danger>撤销</a-button>
@@ -397,6 +442,33 @@ async function updatePassword(){
    <p>新令牌仅显示一次，生成新令牌会立即撤销旧令牌。</p>
    <a-textarea v-if="agentTokenOnce" :value="agentTokenOnce" :rows="3" readonly/>
    <a-alert type="warning" show-icon message="请妥善保存令牌，不要提交到 Git 或在日志中输出。"/>
+  </a-modal>
+  <a-modal v-model:open="grantDialog" :title="'Agent 权限配置 · '+grantAgent.name" :footer="null" width="720px">
+   <a-alert type="info" show-icon message="仅管理 Schema 可见性与 SELECT 字段授权；不会启用 SQL 执行。"/>
+   <a-form layout="vertical" style="margin-top:18px">
+    <a-form-item label="目标数据源">
+     <a-select v-model:value="grantForm.datasourceId" placeholder="选择 ACTIVE 数据源" @change="loadGrants">
+      <a-select-option v-for="d in datasources.filter(x=>x.status==='ACTIVE')" :key="String(d.id)" :value="String(d.id)">{{d.name}} · {{d.environment}}</a-select-option>
+     </a-select>
+    </a-form-item>
+    <a-form-item label="表名"><a-input v-model:value="grantForm.table" placeholder="例如 orders（小写字母、数字、下划线）"/></a-form-item>
+    <a-form-item label="字段名"><a-input v-model:value="grantForm.column" placeholder="例如 order_id（仅字段授权时必填）"/></a-form-item>
+    <a-form-item label="授权决策">
+     <a-radio-group v-model:value="grantForm.action">
+      <a-radio value="ALLOW">ALLOW 允许</a-radio><a-radio value="DENY">DENY 拒绝</a-radio>
+     </a-radio-group>
+    </a-form-item>
+    <div class="actions">
+     <a-button :disabled="!grantForm.datasourceId" :loading="saving" @click="saveGrant('table')">保存表级 Schema 权限</a-button>
+     <a-button type="primary" :disabled="!grantForm.datasourceId" :loading="saving" @click="saveGrant('column')">保存字段级 SELECT 权限</a-button>
+    </div>
+   </a-form>
+   <h4 style="margin-top:24px">现有表级授权</h4>
+   <a-table size="small" :loading="grantLoading" :pagination="{pageSize:5}" :data-source="schemaGrants"
+    :columns="[{title:'表名',dataIndex:'table'},{title:'决策',dataIndex:'action'}]"/>
+   <h4>现有字段级授权</h4>
+   <a-table size="small" :loading="grantLoading" :pagination="{pageSize:5}" :data-source="columnGrants"
+    :columns="[{title:'表名',dataIndex:'table'},{title:'字段',dataIndex:'column'},{title:'决策',dataIndex:'action'}]"/>
   </a-modal>
   <a-modal v-model:open="credentialDialog" title="配置服务端只读凭据引用" ok-text="保存"
    :confirm-loading="saving" @ok="saveCredentials">
