@@ -1419,10 +1419,11 @@ async function updatePassword(){
 .account-detail{min-width:205px;gap:9px;padding:4px 2px}
 .breadcrumb{font-size:12px}
 /* Enterprise login with no fabricated marketing metrics */
-.shell.auth-shell{display:block;background:#f8fafc;min-height:100vh}
-.auth-shell .main,.auth-shell .content{min-height:100vh}
+.shell.auth-shell{display:block;background:#f8fafc;min-height:100dvh}
+.auth-shell .main,.auth-shell .content{min-height:100dvh}
 .auth-shell .content{margin:0;padding:0;max-width:none}
-.auth-layout{min-height:100vh;display:grid;grid-template-columns:minmax(410px,46%) minmax(0,1fr)}
+/* Desktop login: brand 60% / form 40%, shared by sign-in and password reset. */
+.auth-layout{min-height:100dvh;display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr)}
 .auth-brand-panel{padding:42px clamp(36px,5vw,90px) 34px;background:linear-gradient(145deg,#e8f3ff,#d1e6fa);color:#172d46;display:flex;flex-direction:column}
 .auth-brand-top{display:flex;align-items:center;gap:11px;font-weight:700;font-size:17px}
 .auth-mark{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;background:#1677ed;color:#fff;font-size:19px;font-weight:750}
@@ -1436,7 +1437,7 @@ async function updatePassword(){
 .auth-capabilities strong{display:block;font-size:14px;color:#28415e;font-weight:650}
 .auth-capabilities small{display:block;margin-top:4px;font-size:12px;color:#68829d}
 .auth-brand-foot{font-size:12px;color:#7990a8}
-.auth-form-panel{min-width:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 32px 24px;background:#f8fafc}
+.auth-form-panel{min-width:0;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 32px 24px;background:#f8fafc}
 .auth-login-card{width:min(100%,396px);margin:auto 0}
 .auth-mobile-brand{display:none}
 .auth-login-heading{margin-bottom:36px}
@@ -1452,8 +1453,9 @@ async function updatePassword(){
 .auth-copyright{font-size:12px;color:#97a2b0;padding-top:24px;text-align:center}
 .auth-shell .alert{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:1000;max-width:calc(100vw - 32px);box-shadow:0 8px 32px #21334b18}
 .shell:not(.auth-shell) .content{max-width:none;margin:0;padding:14px 14px 36px}
-@media(max-width:900px){.auth-layout{grid-template-columns:minmax(290px,42%) minmax(0,1fr)}.auth-brand-panel{padding:30px}.auth-brand-body h1{font-size:28px}}
-@media(max-width:700px){.auth-layout{display:block}.auth-brand-panel{display:none}.auth-form-panel{padding:32px 24px;min-height:100vh}.auth-mobile-brand{display:flex;align-items:center;gap:10px;margin-bottom:50px;font-size:17px;font-weight:700;color:#192d42}.auth-login-card{margin:auto 0}.auth-login-heading h2{font-size:24px}}
+@media(max-width:1100px){.auth-brand-panel{padding:32px clamp(28px,4vw,56px) 28px}.auth-brand-body h1{font-size:clamp(27px,3vw,34px)}.auth-form-panel{padding:32px 24px 20px}}
+/* On smaller screens prioritise a usable full-width form over a cramped 40% pane. */
+@media(max-width:860px){.auth-layout{display:block}.auth-brand-panel{display:none}.auth-form-panel{padding:32px 24px;min-height:100dvh}.auth-mobile-brand{display:flex;align-items:center;gap:10px;margin-bottom:50px;font-size:17px;font-weight:700;color:#192d42}.auth-login-card{margin:auto 0}.auth-login-heading h2{font-size:24px}}
 
 /* Compact dashboard density baseline (2026-10-23) */
 .shell:not(.auth-shell) .content{padding:2px 2px 22px!important;max-width:none;margin:0}
