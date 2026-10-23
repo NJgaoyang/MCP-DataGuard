@@ -598,19 +598,19 @@ async function updatePassword(){
 <template>
  <div class="shell">
   <aside class="sidebar">
-   <div class="brand"><span class="symbol">◆</span><div>MCP DataGuard<small>AI DATABASE SECURITY</small></div></div>
+   <div class="brand"><span class="symbol">M</span><div>MCP DataGuard<small>数据库安全管理</small></div></div>
    <span class="section">工作台</span>
    <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations();loadSecurityAlerts();loadTrends()};if(page[0]==='flowable'){loadOperations();loadDeadLetters();loadWorkflowDesigns()}}">{{page[1]}}</button>
-   <div class="foot">● 开源研发版 v0.5</div>
+   <div class="foot">MCP DataGuard</div>
   </aside>
   <main class="main">
-   <header class="bar"><div>工作台 / <strong>{{title}}</strong></div>
+   <header class="bar"><div class="breadcrumb">工作台 <span>/</span> <strong>{{title}}</strong></div>
     <div class="actions"><a-button size="small" :disabled="!token||mustChange" :loading="busy" @click="reload">刷新</a-button>
      <a-button v-if="token&&!mustChange" size="small" @click="mustChange=true;error=''">修改密码</a-button>
      <a-button v-else size="small" @click="logout">退出</a-button>
     </div></header>
    <div class="content">
-    <div class="heading"><h1>{{title}}</h1><span class="status">写入已关闭</span></div>
+    <div class="heading"><h1>{{title}}</h1><span class="status"><span class="status-dot"></span>写入已关闭</span></div>
 
     <section v-if="!token" class="panel native-login">
      <h3>MCP DataGuard 登录</h3>
@@ -634,17 +634,25 @@ async function updatePassword(){
     </section>
     <a-alert v-if="error" type="warning" show-icon :message="error" class="alert"/>
     <template v-if="profile&&!mustChange">
-     <section v-if="selected==='dashboard'">
+     <section v-if="selected==='dashboard'" class="dashboard">
       <div class="cards">
-       <article><small>当前用户</small><strong class="person">{{profile.displayName}}</strong><span>{{profile.username}}</span></article>
-       <article><small>Agent 数量（当前页）</small><strong>{{agents.length}}</strong><span>真实授权数据</span></article>
-       <article><small>数据源数量（当前页）</small><strong>{{datasources.length}}</strong><span>真实授权数据</span></article>
+       <article><small>Agent</small><strong>{{agents.length}}</strong><span>已登记</span></article>
+       <article><small>数据源</small><strong>{{datasources.length}}</strong><span>已登记</span></article>
+       <article><small>待审批</small><strong>{{operationalSummary?.pendingApprovals ?? 0}}</strong><span>待处理申请</span></article>
       </div>
-      <div class="panel"><h3>欢迎使用 MCP DataGuard</h3><p>公司内部安全管理平台。SQL 写入能力默认关闭，敏感操作须经独立审批与授权。</p></div>
+      <div class="panel quick-start">
+       <div class="panel-heading"><h3>快捷操作</h3></div>
+       <div class="quick-actions">
+        <a-button @click="selected='agents';newAgent()">新增 Agent</a-button>
+        <a-button @click="selected='datasources';newDatasource()">新增数据源</a-button>
+        <a-button @click="selected='flowable';loadOperations();loadWorkflowDesigns()">查看审批</a-button>
+       </div>
+      </div>
      </section>
-     <section v-else-if="selected==='agents'" class="panel">
-      <div class="panel-heading"><h3>Agent 列表</h3><a-button size="small" type="primary" @click="newAgent">新增 Agent</a-button></div>
-      <a-table row-key="id" :columns="columnsAgents" :data-source="agents" size="small" :loading="busy" :pagination="{pageSize:10}">
+     <section v-else-if="selected==='agents'" class="panel data-panel">
+      <div class="panel-heading"><h3>Agent 列表 <span class="table-count">{{agents.length}}</span></h3><a-button type="primary" @click="newAgent">新增 Agent</a-button></div>
+      <div v-if="!busy && !agents.length" class="empty-state"><div class="empty-icon">＋</div><strong>暂无 Agent</strong><a-button type="primary" @click="newAgent">创建第一个 Agent</a-button></div>
+      <a-table v-if="busy || agents.length" row-key="id" :columns="columnsAgents" :data-source="agents" size="small" :loading="busy" :pagination="{pageSize:10}">
        <template #bodyCell="{column,record}">
         <template v-if="column.key==='actions'">
          <a-button size="small" type="link" @click="editAgent(record)">编辑</a-button>
@@ -657,9 +665,10 @@ async function updatePassword(){
        </template>
       </a-table>
      </section>
-     <section v-else-if="selected==='datasources'" class="panel">
-      <div class="panel-heading"><h3>数据源列表</h3><a-button size="small" type="primary" @click="newDatasource">新增数据源</a-button></div>
-      <a-table row-key="id" :columns="columnsSources" :data-source="datasources" size="small" :loading="busy" :pagination="{pageSize:10}">
+     <section v-else-if="selected==='datasources'" class="panel data-panel">
+      <div class="panel-heading"><h3>数据源列表 <span class="table-count">{{datasources.length}}</span></h3><a-button type="primary" @click="newDatasource">新增数据源</a-button></div>
+      <div v-if="!busy && !datasources.length" class="empty-state"><div class="empty-icon">＋</div><strong>暂无数据源</strong><a-button type="primary" @click="newDatasource">添加数据源</a-button></div>
+      <a-table v-if="busy || datasources.length" row-key="id" :columns="columnsSources" :data-source="datasources" size="small" :loading="busy" :pagination="{pageSize:10}">
        <template #bodyCell="{column,record}">
         <template v-if="column.key==='actions'">
          <a-button size="small" type="link" @click="editDatasource(record)">编辑</a-button>
@@ -830,7 +839,7 @@ async function updatePassword(){
      </section>
      <div v-else class="panel placeholder"><h2>{{title}}</h2><p>开发中，暂未提供真实业务功能。</p></div>
     </template>
-    <p class="disclaimer">必须通过内置账号或 Agent Token 验证、后端权限校验和隔离的数据库只读账户。当前版本不得连接生产数据库执行 SQL。</p>
+    
 
    </div>
   </main>
@@ -1066,4 +1075,44 @@ async function updatePassword(){
 .shell :deep(.ant-btn-primary){background:var(--blue9);box-shadow:none}.shell :deep(.ant-btn-primary:hover){background:var(--blue10)}.shell :deep(.ant-btn-link),.shell :deep(.ant-typography a){color:var(--blue11)}.shell :deep(.ant-table-wrapper .ant-table),.shell :deep(.ant-form),.shell :deep(.ant-input),.shell :deep(.ant-select),.shell :deep(.ant-alert){font-size:14px}.shell :deep(.ant-card),.shell :deep(.ant-input),.shell :deep(.ant-input-affix-wrapper),.shell :deep(.ant-select-selector),.shell :deep(.ant-modal-content){border-radius:6px;box-shadow:none}.shell :deep(.ant-card),.shell :deep(.ant-input),.shell :deep(.ant-input-affix-wrapper),.shell :deep(.ant-select-selector){border-width:0.5px;border-color:var(--slate7)}.shell :deep(.ant-table-thead>tr>th){background:var(--slate2);color:var(--slate11);font-size:12px;font-weight:600;border-bottom:0.5px solid var(--slate6)}.shell :deep(.ant-table-tbody>tr>td){border-bottom:0.5px solid var(--slate5)}.shell :deep(.ant-alert){border-width:0.5px;border-radius:6px}.shell :deep(.ant-form-item-label>label){font-size:14px;color:var(--slate12)}.shell :deep(.ant-btn){box-shadow:none;transition:background-color 250ms ease-out,color 250ms ease-out,border-color 250ms ease-out}
 @media(max-width:850px){.sidebar{width:180px}.content{padding:18px}.cards{grid-template-columns:1fr}.bar{padding:0 16px}}
 @media(max-width:570px){.sidebar{width:62px;padding:16px 6px}.brand div,.section,.nav{font-size:0}.brand{padding:0 5px 22px}.nav:after{content:"•";font-size:14px}.foot{display:none}}
+/* Restrained desktop layout and intentional empty states */
+.shell{background:var(--slate2)}
+.sidebar{width:216px;padding:22px 12px;background:var(--slate1)}
+.brand{gap:10px;padding:4px 8px 26px;line-height:1.25}
+.brand small{font-size:12px;color:var(--slate11);margin-top:5px}
+.symbol{background:var(--slate12);color:var(--slate1);width:34px;height:34px;border-radius:8px;font-size:15px;font-weight:700}
+.section{margin:6px 10px 8px;font-size:12px}
+.nav{padding:10px 12px;margin:2px 0;font-weight:450}
+.nav.active{background:var(--blue3);color:var(--blue11);font-weight:650}
+.foot{color:var(--slate10);padding:12px 10px}
+.bar{height:56px;padding:0 28px}
+.breadcrumb{display:flex;align-items:center;gap:10px;color:var(--slate11)}
+.breadcrumb span{color:var(--slate8)}
+.breadcrumb strong{margin:0;color:var(--slate12)}
+.content{max-width:1100px;padding:30px 28px 48px}
+.heading{margin-bottom:22px}
+.heading h1{font-size:20px;font-weight:650}
+.status{display:flex;align-items:center;gap:7px;background:var(--slate2);border:0.5px solid var(--slate6);color:var(--slate11);padding:5px 9px}
+.status-dot{height:6px;width:6px;border-radius:50%;background:var(--slate9)}
+.cards{gap:14px;margin-bottom:20px}
+.cards article{min-height:125px;padding:20px;gap:8px;border-radius:8px;background:var(--slate1)}
+.cards small{font-size:14px;color:var(--slate11)}
+.cards strong,.cards strong.person{font-size:20px;font-weight:650}
+.cards span{font-size:12px;color:var(--slate10)}
+.panel{padding:22px;border-radius:8px}
+.panel-heading{min-height:34px;margin-bottom:16px}
+.panel-heading h3{font-size:14px}
+.quick-start{padding:22px}
+.quick-actions{display:flex;gap:10px;flex-wrap:wrap}
+.quick-actions :deep(.ant-btn){height:36px;padding-inline:16px}
+.data-panel{padding:22px}
+.table-count{display:inline-flex;align-items:center;justify-content:center;height:20px;min-width:20px;padding:0 6px;margin-left:6px;border-radius:4px;background:var(--slate3);color:var(--slate11);font-weight:500;font-size:12px}
+.empty-state{min-height:245px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;border-top:0.5px solid var(--slate5)}
+.empty-state strong{font-size:14px;font-weight:600}
+.empty-icon{display:grid;place-items:center;width:44px;height:44px;border:0.5px solid var(--slate7);border-radius:10px;color:var(--slate10);font-size:20px;font-weight:400}
+.shell :deep(.ant-table){background:transparent}
+.shell :deep(.ant-table-thead>tr>th){border-radius:0!important}
+.shell :deep(.ant-btn-default){border-width:0.5px}
+@media(max-width:850px){.sidebar{width:180px}.content{padding:22px 18px}.cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){.cards{grid-template-columns:1fr}.content{padding:18px 14px}.sidebar{width:62px}}
 </style>
