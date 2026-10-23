@@ -72,7 +72,7 @@ public final class StrictReadOnlySql {
       (m.group(3)==null ? select.getWhere().isPresent():select.getWhere().isEmpty()))
     return SqlVerdict.deny("PARAMETERS_OR_ROW_LIMIT");
    // AST validation never by itself authorizes a physical database connection.
-   return new SqlVerdict(false,"SELECT","AST_VALID_AUTHORIZATION_REQUIRED");
+   return new SqlVerdict(false,"SELECT","AST_AND_AUTHORIZATION_NOT_CERTIFIED");
   }catch(RuntimeException e){return SqlVerdict.deny("UNSUPPORTED_SQL_SHAPE");}
  }
  public static String table(String sql){return checked(sql).group(2).toLowerCase(Locale.ROOT);}
