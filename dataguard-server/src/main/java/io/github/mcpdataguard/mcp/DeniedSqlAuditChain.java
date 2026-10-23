@@ -64,7 +64,7 @@ public final class DeniedSqlAuditChain {
      fingerprint==null||!fingerprint.matches("[a-f0-9]{64}") ||
      reason==null||!reason.matches("[A-Z0-9_]{1,100}"))
    throw new IllegalArgumentException("Invalid audit chain component");
-  String payload="{\\"fingerprint\\":\\""+fingerprint+"\\",\\"reason\\":\\""+reason+"\\"}";
+  String payload="{\"fingerprint\":\""+fingerprint+"\",\"reason\":\""+reason+"\"}";
   return hash(previous+"|"+sequence+"|"+request+"|"+actorId+"|"+type+"|"+payload);
  }
  private static String hash(String message){
