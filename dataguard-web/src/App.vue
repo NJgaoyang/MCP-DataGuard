@@ -791,7 +791,7 @@ async function updatePassword(){
      </section>
      <section v-else-if="selected==='agents'" class="panel data-panel">
       <div class="panel-heading"><h3>Agent 列表 <span class="table-count">{{agents.length}}</span></h3><a-button type="primary" @click="newAgent">新增 Agent</a-button></div>
-      <div v-if="!busy && !agents.length" class="empty-state"><div class="empty-icon"><UiIcon name="agents" :size="25"/></div><strong>暂无 Agent</strong><span class="empty-description">点击右上角“新增 Agent”，开始创建并管理 Agent</span></div><strong>暂无 Agent</strong><a-button type="primary" @click="newAgent">创建第一个 Agent</a-button></div>
+      <div v-if="!busy && !agents.length" class="empty-state"><div class="empty-icon"><UiIcon name="agents" :size="25"/></div><strong>暂无 Agent</strong><span class="empty-description">点击右上角“新增 Agent”，开始创建并管理 Agent</span></div>
       <a-table v-if="busy || agents.length" row-key="id" :columns="columnsAgents" :data-source="agents" size="small" :loading="busy" :pagination="{pageSize:10}">
        <template #bodyCell="{column,record}">
         <template v-if="column.key==='actions'">
@@ -807,7 +807,7 @@ async function updatePassword(){
      </section>
      <section v-else-if="selected==='datasources'" class="panel data-panel">
       <div class="panel-heading"><h3>数据源列表 <span class="table-count">{{datasources.length}}</span></h3><a-button type="primary" @click="newDatasource">新增数据源</a-button></div>
-      <div v-if="!busy && !datasources.length" class="empty-state"><div class="empty-icon"><UiIcon name="datasources" :size="25"/></div><strong>暂无数据源</strong><span class="empty-description">点击右上角“新增数据源”，配置数据库连接</span></div><strong>暂无数据源</strong><a-button type="primary" @click="newDatasource">添加数据源</a-button></div>
+      <div v-if="!busy && !datasources.length" class="empty-state"><div class="empty-icon"><UiIcon name="datasources" :size="25"/></div><strong>暂无数据源</strong><span class="empty-description">点击右上角“新增数据源”，配置数据库连接</span></div>
       <a-table v-if="busy || datasources.length" row-key="id" :columns="columnsSources" :data-source="datasources" size="small" :loading="busy" :pagination="{pageSize:10}">
        <template #bodyCell="{column,record}">
         <template v-if="column.key==='actions'">
