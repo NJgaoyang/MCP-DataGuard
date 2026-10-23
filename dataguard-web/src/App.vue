@@ -617,17 +617,17 @@ async function updatePassword(){
        <template #content>
         <div class="account-detail">
          <strong>{{profile?.displayName || profile?.username || '当前用户'}}</strong>
-         <span>账号：{{profile?.username || '未获取'}}</span>
+         <span>登录账号：{{profile?.username || '未获取'}}</span>
          <a-button size="small" :disabled="mustChange" @click="mustChange=true;error=''">修改密码</a-button>
         </div>
        </template>
        <button class="account-trigger" type="button" aria-label="查看当前登录用户">
         <span class="account-avatar">{{(profile?.displayName || profile?.username || '用').slice(0,1)}}</span>
-        <span class="account-name">{{profile?.displayName || profile?.username || '当前用户'}}</span>
+        <span class="account-name">{{profile?.username || '当前用户'}}</span>
         <span class="account-chevron">⌄</span>
        </button>
       </a-popover>
-      <a-button size="small" @click="logout">退出登录</a-button>
+      <a-button class="logout-action" size="small" @click="logout">退出登录</a-button>
      </template>
     </div></header>
    <div class="content">
@@ -1261,4 +1261,12 @@ async function updatePassword(){
 .account-chevron{font-size:14px;color:var(--slate10)}
 .account-detail{display:flex;flex-direction:column;gap:10px;min-width:175px;font-size:12px;color:var(--slate11)}
 .account-detail strong{font-size:14px;color:var(--slate12)}
+.shell .bar{height:44px;min-height:44px;padding:0 20px}
+.shell .bar .actions{gap:10px}
+.shell .bar .breadcrumb{font-size:12px}
+.shell .account-trigger{height:30px;padding:2px 8px 2px 3px;border:0.5px solid var(--slate6);background:#fff;border-radius:5px;max-width:240px}
+.shell .account-avatar{height:23px;width:23px}
+.shell .account-name{font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell .logout-action{height:28px}
+@media(max-width:650px){.shell .bar{padding:0 12px}.shell .bar .actions{gap:4px}.shell .account-name{max-width:65px}}
 </style>
