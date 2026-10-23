@@ -187,10 +187,10 @@ async function loadAuditEvents(){
 const policyForm=reactive({code:'',name:''});
 const policyRuleDialog=ref(false);
 const policyTarget=ref({id:'',name:'',status:'',version:0,latestVersion:0});
-const policyRule=reactive({decision:'DENY',priority:100,table:'',environment:'DEV'});
+const policyRule=reactive({decision:'DENY',priority:100,table:'',environment:'DEV',operation:'SELECT'});
 const policyVersions=ref<{revision:number;priority:number;decision:string;rule:string;published:boolean}[]>([]);
 const policySimulation=ref('');
-const effectivePolicyScope=reactive({table:'orders',environment:'TEST'});
+const effectivePolicyScope=reactive({table:'orders',environment:'TEST',operation:'SELECT'});
 const effectivePolicyResult=ref('');
 async function evaluateEffectivePolicies(){
  saving.value=true;error.value='';effectivePolicyResult.value='';
@@ -324,7 +324,7 @@ async function simulatePolicyRule(){
  saving.value=true;error.value='';policySimulation.value='';
  try{
   const result=await requestWrite('/api/v1/sql-policies/'+encodeURIComponent(policyTarget.value.id)+'/simulate','POST',
-   {table:policyRule.table,environment:policyRule.environment}) as unknown as
+   {table:policyRule.table,environment:policyRule.environment,operation:policyRule.operation}) as unknown as
    {matched:boolean;decision:string;revision?:number;simulationOnly:boolean};
   policySimulation.value=result.matched
    ?'命中草稿版本 '+result.revision+'，模拟决策：'+result.decision
@@ -778,6 +778,8 @@ async function updatePassword(){
         <a-input v-model:value="effectivePolicyScope.table" placeholder="数据库表名" style="width:190px"/>
         <a-select v-model:value="effectivePolicyScope.environment" style="width:145px"
           :options="['DEV','TEST','STAGING','PROD'].map(x=>({label:x,value:x}))"/>
+        <a-select v-model:value="effectivePolicyScope.operation" style="width:145px"
+          :options="['SELECT','UPDATE','DELETE','INSERT'].map(x=>({label:x,value:x}))"/>
         <a-button :loading="saving" @click="evaluateEffectivePolicies">模拟跨策略优先级</a-button>
        </a-space>
        <a-alert v-if="effectivePolicyResult" style="margin-top:12px" type="info" show-icon
@@ -897,6 +899,10 @@ async function updatePassword(){
    <a-alert type="warning" show-icon message="当前仅保存拒绝/人工审批规则草稿；没有发布或执行权限。"/>
    <a-form layout="vertical" style="margin-top:16px">
     <a-form-item label="表名"><a-input v-model:value="policyRule.table" placeholder="orders"/></a-form-item>
+    <a-form-item label="操作类型">
+     <a-select v-model:value="policyRule.operation"
+       :options="['SELECT','UPDATE','DELETE','INSERT'].map(x=>({label:x,value:x}))"/>
+    </a-form-item>
     <a-form-item label="环境">
      <a-select v-model:value="policyRule.environment">
       <a-select-option value="DEV">DEV</a-select-option><a-select-option value="TEST">TEST</a-select-option>
