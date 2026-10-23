@@ -27,6 +27,32 @@ const workflowDesigns=ref<{id:string;code:string;name:string;version:number;revi
 const workflowDesignerOpen=ref(false);
 const workflowDesignTarget=ref<{id:string;version:number}|null>(null);
 const workflowDesignForm=reactive({code:'',name:'SQL 双级审批',ownerLabel:'数据源负责人审核',dbaLabel:'DBA 审核'});
+type WorkflowStep={role:string;label:string};
+const workflowSteps=ref<WorkflowStep[]>([
+ {role:'db-owner',label:'数据源负责人审核'},
+ {role:'dba',label:'DBA 审核'}
+]);
+const workflowHighRiskLast=ref(false);
+const workflowDragging=ref<number|null>(null);
+function addWorkflowStep(){
+ if(workflowSteps.value.length>=6)return;
+ workflowSteps.value.push({role:'review-'+(workflowSteps.value.length+1),label:'审批节点 '+(workflowSteps.value.length+1)});
+}
+function removeWorkflowStep(index:number){
+ if(workflowSteps.value.length<=2)return;
+ workflowSteps.value.splice(index,1);
+ if(workflowSteps.value.length<3)workflowHighRiskLast.value=false;
+}
+function moveWorkflowStep(from:number,to:number){
+ if(to<0||to>=workflowSteps.value.length||from===to)return;
+ const [step]=workflowSteps.value.splice(from,1);
+ workflowSteps.value.splice(to,0,step);
+}
+function dropWorkflowStep(to:number){
+ if(workflowDragging.value!==null)moveWorkflowStep(workflowDragging.value,to);
+ workflowDragging.value=null;
+}
+
 async function loadWorkflowDesigns(){
  try{workflowDesigns.value=await getData<typeof workflowDesigns.value>('/api/v1/workflow-designs');}
  catch(e){error.value='读取流程设计失败：'+(e as Error).message;}
@@ -36,9 +62,10 @@ async function saveWorkflowDesign(){
  try{
   if(workflowDesignTarget.value){
    await requestWrite('/api/v1/workflow-designs/'+encodeURIComponent(workflowDesignTarget.value.id)+'/draft',
-      'POST',workflowDesignForm);
+      'POST',{...workflowDesignForm,steps:workflowSteps.value,highRiskOnlyLast:workflowHighRiskLast.value});
   }else{
-   await requestWrite('/api/v1/workflow-designs','POST',workflowDesignForm);
+   await requestWrite('/api/v1/workflow-designs','POST',
+     {...workflowDesignForm,steps:workflowSteps.value,highRiskOnlyLast:workflowHighRiskLast.value});
   }
   message.success('工作流草稿已保存；未启用任何 SQL 执行');
   workflowDesignerOpen.value=false;await loadWorkflowDesigns();
@@ -56,12 +83,24 @@ async function publishWorkflowDesign(row:{id:string;revision:number;version:numb
 function workflowDesignOpenReset(){
  workflowDesignForm.code='';workflowDesignForm.name='SQL 双级审批';
  workflowDesignForm.ownerLabel='数据源负责人审核';workflowDesignForm.dbaLabel='DBA 审核';
+ workflowSteps.value=[{role:'db-owner',label:'数据源负责人审核'},
+   {role:'dba',label:'DBA 审核'}];workflowHighRiskLast.value=false;
  workflowDesignerOpen.value=true;
 }
-function editWorkflowDesign(row:{id:string;code:string;name:string;version:number}){
+async function editWorkflowDesign(row:{id:string;code:string;name:string;version:number}){
  workflowDesignTarget.value={id:row.id,version:row.version};
  workflowDesignForm.code=row.code;workflowDesignForm.name=row.name;
- workflowDesignerOpen.value=true;
+ error.value='';
+ try{
+  const versions=await getData<{revision:number;status:string;processKey:string;
+    steps:WorkflowStep[];highRiskOnlyLast:boolean}[]>(
+    '/api/v1/workflow-designs/'+encodeURIComponent(row.id)+'/versions');
+  if(versions.length){
+   workflowSteps.value=versions[0].steps.map(x=>({...x}));
+   workflowHighRiskLast.value=versions[0].highRiskOnlyLast;
+  }
+  workflowDesignerOpen.value=true;
+ }catch(e){error.value='读取流程修订失败：'+(e as Error).message;}
 }
 
 const deadLetters=ref<{id:string;type:string;approvalId:string;attempts:number;createdAt:string}[]>([]);
@@ -808,21 +847,40 @@ async function updatePassword(){
     <template #bodyCell="{column,record}"><a-popconfirm v-if="column.key==='actions'" title="确认停用？" @confirm="disableMaskRule(record.id)"><a-button danger type="link" size="small">停用</a-button></a-popconfirm></template>
    </a-table>
   </a-modal>
-  <a-modal v-model:open="workflowDesignerOpen" title="工作流可视化设计 · 安全双级审批" width="780px" :footer="null">
-   <a-alert type="info" show-icon message="目前仅支持经认证的固定双人审批拓扑；不允许脚本、任意 BPMN 或自动执行 SQL。"/>
-   <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:22px 0">
-    <a-card size="small" style="width:22%;text-align:center">开始</a-card><span>→</span>
-    <a-card size="small" style="width:30%;text-align:center">{{workflowDesignForm.ownerLabel}}</a-card><span>→</span>
-    <a-card size="small" style="width:30%;text-align:center">{{workflowDesignForm.dbaLabel}}</a-card><span>→</span>
-    <a-card size="small" style="width:16%;text-align:center">结束</a-card>
-   </div>
-   <a-form layout="vertical">
+  <a-modal v-model:open="workflowDesignerOpen" title="通用流程编排 · 安全审批节点" width="880px" :footer="null">
+   <a-alert type="info" show-icon message="支持 2–6 个角色审批节点、拖动排序及预定义高风险条件分支。禁止任意脚本和不安全 BPMN 表达式。"/>
+   <a-form layout="vertical" style="margin-top:16px">
     <a-form-item label="流程编码"><a-input v-model:value="workflowDesignForm.code" :disabled="!!workflowDesignTarget" placeholder="sql_review"/></a-form-item>
     <a-form-item label="流程名称"><a-input v-model:value="workflowDesignForm.name"/></a-form-item>
-    <a-form-item label="第一审批节点"><a-input v-model:value="workflowDesignForm.ownerLabel"/></a-form-item>
-    <a-form-item label="第二审批节点"><a-input v-model:value="workflowDesignForm.dbaLabel"/></a-form-item>
-    <a-button type="primary" :loading="saving" @click="saveWorkflowDesign">保存流程草稿</a-button>
    </a-form>
+   <div style="display:flex;align-items:center;gap:8px;overflow-x:auto;margin:16px 0;padding:8px">
+    <a-tag color="blue">开始</a-tag>
+    <template v-for="(step,index) in workflowSteps" :key="index">
+     <span>→</span>
+     <div draggable="true" @dragstart="workflowDragging=index" @dragover.prevent @drop.prevent="dropWorkflowStep(index)"
+       @dragend="workflowDragging=null" style="border:1px solid #d0d7de;border-radius:10px;padding:12px;min-width:170px;cursor:move">
+      <strong>{{index+1}}. {{step.label}}</strong>
+      <div style="font-size:12px;color:#888">{{step.role}}</div>
+      <a-tag v-if="workflowHighRiskLast && index===workflowSteps.length-1" color="orange">仅高风险</a-tag>
+     </div>
+    </template>
+    <span>→</span><a-tag color="green">结束</a-tag>
+   </div>
+   <div v-for="(step,index) in workflowSteps" :key="'input-'+index"
+     style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+    <span style="width:55px">{{index+1}} 级</span>
+    <a-input v-model:value="step.label" placeholder="节点名称" style="flex:2"/>
+    <a-input v-model:value="step.role" placeholder="角色编码" style="flex:1"/>
+    <a-button size="small" :disabled="index===0" @click="moveWorkflowStep(index,index-1)">上移</a-button>
+    <a-button size="small" :disabled="index===workflowSteps.length-1" @click="moveWorkflowStep(index,index+1)">下移</a-button>
+    <a-button danger size="small" :disabled="workflowSteps.length<=2" @click="removeWorkflowStep(index)">删除</a-button>
+   </div>
+   <a-space wrap style="margin:12px 0">
+    <a-button :disabled="workflowSteps.length>=6" @click="addWorkflowStep">增加审批节点</a-button>
+    <a-switch v-model:checked="workflowHighRiskLast" :disabled="workflowSteps.length<3"/>
+    <span>最后一级仅在 HIGH / CRITICAL 风险时执行</span>
+   </a-space>
+   <div><a-button type="primary" :loading="saving" @click="saveWorkflowDesign">保存新修订</a-button></div>
   </a-modal>
   <a-modal v-model:open="approvalDialog" title="审核 SQL 变更申请" ok-text="确认审核通过"
    :confirm-loading="saving" @ok="approveTask">
