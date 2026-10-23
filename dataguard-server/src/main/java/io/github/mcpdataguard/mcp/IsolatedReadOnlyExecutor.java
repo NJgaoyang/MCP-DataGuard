@@ -68,7 +68,8 @@ public final class IsolatedReadOnlyExecutor {
     if(!status.next() || !"on".equalsIgnoreCase(status.getString(1)))
      throw new SecurityException("PHYSICAL_READ_ONLY_REQUIRED");
    }
-   // A server-side read-only role is still required: JDBC flags are not an ACL.\n   try(PreparedStatement statement=connection.prepareStatement(request.sql(),
+   // A server-side read-only role is still required: JDBC flags are not an ACL.
+   try(PreparedStatement statement=connection.prepareStatement(request.sql(),
         ResultSet.TYPE_FORWARD_ONLY,ResultSet.CONCUR_READ_ONLY)){
     statement.setQueryTimeout(request.timeoutSeconds());
     statement.setMaxRows(request.maxRows());
@@ -92,7 +93,7 @@ public final class IsolatedReadOnlyExecutor {
       List<Object> row=new ArrayList<>();
       for(int i=1;i<=columns.size();i++){
        Object value=rs.getObject(i);
-       // Conservative result policy: redact text-like fields by default.
+       // Conservative result policy: redact all non-null fields by default.
        // A certified masking engine is needed before plaintext output is enabled.
        Object output=value==null?null:"[REDACTED]";
        bytes+=String.valueOf(output).getBytes(StandardCharsets.UTF_8).length;
