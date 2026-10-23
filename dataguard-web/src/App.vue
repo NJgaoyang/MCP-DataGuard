@@ -9,6 +9,11 @@ const pages=[
 const selected=ref('dashboard');
 const sqlPolicies=ref<{id:string;code:string;name:string;status:string}[]>([]);
 const policyDialog=ref(false);
+const systemEvents=ref<{id:string;actor:string;operation:string;resourceType:string|null;resourceId:string|null;createdAt:string}[]>([]);
+async function loadAuditEvents(){
+ try{systemEvents.value=await getData<typeof systemEvents.value>('/api/v1/system-events?limit=100');}
+ catch(e){error.value='查询系统操作审计失败：'+(e as Error).message;}
+}
 const policyForm=reactive({code:'',name:''});
 const policyRuleDialog=ref(false);
 const policyTarget=ref({id:'',name:''});
@@ -343,7 +348,7 @@ async function updatePassword(){
   <aside class="sidebar">
    <div class="brand"><span class="symbol">◆</span><div>MCP DataGuard<small>AI DATABASE SECURITY</small></div></div>
    <span class="section">工作台</span>
-   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies()}">{{page[1]}}</button>
+   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit')loadAuditEvents()}">{{page[1]}}</button>
    <div class="foot">● 开源研发版 · v0.5</div>
   </aside>
   <main class="main">
@@ -417,6 +422,15 @@ async function updatePassword(){
       </a-table>
      </section>
 
+     <section v-else-if="selected==='audit'" class="panel">
+      <div class="panel-heading"><h3>管理操作审计</h3><a-button size="small" @click="loadAuditEvents">刷新</a-button></div>
+      <a-alert type="info" show-icon message="当前仅展示管理操作事件；完整 SQL 调用审计、监控和告警仍待实现。"/>
+      <a-table style="margin-top:16px" row-key="id" size="small" :data-source="systemEvents"
+       :pagination="{pageSize:10}"
+       :columns="[{title:'时间',dataIndex:'createdAt'},{title:'操作',dataIndex:'operation'},
+        {title:'操作者',dataIndex:'actor'},{title:'资源类型',dataIndex:'resourceType'},
+        {title:'资源编号',dataIndex:'resourceId'}]"/>
+     </section>
      <section v-else-if="selected==='rules'" class="panel">
       <div class="panel-heading"><h3>SQL 安全策略草稿</h3><div class="actions">
        <a-button size="small" @click="loadPolicies">刷新</a-button>
