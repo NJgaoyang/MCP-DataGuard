@@ -30,7 +30,7 @@ class ExecutionEligibilityServiceTest {
   verify(jdbc).query(query.capture(),any(RowMapper.class),any(Object[].class));
   assertTrue(query.getValue().contains("flowable_task_id LIKE 'platform:%'"));
   assertTrue(query.getValue().contains("e.state<>'PUBLISHED'"));
-  assertTrue(query.getValue().contains("e.state='PUBLISHED')=2"));
+  assertTrue(query.getValue().contains("AS published_stages"));
 
  }
 }
