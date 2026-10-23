@@ -27,6 +27,7 @@ public class ApprovalOutboxWorker {
  private final ReviewProcessService workflow;
  private final RuntimeService runtime;
  private final TaskService tasks;
+ private CertifiedWorkflowDeployment dynamic;
  public ApprovalOutboxWorker(
      @Value("${dataguard.workflow.outbox.jdbc-url:}") String jdbcUrl,
      @Value("${dataguard.workflow.outbox.user:}") String user,
@@ -36,6 +37,16 @@ public class ApprovalOutboxWorker {
    throw new IllegalStateException("Platform outbox credentials required");
   this.jdbcUrl=jdbcUrl;this.user=user;this.password=password;
   this.workflow=workflow;this.runtime=runtime;this.tasks=tasks;
+ }
+ @org.springframework.beans.factory.annotation.Autowired
+ public ApprovalOutboxWorker(
+     @Value("${dataguard.workflow.outbox.jdbc-url:}") String jdbcUrl,
+     @Value("${dataguard.workflow.outbox.user:}") String user,
+     @Value("${dataguard.workflow.outbox.password:}") String password,
+     ReviewProcessService workflow,RuntimeService runtime,TaskService tasks,
+     CertifiedWorkflowDeployment dynamic){
+  this(jdbcUrl,user,password,workflow,runtime,tasks);
+  this.dynamic=dynamic;
  }
  @Scheduled(fixedDelayString="${dataguard.workflow.outbox.poll-ms:10000}")
  public void poll(){
@@ -66,7 +77,24 @@ public class ApprovalOutboxWorker {
       if(instanceId==null){
        var active=runtime.createProcessInstanceQuery()
          .processInstanceBusinessKey(approval.toString()).singleResult();
-       instanceId=active!=null?active.getId():workflow.start(approval.toString(),org.toString());
+       if(active!=null){
+        instanceId=active.getId();
+       }else if(dynamic!=null && dynamic.enabled()){
+        // The version is resolved through this approval's immutable workflow binding.
+        try(PreparedStatement definition=c.prepareStatement("""
+          SELECT v.bpmn_xml FROM platform.dg_sql_approval a
+          JOIN platform.dg_workflow_version v ON v.org_id=a.org_id AND v.id=a.workflow_version_id
+          WHERE a.org_id=? AND a.id=? AND v.status='PUBLISHED'
+          """)){
+         definition.setObject(1,org);definition.setObject(2,approval);
+         try(ResultSet version=definition.executeQuery()){
+          if(!version.next())throw new SecurityException("Published workflow missing");
+          instanceId=dynamic.start(version.getString(1),approval.toString(),org.toString());
+         }
+        }
+       }else{
+        instanceId=workflow.start(approval.toString(),org.toString());
+       }
        try(PreparedStatement u=c.prepareStatement("""
          UPDATE platform.dg_sql_approval SET process_instance_id=?,updated_at=now()
          WHERE org_id=? AND id=? AND process_instance_id IS NULL
