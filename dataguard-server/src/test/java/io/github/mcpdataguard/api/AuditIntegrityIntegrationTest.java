@@ -17,7 +17,8 @@ class AuditIntegrityIntegrationTest {
  @Test void detectsTamperedAuditEventAndHonorsTenantScope(){
   String url=System.getenv("DG_OUTBOX_E2E_URL");
   Assumptions.assumeTrue(url!=null && url.startsWith("jdbc:postgresql://127.0.0.1:5432/"));
-  JdbcTemplate db=new JdbcTemplate(new DriverManagerDataSource(\n    url+"?currentSchema=platform","postgres","test-only"));
+  JdbcTemplate db=new JdbcTemplate(new DriverManagerDataSource(
+    url+"?currentSchema=platform","postgres","test-only"));
   UUID org=UUID.randomUUID(),user=UUID.randomUUID(),agent=UUID.randomUUID(),
     source=UUID.randomUUID(),request=UUID.randomUUID();
   db.update("INSERT INTO platform.dg_organization(id,code,name) VALUES(?,?,?)",
