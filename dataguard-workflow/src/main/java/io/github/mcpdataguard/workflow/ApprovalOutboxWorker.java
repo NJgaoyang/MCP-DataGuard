@@ -82,14 +82,23 @@ public class ApprovalOutboxWorker {
        }else if(dynamic!=null && dynamic.enabled()){
         // The version is resolved through this approval's immutable workflow binding.
         try(PreparedStatement definition=c.prepareStatement("""
-          SELECT v.bpmn_xml FROM platform.dg_sql_approval a
+          SELECT v.bpmn_xml,v.bpmn_digest FROM platform.dg_sql_approval a
           JOIN platform.dg_workflow_version v ON v.org_id=a.org_id AND v.id=a.workflow_version_id
           WHERE a.org_id=? AND a.id=? AND v.status='PUBLISHED'
           """)){
          definition.setObject(1,org);definition.setObject(2,approval);
          try(ResultSet version=definition.executeQuery()){
           if(!version.next())throw new SecurityException("Published workflow missing");
-          instanceId=dynamic.start(version.getString(1),approval.toString(),org.toString());
+          String xml=version.getString(1);
+          String expectedDigest=version.getString(2);
+          String actualDigest=java.util.HexFormat.of().formatHex(
+            java.security.MessageDigest.getInstance("SHA-256")
+             .digest(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+          if(expectedDigest==null || !java.security.MessageDigest.isEqual(
+             actualDigest.getBytes(java.nio.charset.StandardCharsets.US_ASCII),
+             expectedDigest.getBytes(java.nio.charset.StandardCharsets.US_ASCII)))
+           throw new SecurityException("PUBLISHED_BPMN_DIGEST_MISMATCH");
+          instanceId=dynamic.start(xml,approval.toString(),org.toString());
          }
         }
        }else{
