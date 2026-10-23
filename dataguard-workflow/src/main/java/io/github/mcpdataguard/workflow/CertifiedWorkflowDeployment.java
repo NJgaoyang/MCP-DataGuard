@@ -66,7 +66,7 @@ public class CertifiedWorkflowDeployment {
         "sqlExecutionEnabled",false)).getId();
  }
  public static void verify(String xml){
-  if(xml!=null&&xml.contains("id=\\\"safeWorkflowV2\\\"")){
+  if(xml!=null&&xml.contains("safeWorkflowV2")){
    SafeApprovalGraph.parseCertified(xml);
    return;
   }
