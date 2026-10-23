@@ -27,19 +27,19 @@ public class NativeAuthController {
  @PostMapping("/login")
  @Transactional(noRollbackFor=ResponseStatusException.class)
  public AuthResult login(@RequestBody Login input){
-  if(input==null || input.organization()==null || !input.organization().matches("[a-z][a-z0-9_-]{2,79}")
-     || input.username()==null || !input.username().matches("[A-Za-z0-9_.@-]{3,128}")
+  if(input==null || input.username()==null || !input.username().matches("[A-Za-z0-9_.@-]{3,128}")
      || input.password()==null || input.password().length()>256)throw invalid();
   List<Account> rows=jdbc.query("""
     SELECT u.org_id,u.id,u.password_hash,u.failed_login_attempts,u.login_locked_until,
            u.must_change_password
     FROM dg_user u JOIN dg_organization o ON o.id=u.org_id
-    WHERE o.code=? AND o.status='ACTIVE' AND u.username=? AND u.status='ACTIVE'
+    WHERE o.status='ACTIVE' AND u.username=? AND u.status='ACTIVE'
+      AND (SELECT count(*) FROM dg_organization WHERE status='ACTIVE')=1
     FOR UPDATE OF u
     """,(rs,i)->new Account(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class),
      rs.getString(3),rs.getInt(4),
      rs.getTimestamp(5)==null?null:rs.getTimestamp(5).toInstant(),rs.getBoolean(6)),
-     input.organization(),input.username());
+     input.username());
   Account u=rows.size()==1?rows.get(0):null;
   if(u==null || u.hash()==null){
    NativeTokens.passwords().matches(input.password(),DUMMY);
