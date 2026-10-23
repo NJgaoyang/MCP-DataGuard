@@ -31,9 +31,9 @@ public final class SqlPreflightService {
       !(x instanceof String || x instanceof Number || x instanceof Boolean))))
    return denied("INVALID_PARAMETERS");
   List<Source> sources=jdbc.query("""
-     SELECT d.db_type,d.database_name FROM dg_datasource d
+     SELECT d.db_type,d.database_name,d.environment FROM dg_datasource d
      WHERE d.org_id=? AND d.id=? AND d.status='ACTIVE'
-     """,(rs,i)->new Source(rs.getString(1),rs.getString(2)),agent.orgId(),id);
+     """,(rs,i)->new Source(rs.getString(1),rs.getString(2),rs.getString(3)),agent.orgId(),id);
   if(sources.size()!=1)return denied("DATASOURCE_NOT_AVAILABLE");
   Source source=sources.get(0);
   if(database==null || !database.equals(source.databaseName()))return denied("DATABASE_MISMATCH");
@@ -71,6 +71,17 @@ public final class SqlPreflightService {
        agent.orgId(),agent.agentId(),id,table);
   if(!ColumnGrantPolicy.allows(table,required,grants))
     return denied("COLUMN_GRANT_NOT_AVAILABLE_OR_DENIED");
+  // Active hard-deny rules are enforceable even while the executor stays disabled.
+  Boolean hardDeny=jdbc.queryForObject("""
+   SELECT EXISTS(SELECT 1 FROM dg_sql_policy p
+      JOIN dg_sql_policy_version v ON v.org_id=p.org_id AND v.policy_id=p.id
+       AND v.revision=p.latest_version
+     WHERE p.org_id=? AND p.status='ACTIVE'
+       AND v.published_at IS NOT NULL AND v.decision='DENY'
+       AND v.rule->>'table'=? AND v.rule->>'environment'=?
+       AND v.rule->>'operation'='SELECT')
+   """,Boolean.class,agent.orgId(),table,source.environment());
+  if(Boolean.TRUE.equals(hardDeny))return denied("SQL_POLICY_HARD_DENY");
   // Deliberately deny even if an ACL record exists: syntax regex is not an AST.
   return Map.of("code","AST_AND_EXECUTOR_NOT_CERTIFIED","decision","DENY",
    "retryable",false,"operation","SELECT","object",table,
@@ -79,5 +90,5 @@ public final class SqlPreflightService {
  private static Map<String,Object> denied(String code){
   return Map.of("code",code,"decision","DENY","retryable",false);
  }
- private record Source(String dialect,String databaseName){}
+ private record Source(String dialect,String databaseName,String environment){}
 }
