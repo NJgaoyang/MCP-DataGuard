@@ -26,5 +26,11 @@ class ExecutionEligibilityServiceTest {
     UUID.randomUUID(),UUID.randomUUID(),"a".repeat(64),"b".repeat(64));
   assertFalse(result.eligible());
   assertEquals("APPROVAL_NOT_ELIGIBLE",result.reason());
+  var query=org.mockito.ArgumentCaptor.forClass(String.class);
+  verify(jdbc).query(query.capture(),any(RowMapper.class),any(Object[].class));
+  assertTrue(query.getValue().contains("flowable_task_id LIKE 'platform:%'"));
+  assertTrue(query.getValue().contains("e.state<>'PUBLISHED'"));
+  assertTrue(query.getValue().contains("e.state='PUBLISHED')=2"));
+
  }
 }
