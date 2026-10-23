@@ -12,6 +12,28 @@ const policyDialog=ref(false);
 const operationalSummary=ref<{deniedRequests:number;pendingApprovals:number;openAlerts:number}|null>(null);
 const sqlRequestRows=ref<Record<string,unknown>[]>([]);
 const approvalRows=ref<Record<string,unknown>[]>([]);
+const deadLetters=ref<{id:string;type:string;approvalId:string;attempts:number;createdAt:string}[]>([]);
+async function loadDeadLetters(){
+ try{deadLetters.value=await getData<typeof deadLetters.value>('/api/v1/workflow-events/dead-letters');}
+ catch(e){error.value='读取审批死信失败：'+(e as Error).message;}
+}
+async function retryDeadLetter(id:string){
+ saving.value=true;error.value='';
+ try{
+  await requestWrite('/api/v1/workflow-events/'+encodeURIComponent(id)+'/retry','POST');
+  message.success('事件已加入安全重试队列');await loadDeadLetters();
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
+}
+const auditVerification=ref('');
+async function verifyAuditStream(stream:string){
+ try{
+  const result=await getData<{verified:boolean;code:string;checked?:number}>(
+    '/api/v1/audit-integrity?stream='+encodeURIComponent(stream));
+  auditVerification.value=(result.verified?'完整性验证通过：':'完整性验证失败：')
+    +result.code+'（'+String(result.checked??0)+' 条）';
+ }catch(e){error.value='验证审计链失败：'+(e as Error).message;}
+}
 const securityAlerts=ref<{id:string;status:string;severity:string;rule:string;observedAt:string}[]>([]);
 async function loadSecurityAlerts(){
  try{securityAlerts.value=await getData<typeof securityAlerts.value>('/api/v1/security-alerts');}
@@ -83,6 +105,40 @@ const mustChange=ref(false);
 const forcedPasswordChange=ref(false);
 const changeForm=reactive({currentPassword:'',newPassword:''});
 const agentTokenOnce=ref('');
+const maskDialog=ref(false);
+const maskTarget=ref({id:'',name:''});
+const maskForm=reactive({table:'',column:'',algorithm:'REDACT',priority:100});
+const maskRows=ref<{id:string;table:string;column:string;algorithm:string;priority:number}[]>([]);
+async function loadMaskRules(){
+ if(!maskTarget.value.id)return;
+ try{maskRows.value=await getData<typeof maskRows.value>(
+  '/api/v1/mask-rules?datasourceId='+encodeURIComponent(maskTarget.value.id));}
+ catch(e){error.value='查询脱敏规则失败：'+(e as Error).message;}
+}
+async function openMaskDialog(record:Record<string,unknown>){
+ maskTarget.value={id:String(record.id),name:String(record.name)};
+ maskDialog.value=true;await loadMaskRules();
+}
+async function saveMaskRule(){
+ saving.value=true;error.value='';
+ try{
+  if(!/^[a-z][a-z0-9_]{0,254}$/.test(maskForm.table)||
+     !/^[a-z][a-z0-9_]{0,254}$/.test(maskForm.column))
+   throw new Error('请输入精确的表名和字段名');
+  await requestWrite('/api/v1/mask-rules','POST',{
+   datasourceId:maskTarget.value.id,...maskForm});
+  message.success('脱敏规则已保存');await loadMaskRules();
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
+}
+async function disableMaskRule(id:string){
+ saving.value=true;error.value='';
+ try{
+  await requestWrite('/api/v1/mask-rules/'+encodeURIComponent(id),'DELETE');
+  message.success('脱敏规则已停用');await loadMaskRules();
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
+}
 const grantDialog=ref(false);
 const grantAgent=ref({id:'',name:''});
 const grantForm=reactive({datasourceId:'',table:'',column:'',action:'ALLOW' as 'ALLOW'|'DENY'});
@@ -438,7 +494,7 @@ async function updatePassword(){
   <aside class="sidebar">
    <div class="brand"><span class="symbol">◆</span><div>MCP DataGuard<small>AI DATABASE SECURITY</small></div></div>
    <span class="section">工作台</span>
-   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations();loadSecurityAlerts()};if(page[0]==='flowable')loadOperations()}">{{page[1]}}</button>
+   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations();loadSecurityAlerts()};if(page[0]==='flowable'){loadOperations();loadDeadLetters()}}">{{page[1]}}</button>
    <div class="foot">● 开源研发版 · v0.5</div>
   </aside>
   <main class="main">
@@ -503,6 +559,7 @@ async function updatePassword(){
         <template v-if="column.key==='actions'">
          <a-button size="small" type="link" @click="editDatasource(record)">编辑</a-button>
          <a-button size="small" type="link" @click="openCredentials(record)">凭据引用</a-button>
+         <a-button size="small" type="link" @click="openMaskDialog(record)">字段脱敏</a-button>
          <a-button size="small" type="link" @click="testDatasource(record)">测试连接</a-button>
          <a-popconfirm v-if="record.status!=='DISABLED'" title="确认停用数据源？" ok-text="停用" cancel-text="取消" @confirm="disableDatasource(record)">
           <a-button size="small" type="link" danger>停用</a-button>
@@ -524,7 +581,18 @@ async function updatePassword(){
          <a-button danger type="link" size="small" @click="rejectingApproval={id:String(record.id),version:Number(record.version)};rejectionDialog=true">拒绝</a-button>
         </template>
        </template>
-      </a-table>"/>
+      </a-table>
+      <h4 style="margin-top:20px">审批失败事件与死信</h4>
+      <a-table row-key="id" size="small" :data-source="deadLetters" :pagination="{pageSize:5}"
+       :columns="[{title:'事件',dataIndex:'type'},{title:'工单',dataIndex:'approvalId'},
+         {title:'重试次数',dataIndex:'attempts'},{title:'操作',key:'actions'}]">
+       <template #bodyCell="{column,record}">
+        <a-popconfirm v-if="column.key==='actions'" title="确认将此事件重新加入安全审批队列？"
+          @confirm="retryDeadLetter(record.id)">
+         <a-button type="link" size="small">安全重试</a-button>
+        </a-popconfirm>
+       </template>
+      </a-table>
      </section>
      <section v-else-if="selected==='audit'" class="panel">
       <div class="panel-heading"><h3>管理操作审计</h3><a-button size="small" @click="loadAuditEvents">刷新</a-button></div>
@@ -551,6 +619,11 @@ async function updatePassword(){
         </a-popconfirm>
        </template>
       </a-table>
+      <h4>审计链完整性</h4>
+      <div class="actions"><a-button size="small" @click="verifyAuditStream('mcp-denied-sql')">核验拒绝请求链</a-button>
+      <a-button size="small" @click="verifyAuditStream('mcp-read-sql')">核验只读执行链</a-button></div>
+      <a-alert v-if="auditVerification" style="margin-top:8px" :type="auditVerification.startsWith('完整性验证通过')?'success':'error'"
+        :message="auditVerification" show-icon/>
       <h4>管理操作历史</h4>
       <a-table style="margin-top:16px" row-key="id" size="small" :data-source="systemEvents"
        :pagination="{pageSize:10}"
@@ -614,6 +687,20 @@ async function updatePassword(){
    </div>
   </main>
 
+  <a-modal v-model:open="maskDialog" :title="'字段脱敏 · '+maskTarget.name" :footer="null" width="700px">
+   <a-alert type="info" show-icon message="仅允许 REDACT 和 NULLIFY；没有匹配规则时仍默认 REDACT。"/>
+   <a-form layout="vertical" style="margin-top:16px">
+    <a-form-item label="表名"><a-input v-model:value="maskForm.table" placeholder="orders"/></a-form-item>
+    <a-form-item label="字段名"><a-input v-model:value="maskForm.column" placeholder="account_number"/></a-form-item>
+    <a-form-item label="脱敏方式"><a-radio-group v-model:value="maskForm.algorithm"><a-radio value="REDACT">REDACT 替换</a-radio><a-radio value="NULLIFY">NULLIFY 置空</a-radio></a-radio-group></a-form-item>
+    <a-form-item label="优先级"><a-input-number v-model:value="maskForm.priority" :min="1" :max="10000"/></a-form-item>
+    <a-button type="primary" :loading="saving" @click="saveMaskRule">保存字段脱敏规则</a-button>
+   </a-form>
+   <a-table size="small" row-key="id" :data-source="maskRows" :pagination="{pageSize:5}"
+    :columns="[{title:'表名',dataIndex:'table'},{title:'字段',dataIndex:'column'},{title:'算法',dataIndex:'algorithm'},{title:'操作',key:'actions'}]">
+    <template #bodyCell="{column,record}"><a-popconfirm v-if="column.key==='actions'" title="确认停用？" @confirm="disableMaskRule(record.id)"><a-button danger type="link" size="small">停用</a-button></a-popconfirm></template>
+   </a-table>
+  </a-modal>
   <a-modal v-model:open="approvalDialog" title="审核 SQL 变更申请" ok-text="确认审核通过"
    :confirm-loading="saving" @ok="approveTask">
    <a-alert type="warning" show-icon message="必须由两名不同审核人完成两级审批；审批通过也不会自动执行写 SQL。"/>
