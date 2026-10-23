@@ -57,7 +57,9 @@ public class CertifiedWorkflowDeployment {
   }else{
    var definition=repository.createProcessDefinitionQuery()
      .deploymentId(previous.get(0).getId()).singleResult();
-   if(definition==null || !"sqlTwoLevelReview".equals(definition.getKey()))
+   if(definition==null ||
+      !("sqlTwoLevelReview".equals(definition.getKey())||
+        "safeWorkflowV2".equals(definition.getKey())))
     throw new SecurityException("CERTIFIED_DEFINITION_MISSING");
    definitionId=definition.getId();
   }
