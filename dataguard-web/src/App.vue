@@ -12,6 +12,21 @@ const policyDialog=ref(false);
 const operationalSummary=ref<{deniedRequests:number;pendingApprovals:number;openAlerts:number}|null>(null);
 const sqlRequestRows=ref<Record<string,unknown>[]>([]);
 const approvalRows=ref<Record<string,unknown>[]>([]);
+const rejectionDialog=ref(false);
+const rejectingApproval=ref({id:'',version:0});
+const rejectionReason=ref('');
+async function rejectApproval(){
+ if(!rejectionReason.value.trim()){error.value='请输入驳回原因';return;}
+ saving.value=true;error.value='';
+ try{
+  await requestWrite('/api/v1/approvals/'+encodeURIComponent(rejectingApproval.value.id)+'/reject','POST',
+    {reason:rejectionReason.value,expectedVersion:rejectingApproval.value.version});
+  rejectionDialog.value=false;rejectionReason.value='';message.success('工单已拒绝并阻止执行');
+  await loadOperations();
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
+}
+
 async function loadOperations(){
  try{
   const [summary,requests,approvals]=await Promise.all([
@@ -463,7 +478,12 @@ async function updatePassword(){
       <a-alert type="info" show-icon message="仅显示审批记录，不开放审批执行操作；Flowable 任务闭环仍待验收。"/>
       <a-table style="margin-top:16px" row-key="id" size="small" :data-source="approvalRows"
        :columns="[{title:'审批编号',dataIndex:'id'},{title:'审批状态',dataIndex:'approvalStatus'},
-        {title:'执行状态',dataIndex:'executionStatus'},{title:'到期时间',dataIndex:'expiresAt'}]"/>
+        {title:'执行状态',dataIndex:'executionStatus'},{title:'到期时间',dataIndex:'expiresAt'},{title:'操作',key:'actions'}]">
+       <template #bodyCell="{column,record}">
+        <a-button v-if="column.key==='actions' && record.approvalStatus==='PENDING' && record.executionStatus==='NOT_SCHEDULED'"
+         danger type="link" size="small" @click="rejectingApproval={id:String(record.id),version:Number(record.version)};rejectionDialog=true">拒绝</a-button>
+       </template>
+      </a-table>"/>
      </section>
      <section v-else-if="selected==='audit'" class="panel">
       <div class="panel-heading"><h3>管理操作审计</h3><a-button size="small" @click="loadAuditEvents">刷新</a-button></div>
@@ -541,6 +561,10 @@ async function updatePassword(){
    </div>
   </main>
 
+  <a-modal v-model:open="rejectionDialog" title="拒绝审批工单" ok-text="确认拒绝" :confirm-loading="saving" @ok="rejectApproval">
+   <a-alert type="warning" show-icon message="拒绝后不会启动 SQL 执行；审批人不能拒绝自己的申请。"/>
+   <a-form-item label="拒绝原因" style="margin-top:14px"><a-textarea v-model:value="rejectionReason" :maxlength="1000" :rows="3"/></a-form-item>
+  </a-modal>
   <a-modal v-model:open="policyRuleDialog" :title="'规则草稿版本 · '+policyTarget.name" :footer="null" width="760px">
    <a-alert type="warning" show-icon message="当前仅保存拒绝/人工审批规则草稿；没有发布或执行权限。"/>
    <a-form layout="vertical" style="margin-top:16px">
