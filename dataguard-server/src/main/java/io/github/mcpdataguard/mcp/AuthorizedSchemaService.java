@@ -58,7 +58,27 @@ public final class AuthorizedSchemaService {
   List<String> columns=jdbc.query("""
     SELECT DISTINCT g.column_pattern FROM dg_object_grant g
     WHERE g.org_id=? AND g.agent_id=? AND g.datasource_id=?
-      AND g.table_pattern=? AND g.column_pattern<>'*' AND 'SELECT'=ANY(g.operations)
+      AND g.table_pattern=? AND g.column_pattern ~ '^[a-z][a-z0-9_]*
+      AND g.decision='ALLOW'
+      AND (g.schema_pattern='*' OR g.schema_pattern=?)
+      AND NOT EXISTS(SELECT 1 FROM dg_object_grant x
+        WHERE x.org_id=g.org_id AND x.agent_id=g.agent_id AND x.datasource_id=g.datasource_id
+          AND (x.table_pattern='*' OR x.table_pattern=g.table_pattern)
+          AND (x.schema_pattern='*' OR x.schema_pattern=?)
+          AND (x.column_pattern='*' OR x.column_pattern=g.column_pattern)
+          AND 'SELECT'=ANY(x.operations) AND x.decision='DENY')
+    ORDER BY g.column_pattern LIMIT ? OFFSET ?
+    """,(rs,i)->rs.getString(1),actor.orgId(),actor.agentId(),id,table,
+       schema==null?"":schema,schema==null?"":schema,limit+1,offset);
+  if(columns.isEmpty() && offset==0)return deny("NO_AUTHORIZED_COLUMNS");
+  boolean more=columns.size()>limit;
+  return Map.of("decision","ALLOW","metadataSource","CONFIGURED_GRANTS_ONLY",
+   "physicalSchemaVerified",false,"schema",schema==null?"":schema,"table",table,
+   "columns",more?columns.subList(0,limit):columns,
+   "hasMore",more,"nextCursor",more?Integer.toString(offset+limit):"");
+ }
+}
+\n      AND 'SELECT'=ANY(g.operations)
       AND g.decision='ALLOW'
       AND (g.schema_pattern='*' OR g.schema_pattern=?)
       AND NOT EXISTS(SELECT 1 FROM dg_object_grant x
