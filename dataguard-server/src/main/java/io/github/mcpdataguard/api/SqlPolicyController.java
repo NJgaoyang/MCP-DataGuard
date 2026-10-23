@@ -96,14 +96,14 @@ public class SqlPolicyController {
  public List<Map<String,Object>> versions(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID policyId){
   UserPrincipal u=admin(jwt);
   return jdbc.query("""
-   SELECT v.revision,v.priority,v.decision,v.rule::text AS rule
+   SELECT v.revision,v.priority,v.decision,v.rule::text AS rule,\n    (v.published_at IS NOT NULL) AS published
    FROM dg_sql_policy_version v JOIN dg_sql_policy p
       ON p.org_id=v.org_id AND p.id=v.policy_id
    WHERE v.org_id=? AND v.policy_id=? AND p.status='DRAFT'
    ORDER BY v.revision DESC LIMIT 100
    """,(rs,i)->Map.<String,Object>of("revision",rs.getInt("revision"),
      "priority",rs.getInt("priority"),"decision",rs.getString("decision"),
-     "rule",rs.getString("rule")),u.orgId(),policyId);
+     "rule",rs.getString("rule"),"published",rs.getBoolean("published")),u.orgId(),policyId);
  }
  @PostMapping("/{policyId}/versions")
  @Transactional
