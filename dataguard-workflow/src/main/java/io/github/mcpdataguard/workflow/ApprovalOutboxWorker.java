@@ -97,7 +97,51 @@ public class ApprovalOutboxWorker {
     }
    }catch(Exception e){c.rollback();throw e;}
   }catch(Exception e){
+   // Do not leak event payload or database errors into logs.
    System.err.println("Approval outbox dispatch failed (details redacted)");
+   retryFailedEvent();
+  }
+ }
+ /**
+  * A separate transaction survives the failed business transaction. Bounded
+  * exponential delays; after 8 attempts FAILED is a dead-letter state.
+  */
+ private void retryFailedEvent(){
+  try(Connection c=DriverManager.getConnection(jdbcUrl,user,password)){
+   c.setAutoCommit(false);
+   try(PreparedStatement q=c.prepareStatement("""
+     SELECT id,org_id,attempts FROM platform.dg_outbox_event
+     WHERE state='PENDING' AND available_at<=now()
+       AND event_type IN ('APPROVAL_REQUESTED','APPROVAL_STEP_APPROVED','APPROVAL_REJECTED')
+     ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED
+     """);ResultSet rs=q.executeQuery()){
+    if(rs.next()){
+     UUID id=rs.getObject(1,UUID.class),org=rs.getObject(2,UUID.class);
+     int attempts=rs.getInt(3)+1;
+     try(PreparedStatement u=c.prepareStatement("""
+       UPDATE platform.dg_outbox_event
+       SET attempts=?,state=?,available_at=now()+(? * interval '1 second')
+       WHERE id=? AND org_id=? AND state='PENDING'
+       """)){
+      u.setInt(1,attempts);
+      u.setString(2,attempts>=8?"FAILED":"PENDING");
+      u.setInt(3,Math.min(3600,10*(1<<Math.min(attempts,8))));
+      u.setObject(4,id);u.setObject(5,org);u.executeUpdate();
+     }
+     if(attempts>=8){
+      try(PreparedStatement a=c.prepareStatement("""
+       INSERT INTO platform.dg_system_event(id,org_id,actor,operation,resource_type,resource_id)
+       VALUES (?,?,'FLOWABLE_OUTBOX_WORKER','APPROVAL_EVENT_DEAD_LETTER','OUTBOX',?)
+       """)){
+       a.setObject(1,UUID.randomUUID());a.setObject(2,org);
+       a.setString(3,id.toString());a.executeUpdate();
+      }
+     }
+    }
+   }
+   c.commit();
+  }catch(Exception ignored){
+   System.err.println("Approval outbox retry update failed (redacted)");
   }
  }
  private String lookupInstance(Connection c,UUID org,UUID approval)throws Exception{
