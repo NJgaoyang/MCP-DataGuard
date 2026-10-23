@@ -29,15 +29,14 @@ class NativeHttpSmokeTest {
   var result=http.send(request.build(),HttpResponse.BodyHandlers.ofString());
   return new Reply(result.statusCode(),result.body());
  }
- private static String token(String json){
-  int key=json.indexOf("token");
-  assertTrue(key>=0);
-  int colon=json.indexOf(':',key);
-  int start=json.indexOf('"',colon);
-  int end=json.indexOf('"',start+1);
-  assertTrue(end>start);
-  return json.substring(start+1,end);
+ private static String token(String json)throws Exception{
+  String bearer=new com.fasterxml.jackson.databind.ObjectMapper()
+    .readTree(json).path("token").asText();
+  assertTrue(bearer.matches("dg_[A-Za-z0-9_-]{43}"),
+    "Login must return a valid opaque session token");
+  return bearer;
  }
+
  @Test void realFirstLoginPasswordRotationAuthorizationMcpAndConsoleHttp()throws Exception{
   String base=System.getenv("DG_HTTP_E2E_URL"),web=System.getenv("DG_WEB_E2E_URL"),
     jdbc=System.getenv("DG_DB_E2E_URL");
