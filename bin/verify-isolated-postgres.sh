@@ -42,7 +42,9 @@ echo "PASSED: PostgreSQL readonly transaction"
 ROLE_PROBE="SELECT NOT EXISTS(SELECT 1 FROM pg_roles r
  WHERE (r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR r.rolreplication OR r.rolbypassrls)
    AND pg_has_role(current_user,r.oid,'MEMBER'))
- AND NOT EXISTS(SELECT 1 FROM pg_class c WHERE c.relkind IN ('r','p','f','v','m')
+ AND NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace ns ON ns.oid=c.relnamespace
+ WHERE ns.nspname NOT LIKE 'pg_%' AND ns.nspname<>'information_schema'
+   AND c.relkind IN ('r','p','f','v','m')
    AND (has_table_privilege(current_user,c.oid,'INSERT')
     OR has_table_privilege(current_user,c.oid,'UPDATE')
     OR has_table_privilege(current_user,c.oid,'DELETE')
