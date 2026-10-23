@@ -140,6 +140,20 @@ const policyTarget=ref({id:'',name:'',status:'',version:0,latestVersion:0});
 const policyRule=reactive({decision:'DENY',priority:100,table:'',environment:'DEV'});
 const policyVersions=ref<{revision:number;priority:number;decision:string;rule:string;published:boolean}[]>([]);
 const policySimulation=ref('');
+const effectivePolicyScope=reactive({table:'orders',environment:'TEST'});
+const effectivePolicyResult=ref('');
+async function evaluateEffectivePolicies(){
+ saving.value=true;error.value='';effectivePolicyResult.value='';
+ try{
+  const v=await requestWrite('/api/v1/sql-policies/effective-decision','POST',
+    effectivePolicyScope) as unknown as
+     {decision:string;matched:boolean;evaluatedRuleCount:number;matchedRules:{code:string;priority:number;decision:string}[]};
+  effectivePolicyResult.value='最终决策：'+v.decision+'；匹配 '+v.evaluatedRuleCount+' 条已发布规则。'+
+    v.matchedRules.map(x=>x.code+'（优先级 '+x.priority+'，'+x.decision+'）').join(' → ');
+ }catch(e){error.value=(e as Error).message;}
+ finally{saving.value=false;}
+}
+
 const token=ref('');
 const loginForm=reactive({organization:'dataguard',username:'',password:''});
 const mustChange=ref(false);
@@ -693,7 +707,17 @@ async function updatePassword(){
        <a-button size="small" @click="loadPolicies">刷新</a-button>
        <a-button type="primary" size="small" @click="policyDialog=true">创建草稿</a-button>
       </div></div>
-      <a-alert type="info" show-icon message="仅支持草稿登记，未开放策略发布、执行授权。"/>
+      <a-alert type="info" show-icon message="支持 DENY 策略受控发布、回滚和多规则优先级模拟；模拟结果绝不授予执行权限。"/>
+      <a-card size="small" style="margin:16px 0" title="已发布策略 · 多规则决策预览">
+       <a-space wrap>
+        <a-input v-model:value="effectivePolicyScope.table" placeholder="数据库表名" style="width:190px"/>
+        <a-select v-model:value="effectivePolicyScope.environment" style="width:145px"
+          :options="['DEV','TEST','STAGING','PROD'].map(x=>({label:x,value:x}))"/>
+        <a-button :loading="saving" @click="evaluateEffectivePolicies">模拟跨策略优先级</a-button>
+       </a-space>
+       <a-alert v-if="effectivePolicyResult" style="margin-top:12px" type="info" show-icon
+        :message="effectivePolicyResult"/>
+      </a-card>
       <a-table row-key="id" size="small" :data-source="sqlPolicies" :pagination="{pageSize:10}"
        :columns="[{title:'编码',dataIndex:'code'},{title:'名称',dataIndex:'name'},{title:'状态',dataIndex:'status'},{title:'操作',key:'actions'}]">
        <template #bodyCell="{column,record}">
