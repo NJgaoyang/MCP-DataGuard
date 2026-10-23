@@ -16,9 +16,11 @@ public final class SqlTools {
  private final AgentPrincipalResolver agents;
  private final AuthorizedSchemaService schemas;
  private final SqlRequestAuditService audit;
+ private final ChangeRequestService changes;
  public SqlTools(AuthorizedDatasourceService datasources,SqlPreflightService preflight,
-                 AgentPrincipalResolver agents,AuthorizedSchemaService schemas,SqlRequestAuditService audit){
-  this.datasources=datasources;this.preflight=preflight;this.agents=agents;this.schemas=schemas;this.audit=audit;
+                 AgentPrincipalResolver agents,AuthorizedSchemaService schemas,SqlRequestAuditService audit,
+                 ChangeRequestService changes){
+  this.datasources=datasources;this.preflight=preflight;this.agents=agents;this.schemas=schemas;this.audit=audit;this.changes=changes;
  }
 
  private static Map<String,Object> deny(String code) {
@@ -62,7 +64,7 @@ public final class SqlTools {
   audit.recordDeniedCheck(datasourceId,database,sql,result);
   return result;
  }
- @McpTool(name="submit_change",description="Submit a SQL change for human approval (disabled)")
+ @McpTool(name="submit_change",description="Submit an encrypted SQL change for approval (never executes SQL)")
  public Map<String,Object> submitChange(
   @McpToolParam(description="Datasource ID",required=true) String datasourceId,
   @McpToolParam(description="Database name",required=true) String database,
@@ -70,13 +72,11 @@ public final class SqlTools {
   @McpToolParam(description="Bind parameters",required=false) List<Object> parameters,
   @McpToolParam(description="Reason",required=true) String reason,
   @McpToolParam(description="Idempotency UUID",required=true) String idempotencyKey){
-  agents.requireActiveAgent();
-  return deny("APPROVAL_NOT_IMPLEMENTED");
+  return changes.submit(datasourceId,database,sql,parameters,reason,idempotencyKey);
  }
- @McpTool(name="get_change_status",description="Get status of an authorized change (disabled)")
+ @McpTool(name="get_change_status",description="Read the caller-owned SQL approval status")
  public Map<String,Object> getChangeStatus(
   @McpToolParam(description="Approval ID",required=true) String approvalId){
-  agents.requireActiveAgent();
-  return deny("APPROVAL_AUTHORIZATION_NOT_IMPLEMENTED");
+  return changes.status(approvalId);
  }
 }
