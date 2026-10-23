@@ -601,41 +601,70 @@ async function updatePassword(){
 
 </script>
 <template>
- <div class="shell">
-  <aside class="sidebar">
+ <div class="shell" :class="{'auth-shell':!token||mustChange}">
+  <aside v-if="token&&!mustChange" class="sidebar">
    <div class="brand"><span class="symbol">M</span><div>MCP DataGuard<small>数据库安全管理</small></div></div>
    <span class="section">工作台</span>
    <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations();loadSecurityAlerts();loadTrends()};if(page[0]==='flowable'){loadOperations();loadDeadLetters();loadWorkflowDesigns()}}">{{page[1]}}</button>
    <div class="foot">MCP DataGuard</div>
   </aside>
   <main class="main">
-   <header class="bar"><div class="breadcrumb">工作台 <span>/</span> <strong>{{title}}</strong></div>
+   <header v-if="token&&!mustChange" class="bar"><div class="breadcrumb">工作台 <span>/</span> <strong>{{title}}</strong></div>
     <div class="actions"><a-button size="small" :disabled="!token||mustChange" :loading="busy" @click="reload">刷新</a-button>
      <a-button v-if="token&&!mustChange" size="small" @click="mustChange=true;error=''">修改密码</a-button>
      <a-button v-else size="small" @click="logout">退出</a-button>
     </div></header>
    <div class="content">
-    <div class="heading"><h1>{{title}}</h1><span class="status"><span class="status-dot"></span>写入已关闭</span></div>
+    <div v-if="token&&!mustChange" class="heading"><h1>{{title}}</h1><span class="status"><span class="status-dot"></span>写入已关闭</span></div>
 
-    <section v-if="!token" class="panel native-login">
-     <h3>MCP DataGuard 登录</h3>
-     <p>统一使用内置账号认证，无需 Keycloak。</p>
-     <a-form :model="loginForm" layout="vertical" @finish="login">
-      <a-form-item label="用户名" name="username"><a-input v-model:value="loginForm.username" autocomplete="username"/></a-form-item>
-      <a-form-item label="密码" name="password"><a-input-password v-model:value="loginForm.password" autocomplete="current-password"/></a-form-item>
-      <a-button html-type="submit" type="primary" block :loading="busy">登录</a-button>
-     </a-form>
+    <section v-if="!token" class="auth-layout">
+     <div class="auth-brand-panel">
+      <div class="auth-brand-top"><span class="auth-mark">M</span><span>MCP DataGuard</span></div>
+      <div class="auth-brand-body">
+       <div class="auth-eyebrow">DATA ACCESS GOVERNANCE</div>
+       <h1>让每一次数据访问<br>安全、可控、可追溯</h1>
+       <p>面向 Agent 与企业数据源的统一安全访问管理平台</p>
+       <div class="auth-capabilities">
+        <div><span class="capability-icon">01</span><div><strong>访问权限治理</strong><small>Agent 身份与数据源访问控制</small></div></div>
+        <div><span class="capability-icon">02</span><div><strong>SQL 安全防护</strong><small>安全规则校验与执行审计</small></div></div>
+        <div><span class="capability-icon">03</span><div><strong>变更审批管控</strong><small>高风险操作审批与全链路追踪</small></div></div>
+       </div>
+      </div>
+      <div class="auth-brand-foot">MCP DataGuard · 数据库安全管理</div>
+     </div>
+     <div class="auth-form-panel">
+      <div class="auth-login-card">
+       <div class="auth-mobile-brand"><span class="auth-mark">M</span> MCP DataGuard</div>
+       <div class="auth-login-heading"><h2>登录管理平台</h2><p>请输入管理员分配的账号和密码</p></div>
+       <a-form :model="loginForm" layout="vertical" @finish="login" class="auth-form">
+        <a-form-item label="账号" name="username" :rules="[{required:true,message:'请输入账号'}]"><a-input v-model:value="loginForm.username" autocomplete="username" placeholder="请输入账号" size="large"/></a-form-item>
+        <a-form-item label="密码" name="password" :rules="[{required:true,message:'请输入密码'}]"><a-input-password v-model:value="loginForm.password" autocomplete="current-password" placeholder="请输入密码" size="large"/></a-form-item>
+        <a-button html-type="submit" type="primary" block size="large" :loading="busy" class="auth-submit">登录</a-button>
+       </a-form>
+       <p class="auth-support">如需开通账号或重置密码，请联系系统管理员</p>
+      </div>
+      <div class="auth-copyright">© 2026 MCP DataGuard</div>
+     </div>
     </section>
-    <section v-else-if="mustChange" class="panel native-login">
-     <h3>修改登录密码</h3>
-     
-     <a-form :model="changeForm" layout="vertical" @finish="updatePassword">
-      <a-form-item label="当前密码"><a-input-password v-model:value="changeForm.currentPassword" autocomplete="current-password"/></a-form-item>
-      <a-form-item label="新密码"><a-input-password v-model:value="changeForm.newPassword" autocomplete="new-password"/></a-form-item>
-      <p>至少12位，包含大写、小写字母、数字和特殊字符。</p>
-      <a-button type="primary" block html-type="submit" :loading="saving">修改密码并重新登录</a-button>
-      <a-button v-if="!forcedPasswordChange" block style="margin-top:10px" @click="cancelPasswordChange">取消修改</a-button>
-     </a-form>
+    <section v-else-if="mustChange" class="auth-layout">
+     <div class="auth-brand-panel">
+      <div class="auth-brand-top"><span class="auth-mark">M</span><span>MCP DataGuard</span></div>
+      <div class="auth-brand-body"><div class="auth-eyebrow">ACCOUNT SECURITY</div><h1>安全始于身份认证</h1><p>保护企业数据资产，建立可信访问边界。</p></div>
+      <div class="auth-brand-foot">MCP DataGuard · 数据库安全管理</div>
+     </div>
+     <div class="auth-form-panel">
+      <div class="auth-login-card">
+       <div class="auth-mobile-brand"><span class="auth-mark">M</span> MCP DataGuard</div>
+       <div class="auth-login-heading"><h2>{{forcedPasswordChange?'首次登录，请修改密码':'修改登录密码'}}</h2><p>新密码至少 12 位，包含大小写字母、数字及特殊字符</p></div>
+       <a-form :model="changeForm" layout="vertical" @finish="updatePassword" class="auth-form">
+        <a-form-item label="当前密码" name="currentPassword" :rules="[{required:true,message:'请输入当前密码'}]"><a-input-password v-model:value="changeForm.currentPassword" autocomplete="current-password" size="large"/></a-form-item>
+        <a-form-item label="新密码" name="newPassword" :rules="[{required:true,message:'请输入新密码'}]"><a-input-password v-model:value="changeForm.newPassword" autocomplete="new-password" size="large"/></a-form-item>
+        <a-button type="primary" block size="large" html-type="submit" :loading="saving" class="auth-submit">确认修改并重新登录</a-button>
+        <a-button v-if="!forcedPasswordChange" block size="large" class="auth-cancel" @click="cancelPasswordChange">返回工作台</a-button>
+       </a-form>
+      </div>
+      <div class="auth-copyright">© 2026 MCP DataGuard</div>
+     </div>
     </section>
     <a-alert v-if="error" type="warning" show-icon :message="error" class="alert"/>
     <template v-if="profile&&!mustChange">
@@ -1232,4 +1261,41 @@ async function updatePassword(){
 .user-table :deep(.ant-pagination),.user-roles :deep(.ant-pagination){margin-top:18px}
 @media(max-width:1150px){.overview{grid-template-columns:1fr}.overview-aside{display:grid;grid-template-columns:1fr 1fr}.overview-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.overview-aside{grid-template-columns:1fr}.overview-shortcuts{grid-template-columns:1fr}.overview-stats{grid-template-columns:1fr 1fr}.filter-panel{align-items:stretch}}
+
+/* Enterprise login with no fabricated marketing metrics */
+.shell.auth-shell{display:block;background:#f8fafc;min-height:100vh}
+.auth-shell .main,.auth-shell .content{min-height:100vh}
+.auth-shell .content{margin:0;padding:0;max-width:none}
+.auth-layout{min-height:100vh;display:grid;grid-template-columns:minmax(410px,46%) minmax(0,1fr)}
+.auth-brand-panel{padding:42px clamp(36px,5vw,90px) 34px;background:linear-gradient(145deg,#e8f3ff,#d1e6fa);color:#172d46;display:flex;flex-direction:column}
+.auth-brand-top{display:flex;align-items:center;gap:11px;font-weight:700;font-size:17px}
+.auth-mark{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;background:#1677ed;color:#fff;font-size:19px;font-weight:750}
+.auth-brand-body{max-width:460px;margin:auto 0;padding:44px 0}
+.auth-eyebrow{font-size:11px;letter-spacing:2px;font-weight:700;color:#4286cb;margin-bottom:22px}
+.auth-brand-body h1{font-size:clamp(28px,2.5vw,38px);line-height:1.42;font-weight:700;letter-spacing:-.8px;margin:0}
+.auth-brand-body>p{font-size:14px;line-height:1.8;color:#637e9a;margin:17px 0 42px}
+.auth-capabilities{display:flex;flex-direction:column;gap:25px}
+.auth-capabilities>div{display:flex;align-items:flex-start;gap:15px}
+.capability-icon{width:34px;height:34px;flex:none;display:grid;place-items:center;background:#ffffffad;border:1px solid #4f8fce21;border-radius:7px;color:#1677ed;font-size:12px;font-weight:700}
+.auth-capabilities strong{display:block;font-size:14px;color:#28415e;font-weight:650}
+.auth-capabilities small{display:block;margin-top:4px;font-size:12px;color:#68829d}
+.auth-brand-foot{font-size:12px;color:#7990a8}
+.auth-form-panel{min-width:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 32px 24px;background:#f8fafc}
+.auth-login-card{width:min(100%,396px);margin:auto 0}
+.auth-mobile-brand{display:none}
+.auth-login-heading{margin-bottom:36px}
+.auth-login-heading h2{font-size:26px;font-weight:700;letter-spacing:-.5px;color:#192d42;margin:0 0 9px}
+.auth-login-heading p{color:#7b8a9c;font-size:13px;line-height:1.7;margin:0}
+.auth-form :deep(.ant-form-item){margin-bottom:22px}
+.auth-form :deep(.ant-form-item-label>label){color:#35465b;font-weight:550;font-size:13px}
+.auth-form :deep(.ant-input),.auth-form :deep(.ant-input-affix-wrapper){background:#fff!important;border:1px solid #dce3ec!important;border-radius:7px!important;min-height:44px;box-shadow:none!important}
+.auth-form :deep(.ant-input:focus),.auth-form :deep(.ant-input-affix-wrapper-focused){border-color:#1677ed!important;box-shadow:0 0 0 3px #1677ed1a!important}
+.auth-shell .auth-submit{height:44px;margin-top:8px;border-radius:7px;font-size:15px;font-weight:600;background:#1677ed;box-shadow:none}
+.auth-shell .auth-cancel{height:42px;margin-top:12px;border-radius:7px}
+.auth-support{font-size:12px;color:#8a98a9!important;text-align:center;margin-top:25px}
+.auth-copyright{font-size:12px;color:#97a2b0;padding-top:24px;text-align:center}
+.auth-shell .alert{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:1000;max-width:calc(100vw - 32px);box-shadow:0 8px 32px #21334b18}
+.shell:not(.auth-shell) .content{max-width:none;margin:0;padding:14px 14px 36px}
+@media(max-width:900px){.auth-layout{grid-template-columns:minmax(290px,42%) minmax(0,1fr)}.auth-brand-panel{padding:30px}.auth-brand-body h1{font-size:28px}}
+@media(max-width:700px){.auth-layout{display:block}.auth-brand-panel{display:none}.auth-form-panel{padding:32px 24px;min-height:100vh}.auth-mobile-brand{display:flex;align-items:center;gap:10px;margin-bottom:50px;font-size:17px;font-weight:700;color:#192d42}.auth-login-card{margin:auto 0}.auth-login-heading h2{font-size:24px}}
 </style>
