@@ -280,6 +280,16 @@ function localizedPermissions(value:unknown):string{
  if(!Array.isArray(items))return String(items??'—');
  return items.map(item=>permissionNameMap[String(item)]||String(item)).join('、')||'无';
 }
+/* Localized presentation: preserve raw event data and permissions. */
+const workspaceTab=ref<'users'|'roles'>('users');
+const operationLabels:Record<string,string>={BOOTSTRAP_ORGANIZATION:'初始化组织',CREATE_USER:'创建用户',CREATE_ROLE:'创建角色',ASSIGN_ROLE:'分配角色',LOGIN:'用户登录',LOGOUT:'退出登录',PASSWORD_CHANGE:'修改密码',PASSWORD_RESET:'重置密码',UPDATE_USER:'更新用户',DISABLE_USER:'停用用户',ENABLE_USER:'启用用户',CREATE_AGENT:'创建 Agent',REGISTER_AGENT:'注册 Agent',REVOKE_AGENT:'撤销 Agent',CREATE_DATASOURCE:'添加数据源',UPDATE_DATASOURCE:'更新数据源',CREATE_POLICY:'创建安全策略',PUBLISH_POLICY:'发布安全策略',ACKNOWLEDGE_ALERT:'确认安全告警'};
+const resourceLabels:Record<string,string>={ORGANIZATION:'组织',USER:'用户',ROLE:'角色',AGENT:'Agent',DATASOURCE:'数据源',SQL_POLICY:'SQL 安全策略',APPROVAL:'审批工单',SECURITY_ALERT:'安全告警',WORKFLOW:'工作流'};
+function localizedOperation(value:unknown){const raw=String(value??'');return operationLabels[raw]||(raw?'其他管理操作':'—');}
+function localizedResource(value:unknown){const raw=String(value??'');return resourceLabels[raw]||(raw?'其他资源':'—');}
+function displayTime(value:unknown){const raw=String(value??'');if(!raw)return '—';const d=new Date(raw);return Number.isNaN(d.getTime())?raw:d.toLocaleString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});}
+function shortenedIdentifier(value:unknown){const v=String(value??'');return v.length>23?v.slice(0,12)+'…'+v.slice(-6):v||'—';}
+const policyCount=computed(()=>sqlPolicies.value.length);
+const publishedPolicyCount=computed(()=>sqlPolicies.value.filter(x=>x.status==='ACTIVE').length);
 const accountMenuOpen=ref(false);
 const dayGreeting=computed(()=>{
  const hour=new Date().getHours();
@@ -864,59 +874,65 @@ async function updatePassword(){
        </template>
       </a-table>
      </section>
-     <section v-else-if="selected==='audit'" class="panel">
-      <div class="panel-heading"><h3>管理操作审计</h3><a-button size="small" @click="loadAuditEvents">刷新</a-button></div>
-      
-      <div v-if="operationalSummary" class="audit-summary">
-        <div class="audit-kpi"><span class="audit-kpi-icon audit-blue"><UiIcon name="document" :size="19"/></span><span><small>被拒绝请求</small><strong>{{operationalSummary.deniedRequests}}</strong></span></div>
-        <div class="audit-kpi"><span class="audit-kpi-icon audit-amber"><UiIcon name="clock" :size="19"/></span><span><small>待审批工单</small><strong>{{operationalSummary.pendingApprovals}}</strong></span></div>
-        <div class="audit-kpi"><span class="audit-kpi-icon audit-rose"><UiIcon name="warning" :size="19"/></span><span><small>未处理安全告警</small><strong>{{operationalSummary.openAlerts}}</strong></span></div>
-       </div>
-      <h4>近 14 天 SQL 请求和拒绝趋势</h4>
-      <div style="display:flex;gap:8px;align-items:end;height:165px;margin:16px 0 6px">
-       <div v-for="day in dailyTrends" :key="day.day" :title="day.day+' 请求：'+day.requests+'；拒绝：'+day.denied+'；告警：'+day.alerts"
-         style="display:flex;flex:1;min-width:0;height:100%;align-items:end;gap:2px">
-        <div style="flex:1;background:#0090ff;border-radius:4px 4px 0 0;min-height:2px"
-          :style="{height:trendPercent(day.requests)}"></div>
-        <div style="flex:1;background:#e5484d;border-radius:4px 4px 0 0;min-height:2px"
-          :style="{height:trendPercent(day.denied)}"></div>
-       </div>
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--slate11)">
-       <span>{{dailyTrends[0]?.day ?? '无数据'}}</span>
-       <span>蓝色：请求 红色：拒绝（每日数量）</span>
-       <span>{{dailyTrends[dailyTrends.length-1]?.day ?? ''}}</span>
-      </div>
-      <h4>SQL 请求安全记录</h4>
-      <a-table row-key="id" size="small" :data-source="sqlRequestRows" :pagination="{pageSize:10}"
-       :columns="[{title:'请求编号',dataIndex:'id'},{title:'工具',dataIndex:'tool_name'},
-        {title:'决策',dataIndex:'decision'},{title:'状态',dataIndex:'request_status'},
-        {title:'指纹',dataIndex:'sql_fingerprint'},{title:'接收时间',dataIndex:'receivedAt'}]"/>
-      <h4>安全告警处置</h4>
-      <a-table row-key="id" size="small" :data-source="securityAlerts" :pagination="{pageSize:10}"
-       :columns="[{title:'规则',dataIndex:'rule'},{title:'等级',dataIndex:'severity'},
-        {title:'状态',dataIndex:'status'},{title:'发生时间',dataIndex:'observedAt'},
-        {title:'操作',key:'actions'}]">
-       <template #bodyCell="{column,record}">
-        <a-popconfirm v-if="column.key==='actions' && record.status==='OPEN'" title="确认已查看此安全告警？"
-         @confirm="acknowledgeAlert(record.id)">
-         <a-button size="small" type="link">确认告警</a-button>
-        </a-popconfirm>
-       </template>
-      </a-table>
-      <h4>审计链完整性</h4>
-      <div class="actions"><a-button size="small" @click="verifyAuditStream('mcp-denied-sql')">核验拒绝请求链</a-button>
-      <a-button size="small" @click="verifyAuditStream('mcp-read-sql')">核验只读执行链</a-button></div>
-      <a-alert v-if="auditVerification" style="margin-top:8px" :type="auditVerification.startsWith('完整性验证通过')?'success':'error'"
-        :message="auditVerification" show-icon/>
-      <h4>管理操作历史</h4>
-      <a-table style="margin-top:16px" row-key="id" size="small" :data-source="systemEvents"
-       :pagination="{pageSize:10}"
-       :columns="[{title:'时间',dataIndex:'createdAt'},{title:'操作',dataIndex:'operation'},
-        {title:'操作者',dataIndex:'actor'},{title:'资源类型',dataIndex:'resourceType'},
-        {title:'资源编号',dataIndex:'resourceId'}]"/>
-     </section>
-     <section v-else-if="selected==='rules'" class="panel rules-panel">
+     <section v-else-if="selected==='audit'" class="audit-workspace b2b-workspace">
+ <header class="workspace-heading"><div><h2>SQL 审计与监控</h2><p>集中查看安全态势、请求记录及操作历史</p></div>
+  <a-button @click="loadAuditEvents();loadOperations();loadSecurityAlerts();loadTrends()">刷新数据</a-button>
+ </header>
+ <div v-if="operationalSummary" class="audit-summary">
+  <div class="audit-kpi"><span class="audit-kpi-icon audit-blue"><UiIcon name="document" :size="19"/></span><span><small>被拒绝请求</small><strong>{{operationalSummary.deniedRequests}}</strong></span></div>
+  <div class="audit-kpi"><span class="audit-kpi-icon audit-amber"><UiIcon name="clock" :size="19"/></span><span><small>待审批工单</small><strong>{{operationalSummary.pendingApprovals}}</strong></span></div>
+  <div class="audit-kpi"><span class="audit-kpi-icon audit-rose"><UiIcon name="warning" :size="19"/></span><span><small>未处理安全告警</small><strong>{{operationalSummary.openAlerts}}</strong></span></div>
+ </div>
+ <section class="workspace-surface">
+  <div class="workspace-section-title"><div><h3>近 14 天 SQL 请求趋势</h3><p>蓝色表示请求次数，红色表示拒绝次数</p></div></div>
+  <div v-if="dailyTrends.length" class="trend-plot">
+   <div v-for="day in dailyTrends" :key="day.day" class="trend-bar" :title="day.day+' 请求 '+day.requests+' 次；拒绝 '+day.denied+' 次'">
+    <div class="trend-bars"><i class="trend-request" :style="{height:trendPercent(day.requests)}"></i><i class="trend-denied" :style="{height:trendPercent(day.denied)}"></i></div><span>{{day.day.slice(5)}}</span>
+   </div>
+  </div>
+  <div v-else class="workspace-empty compact-empty"><UiIcon name="audit" :size="25"/><span>暂无趋势数据，产生 SQL 请求后将在这里展示</span></div>
+ </section>
+ <section class="workspace-surface">
+  <div class="workspace-section-title"><div><h3>SQL 请求安全记录</h3><p>每次请求的决策与执行状态</p></div><span class="workspace-count">{{sqlRequestRows.length}} 条</span></div>
+  <a-table row-key="id" size="small" :data-source="sqlRequestRows" :pagination="{pageSize:10}" :scroll="{x:850}"
+   :columns="[{title:'请求编号',dataIndex:'id'},{title:'工具',dataIndex:'tool_name'},{title:'决策',dataIndex:'decision'},{title:'状态',dataIndex:'request_status'},{title:'SQL 指纹',dataIndex:'sql_fingerprint'},{title:'接收时间',dataIndex:'receivedAt'}]">
+   <template #bodyCell="{column,record}">
+    <template v-if="column.dataIndex==='decision'||column.dataIndex==='request_status'">{{localizedStatus(record[column.dataIndex])}}</template>
+    <template v-else-if="column.dataIndex==='receivedAt'">{{displayTime(record.receivedAt)}}</template>
+    <template v-else-if="column.dataIndex==='id'||column.dataIndex==='sql_fingerprint'"><span :title="String(record[column.dataIndex]??'')">{{shortenedIdentifier(record[column.dataIndex])}}</span></template>
+   </template>
+  </a-table>
+ </section>
+ <section class="workspace-surface">
+  <div class="workspace-section-title"><div><h3>安全告警处置</h3><p>核查异常事件并保留处置记录</p></div><span class="workspace-count">{{securityAlerts.length}} 条</span></div>
+  <a-table row-key="id" size="small" :data-source="securityAlerts" :pagination="{pageSize:10}" :scroll="{x:660}"
+   :columns="[{title:'安全规则',dataIndex:'rule'},{title:'风险等级',dataIndex:'severity'},{title:'处理状态',dataIndex:'status'},{title:'发生时间',dataIndex:'observedAt'},{title:'操作',key:'actions'}]">
+   <template #bodyCell="{column,record}">
+    <template v-if="column.key==='actions'"><a-popconfirm v-if="record.status==='OPEN'" title="确认已查看这条安全告警？" ok-text="确认" cancel-text="返回" @confirm="acknowledgeAlert(record.id)"><a-button size="small" type="link">确认告警</a-button></a-popconfirm><span v-else class="muted-cell">—</span></template>
+    <template v-else-if="column.dataIndex==='severity'||column.dataIndex==='status'">{{localizedStatus(record[column.dataIndex])}}</template>
+    <template v-else-if="column.dataIndex==='observedAt'">{{displayTime(record.observedAt)}}</template>
+   </template>
+  </a-table>
+ </section>
+ <section class="workspace-surface">
+  <div class="workspace-section-title"><div><h3>管理操作历史</h3><p>中文摘要，悬停可查看原始代码与完整编号</p></div><span class="workspace-count">{{systemEvents.length}} 条</span></div>
+  <a-table row-key="id" size="small" :data-source="systemEvents" :pagination="{pageSize:10}" :scroll="{x:860}"
+   :columns="[{title:'操作时间',dataIndex:'createdAt'},{title:'操作内容',dataIndex:'operation'},{title:'操作账号',dataIndex:'actor'},{title:'资源类型',dataIndex:'resourceType'},{title:'资源编号',dataIndex:'resourceId'}]">
+   <template #bodyCell="{column,record}">
+    <template v-if="column.dataIndex==='createdAt'">{{displayTime(record.createdAt)}}</template>
+    <template v-else-if="column.dataIndex==='operation'"><span :title="String(record.operation)">{{localizedOperation(record.operation)}}</span></template>
+    <template v-else-if="column.dataIndex==='resourceType'"><span :title="String(record.resourceType??'')">{{localizedResource(record.resourceType)}}</span></template>
+    <template v-else-if="column.dataIndex==='actor'||column.dataIndex==='resourceId'"><span :title="String(record[column.dataIndex]??'')">{{shortenedIdentifier(record[column.dataIndex])}}</span></template>
+   </template>
+  </a-table>
+ </section>
+ <section class="workspace-surface">
+  <div class="workspace-section-title"><div><h3>审计链完整性校验</h3><p>核验拒绝记录与只读执行记录</p></div></div>
+  <div class="integrity-actions"><a-button @click="verifyAuditStream('mcp-denied-sql')">核验拒绝请求链</a-button><a-button @click="verifyAuditStream('mcp-read-sql')">核验只读执行链</a-button></div>
+  <a-alert v-if="auditVerification" style="margin-top:12px" :type="auditVerification.startsWith('完整性验证通过')?'success':'error'" :message="auditVerification" show-icon/>
+ </section>
+</section>
+      <section v-else-if="selected==='rules'" class="panel rules-panel">
       <div class="panel-heading"><h3>SQL 安全策略草稿</h3><div class="actions">
        <a-button size="small" @click="loadPolicies">刷新</a-button>
        <a-button type="primary" size="small" @click="policyDialog=true">创建草稿</a-button>
