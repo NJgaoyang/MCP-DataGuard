@@ -201,8 +201,8 @@ async function evaluateEffectivePolicies(){
   const v=await requestWrite('/api/v1/sql-policies/effective-decision','POST',
     effectivePolicyScope) as unknown as
      {decision:string;matched:boolean;evaluatedRuleCount:number;matchedRules:{code:string;priority:number;decision:string}[]};
-  effectivePolicyResult.value='最终决策：'+v.decision+'；匹配 '+v.evaluatedRuleCount+' 条已发布规则。'+
-    v.matchedRules.map(x=>x.code+'（优先级 '+x.priority+'，'+x.decision+'）').join(' → ');
+  effectivePolicyResult.value='最终决策：'+localizedStatus(v.decision)+'；匹配 '+v.evaluatedRuleCount+' 条已发布规则。'+
+    v.matchedRules.map(x=>x.code+'（优先级 '+x.priority+'，'+localizedStatus(x.decision)+'）').join(' → ');
  }catch(e){error.value=(e as Error).message;}
  finally{saving.value=false;}
 }
@@ -270,7 +270,7 @@ const assignment=reactive({userId:'',roleId:''});
 const datasources=ref<Record<string,unknown>[]>([]);
 const busy=ref(false),error=ref('');
 const title=computed(()=>pages.find(p=>p[0]===selected.value)?.[1]||'总览仪表盘');
-const statusLabels:Record<string,string>={ACTIVE:'启用',DISABLED:'停用',REVOKED:'已撤销',DRAFT:'草稿',OPEN:'待处理',PENDING:'待审核',CLOSED:'已关闭',ACKNOWLEDGED:'已确认',APPROVED:'已通过',REJECTED:'已拒绝',LOCKED:'已锁定'};
+const statusLabels:Record<string,string>={ACTIVE:'启用',DISABLED:'停用',REVOKED:'已撤销',DRAFT:'草稿',OPEN:'待处理',PENDING:'待审核',CLOSED:'已关闭',ACKNOWLEDGED:'已确认',APPROVED:'已通过',REJECTED:'已拒绝',LOCKED:'已锁定',HIGH:'高风险',CRITICAL:'严重风险',LOW:'低风险',MEDIUM:'中风险',INFO:'提示',DENY:'拒绝',ALLOW:'允许',REQUIRE_APPROVAL:'需要审批',FAILED:'失败',SUCCESS:'成功',COMPLETED:'已完成',NOT_SCHEDULED:'尚未调度',SCHEDULED:'已调度',RUNNING:'运行中',EXECUTED:'已执行',CANCELLED:'已取消',TIMEOUT:'已超时',BLOCKED:'已拦截'};
 function localizedStatus(value:unknown){const status=String(value??'');return statusLabels[status]||status||'—';}
 function localizedDisplayName(value:unknown){const name=String(value??'');return ({'Test Administrator':'测试管理员','Organization administrators':'组织管理员'} as Record<string,string>)[name]||name;}
 const permissionNameMap:Record<string,string>={'agent:read':'查看 Agent','agent:write':'管理 Agent','datasource:read':'查看数据源','datasource:write':'管理数据源','datasource:test':'测试数据源','datasource:secret:write':'管理数据源凭据','identity:admin':'身份与用户管理','agent:identity:write':'管理 Agent 身份','agent:permission:write':'管理 Agent 权限','sql:read':'查看 SQL','sql:write':'SQL 策略管理','approval:read':'查看审批','approval:write':'处理审批','audit:read':'查看审计','security:alert:read':'查看告警'};
