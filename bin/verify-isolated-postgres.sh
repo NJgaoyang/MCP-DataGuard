@@ -108,4 +108,23 @@ if [[ "${DG_RUN_READ_TLS_E2E:-false}" == "true" ]]; then
      -Dtest=ReadOnlyJdbcTlsIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false test
  echo "PASSED: JDBC verify-full TLS, physical roles, masking and resource budgets"
 fi
+if [[ "${DG_RUN_WRITE_TLS_E2E:-false}" == "true" ]]; then
+ WRITE_TLS_TMP="$(mktemp -d)"
+ trap 'docker rm -f "$NAME" >/dev/null 2>&1 || true; rm -rf "$WRITE_TLS_TMP"' EXIT
+ docker exec -u postgres "$NAME" sh -c 'cd "$PGDATA" && if test ! -f server.crt; then openssl req -x509 -nodes -days 1 -newkey rsa:2048 -keyout server.key -out server.crt -subj /CN=localhost -addext subjectAltName=DNS:localhost >/dev/null 2>&1 && chmod 600 server.key; fi'
+ docker exec -u postgres "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d dataguard -c "ALTER SYSTEM SET ssl='on'" >/dev/null
+ docker exec -u postgres "$NAME" pg_ctl -D /var/lib/postgresql/data reload >/dev/null
+ docker exec -u postgres "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d dataguard \
+   -c 'CREATE ROLE dg_test_write_role LOGIN; CREATE TABLE public.write_probe(id integer PRIMARY KEY,amount integer); INSERT INTO public.write_probe VALUES(1,200),(2,300); GRANT UPDATE ON public.write_probe TO dg_test_write_role;' >/dev/null
+ docker cp "$NAME:/var/lib/postgresql/data/server.crt" "$WRITE_TLS_TMP/root.crt" >/dev/null
+ CACHE="${DG_M2_CACHE:-$HOME/.cache/mcp-dataguard/m2}"
+ mkdir -p "$CACHE"
+ docker run --rm --network "container:$NAME" -e DG_WRITE_JDBC_E2E=true \
+   -v "$ROOT:/workspace" -v "$CACHE:/root/.m2" \
+   -v "$WRITE_TLS_TMP/root.crt:/root/.postgresql/root.crt:ro" -w /workspace \
+   maven:3.9.11-eclipse-temurin-21 \
+   mvn -B -o -ntp -pl dataguard-server -am \
+     -Dtest=CertifiedWriteJdbcTlsTest -Dsurefire.failIfNoSpecifiedTests=false test
+ echo "PASSED: physical single-row write role and verified TLS safety"
+fi
 echo "ISOLATED_POSTGRES_VERIFICATION_PASSED"
