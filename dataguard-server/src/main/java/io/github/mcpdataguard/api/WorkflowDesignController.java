@@ -136,6 +136,12 @@ public class WorkflowDesignController {
       AND revision=? AND status='DRAFT' FOR UPDATE
     """,(rs,i)->rs.getInt(1),u.orgId(),id,input.revision());
   if(matching.size()!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Draft revision unavailable");
+  Integer latest=jdbc.queryForObject("""
+    SELECT MAX(revision) FROM dg_workflow_version
+    WHERE org_id=? AND workflow_id=?
+    """,Integer.class,u.orgId(),id);
+  if(latest==null||latest!=input.revision())
+   throw new ResponseStatusException(HttpStatus.CONFLICT,"Only latest draft revision can publish");
   int updated=jdbc.update("""
     UPDATE dg_workflow_template SET version=version+1,updated_at=now()
     WHERE org_id=? AND id=? AND state='ACTIVE' AND version=?
