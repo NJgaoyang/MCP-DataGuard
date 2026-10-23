@@ -24,7 +24,7 @@ class SafeApprovalGraphTest {
  @Test void arbitraryXmlAndCodeInjectionAreRejected(){
   var good=SafeApprovalGraph.compile(graph(true));
   assertThrows(SecurityException.class,()->
-   SafeApprovalGraph.parseCertified(good.replace("data-owner","superusers")));
+   SafeApprovalGraph.parseCertified(good.replace("data-owner","invalid!role")));
   assertThrows(SecurityException.class,()->SafeApprovalGraph.validate(
    new SafeApprovalGraph.Design(List.of(
     new SafeApprovalGraph.Step("team-one","Safe Reviewer"),
