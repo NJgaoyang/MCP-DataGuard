@@ -192,8 +192,9 @@ class ApprovedWritePipelineIntegrationTest {
    assertEquals(1L,f.db().queryForObject("""
        SELECT count(*) FROM dg_alert_event e JOIN dg_alert_rule r
          ON r.org_id=e.org_id AND r.id=e.rule_id
-       WHERE e.org_id=? AND r.code='WRITE_EXECUTION_UNKNOWN' AND e.event_state='OPEN'
-     """,Long.class,f.org()));
+       WHERE e.org_id=? AND r.code='WRITE_EXECUTION_UNKNOWN'
+         AND e.event_state='OPEN' AND e.details->>'taskId'=?
+     """,Long.class,f.org(),queued.taskId().toString()));
    // Real Java Worker restart with valid credentials must NOT re-claim UNKNOWN.
    f.worker().runOne();
    assertEquals(1L,f.db().queryForObject(
