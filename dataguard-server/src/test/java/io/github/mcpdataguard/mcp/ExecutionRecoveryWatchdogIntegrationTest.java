@@ -83,6 +83,16 @@ class ExecutionRecoveryWatchdogIntegrationTest {
   assertEquals(625,db.queryForObject("""
     SELECT amount FROM public.write_chaos_probe WHERE task_id=?
     """,Integer.class,task),"The target transaction has physically committed");
+  // Immediate uncertain-worker error and the later lease watchdog must
+  // point to exactly one OPEN critical incident, not two notifications.
+  UnknownWriteIncidentService.record(db,org,task,"WORKER_FAILURE");
+  UnknownWriteIncidentService.record(db,org,task,"WORKER_FAILURE");
+  assertEquals(1L,db.queryForObject("""
+    SELECT count(*) FROM dg_alert_event a JOIN dg_alert_rule r
+      ON a.org_id=r.org_id AND a.rule_id=r.id
+    WHERE a.org_id=? AND a.event_state='OPEN'
+       AND r.code='WRITE_EXECUTION_UNKNOWN'
+    """,Long.class,org));
   var watchdog=new ExecutionRecoveryWatchdog(db,true);
   watchdog.quarantineExpiredLeases();
   assertEquals("UNKNOWN",db.queryForObject("""
@@ -183,6 +193,12 @@ class ExecutionRecoveryWatchdogIntegrationTest {
   assertEquals(625,db.queryForObject("""
     SELECT amount FROM public.write_chaos_probe WHERE task_id=?
     """,Integer.class,task));
+ }
+ @Test void invalidAlertCauseDoesNotTouchDatabase(){
+  JdbcTemplate db=org.mockito.Mockito.mock(JdbcTemplate.class);
+  assertThrows(IllegalArgumentException.class,()->
+    UnknownWriteIncidentService.record(db,UUID.randomUUID(),UUID.randomUUID(),"RAW_SQL_TEXT"));
+  org.mockito.Mockito.verifyNoInteractions(db);
  }
  @Test void disabledWatchdogNeverQueriesExecutionTasks(){
   JdbcTemplate db=org.mockito.Mockito.mock(JdbcTemplate.class);
