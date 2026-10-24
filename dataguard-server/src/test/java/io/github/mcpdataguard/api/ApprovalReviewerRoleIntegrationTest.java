@@ -84,7 +84,12 @@ class ApprovalReviewerRoleIntegrationTest {
   ApprovalDecisionController controller=new ApprovalDecisionController(db,users);
   java.util.function.Function<UUID,UserPrincipal> asUser=id->
     new UserPrincipal(org,id,"reviewer","Reviewer","native","local");
+  when(users.requireUser(jwt)).thenReturn(asUser.apply(first));
+  assertEquals(1,controller.myInbox(jwt).size(),"First reviewer sees current work");
+  when(users.requireUser(jwt)).thenReturn(asUser.apply(second));
+  assertTrue(controller.myInbox(jwt).isEmpty(),"Second reviewer cannot skip first step");
   when(users.requireUser(jwt)).thenReturn(asUser.apply(owner));
+  assertTrue(controller.myInbox(jwt).isEmpty(),"Requester cannot review own Agent");
   var ex=assertThrows(ResponseStatusException.class,()->controller.approve(
     jwt,approval,new ApprovalDecisionController.DecisionInput("self approval",0)));
   assertEquals(HttpStatus.FORBIDDEN,ex.getStatusCode(),
@@ -105,6 +110,10 @@ class ApprovalReviewerRoleIntegrationTest {
     new ApprovalDecisionController.DecisionInput("first reviewer",0));
   assertEquals("PENDING",initial.get("approvalStatus"));
   assertEquals(1,initial.get("stage"));
+  assertTrue(controller.myInbox(jwt).isEmpty(),"First reviewer has completed their stage");
+  when(users.requireUser(jwt)).thenReturn(asUser.apply(second));
+  assertEquals(1,controller.myInbox(jwt).size(),"Second reviewer now has an inbox item");
+  when(users.requireUser(jwt)).thenReturn(asUser.apply(first));
 
   ex=assertThrows(ResponseStatusException.class,()->controller.approve(
     jwt,approval,new ApprovalDecisionController.DecisionInput("same person twice",1)));
@@ -129,6 +138,47 @@ class ApprovalReviewerRoleIntegrationTest {
   assertEquals(0L,db.queryForObject("""
     SELECT count(*) FROM dg_execution_task WHERE org_id=?
     """,Long.class,org));
+  // A second native business approval is rejected only by the CURRENT
+  // db-owner role. No global identity:admin permission was granted to the
+  // two reviewers at any point in this test.
+  UUID request2=UUID.randomUUID(),approval2=UUID.randomUUID();
+  db.update("""
+    INSERT INTO dg_sql_request(id,org_id,agent_id,datasource_id,tool_name,
+      decision,request_status,risk_level,requester_user_id)
+    VALUES(?,?,?,?,'submit_change','REQUIRE_APPROVAL','PENDING_APPROVAL','LOW',NULL)
+    """,request2,org,agent,source);
+  db.update("""
+    INSERT INTO dg_sql_approval(id,org_id,request_id,workflow_version_id,
+      process_instance_id,approval_status,execution_status,expires_at)
+    VALUES(?,?,?,?,?,'PENDING','NOT_SCHEDULED',now()+interval '1 day')
+    """,approval2,org,request2,version,UUID.randomUUID().toString());
+  when(users.requireUser(jwt)).thenReturn(asUser.apply(second));
+  var wrongReject=assertThrows(ResponseStatusException.class,()->
+    controller.reject(jwt,approval2,
+      new ApprovalDecisionController.DecisionInput("attempt skip first",0)));
+  assertEquals(HttpStatus.FORBIDDEN,wrongReject.getStatusCode());
+  when(users.requireUser(jwt)).thenReturn(asUser.apply(owner));
+  var selfReject=assertThrows(ResponseStatusException.class,()->
+    controller.reject(jwt,approval2,
+      new ApprovalDecisionController.DecisionInput("self rejection",0)));
+  assertEquals(HttpStatus.FORBIDDEN,selfReject.getStatusCode());
+  when(users.requireUser(jwt)).thenReturn(asUser.apply(first));
+  var rejected=controller.reject(jwt,approval2,
+    new ApprovalDecisionController.DecisionInput("business reviewer rejected",0));
+  assertEquals("REJECTED",rejected.get("approvalStatus"));
+  assertEquals(false,rejected.get("sqlExecutionEnabled"));
+  assertTrue(controller.myInbox(jwt).isEmpty());
+  verify(users,never()).requirePermission(any(),eq("identity:admin"));
+  assertEquals(1L,db.queryForObject("""
+     SELECT count(*) FROM dg_sql_approval_action
+     WHERE org_id=? AND approval_id=? AND reviewer_user_id=? AND action='REJECT'
+     """,Long.class,org,approval2,first));
+  assertEquals("CANCELLED",db.queryForObject("""
+     SELECT execution_status FROM dg_sql_approval WHERE org_id=? AND id=?
+     """,String.class,org,approval2));
+  assertEquals(0L,db.queryForObject("""
+     SELECT count(*) FROM dg_execution_task WHERE org_id=?
+     """,Long.class,org));
   // This test does not instantiate Flowable. The two fake pending events
   // must not be consumed by subsequent real outbox integration tests sharing
   // the same ephemeral PostgreSQL instance.
@@ -136,5 +186,9 @@ class ApprovalReviewerRoleIntegrationTest {
     DELETE FROM dg_outbox_event WHERE org_id=? AND aggregate_id=?
       AND event_type='APPROVAL_STEP_APPROVED'
     """,org,approval);
+  db.update("""
+    DELETE FROM dg_outbox_event WHERE org_id=? AND aggregate_id=?
+      AND event_type='APPROVAL_REJECTED'
+    """,org,approval2);
  }
 }
