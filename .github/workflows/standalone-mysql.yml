@@ -53,7 +53,7 @@ jobs:
           set -euo pipefail
           test -s dataguard-standalone/src/main/resources/db/migration/V10__mysql_starrocks_sources.sql
           grep -q "enum ReadDatasourceDialect" dataguard-standalone/src/main/java/io/github/mcpdataguard/standalone/ReadDatasourceDialect.java
-          grep -q "ReadProjection.select" dataguard-standalone/src/main/java/io/github/mcpdataguard/standalone/ReadApi.java
+          grep -q "ReadProjection.build" dataguard-standalone/src/main/java/io/github/mcpdataguard/standalone/ReadApi.java
           ! grep -Eq 'SELECT \\* FROM' dataguard-standalone/src/main/java/io/github/mcpdataguard/standalone/ReadApi.java
           ! grep -q '<module>dataguard-server</module>' pom.xml
       - name: Verify Vue assets embedded in executable JAR
