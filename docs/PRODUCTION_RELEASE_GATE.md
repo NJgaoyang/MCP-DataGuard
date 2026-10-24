@@ -78,3 +78,37 @@ DG_RESTORE_VERIFY_ARCHIVE=/secure/offsite/dataguard-<date>.dump.gpg \
 ## 5. 明确的当前生产上线结论
 
 **NO-GO**。软件层完成了上述加固和隔离测试，但生产密钥、离机灾备与 WAL/PITR、正式域名与 TLS、实际网络故障注入、生产审批身份联调、生产负载/渗透测试、值班告警和批准手续仍需由环境持有人执行。不要将任何测试报告改写成生产可用证明。
+
+## 6. 2026-10-24 后续 P0 实施增量与上线约束
+
+- **真实 TCP/COMMIT 故障演练已实现**：`bin/verify-real-postgres-commit-disconnect.sh` 在专属 Docker 隔离网段、一次性 PostgreSQL 和独立客户端中，真实调用 `pg_terminate_backend`。验证 COMMIT 之前断连导致回滚；存储过程在 COMMIT 之后、CALL 返回之前断连时，客户端收到错误但目标库物理提交保持可见。这是数据库底层故障的实证；对 DataGuard 任务 `UNKNOWN`、拒绝重复执行的验证见 `ExecutionRecoveryWatchdogIntegrationTest`。
+- **Flowable 任务权限负向验收**：`ReviewProcessAuthorizationIntegrationTest` 使用真实 Flowable 引擎和 BPMN 验证禁止未领取任务提交、非当前审批人、跨租户任务访问、拒绝处理以及审批不能启用 SQL 写入。与 PostgreSQL 审批隔离测试合计 **22 个核心集成用例**。
+- **异地不可变备份上传代码**：`bin/export-encrypted-backup-s3.sh` 要求来自 `backup-postgres-encrypted.sh` 的受限文件权限和 SHA-256 校验，AWS S3 Object Lock、`COMPLIANCE`、正式 KMS 密钥、至少 30 天保留以及 `If-None-Match: *` 的禁止覆盖语义。随后核对云端 Object Lock/KMS/校验属性。`bin/verify-offsite-export-policy.sh` 离线模拟服务测试通过。**尚无真实云端桶/IAM/KMS 凭据，未上传真实生产备份，不能宣布异地灾备完成。**
+- **发布签字门禁**：`bin/verify-signed-production-release.sh` 必须校验不同的安全、DBA、业务 GPG 签名、短期有效期、不可变镜像 Digest，以及所有 P0 上线证据。`bin/verify-signed-release-policy.sh` 验证篡改、过期、同一签名人兼任审批角色被拒绝。**目前尚未获得三方正式签名，因此生产发布仍应阻断。**
+- **PostgreSQL 不停机资源控制已实施**：实际运行容器内存/交换空间各上限 1.5 GiB，CPU 2 核、PID 256；数据库查询和网关健康检查通过。Compose `deploy/compose.hardened.yaml` 已持久化配置。**PostgreSQL 容器的 no-new-privileges 尚未生效**，需经数据库维护窗口重建容器并验证恢复与回滚。
+- GitHub `production-hardening.yml` 已集成真实 TCP COMMIT 断连、异地备份策略、GPG 三方签名检查、加密恢复演练。该流水线只使用一次性模拟身份和数据；真实云端上传与审批仍须现场验收。
+
+### 本轮已经验证的命令
+
+```bash
+DG_RUN_NATIVE_MCP_HTTP_E2E=true \
+DG_RUN_MCP_READ_ALLOW_HTTP_E2E=true \
+DG_RUN_REAL_TCP_COMMIT_E2E=true \
+bash bin/verify-core-security-gates.sh
+
+bash bin/verify-hardened-compose.sh
+bash bin/verify-live-hardened-dev.sh
+bash bin/verify-offsite-export-policy.sh
+bash bin/verify-signed-release-policy.sh
+```
+
+### 剩余真实生产 P0（没有现场证据则为 NO-GO）
+
+1. 生产审批用户与实际 Flowable 消费队列的业务身份联调及审批责任确认。
+2. 完整 DataGuard Worker 进程 SIGKILL/网络分区与数据库提交交叉时序的实机故障演练，以及 UNKNOWN 人工对账操作演练。已有真实数据库断连试验不能替代此项。
+3. 正式 S3 Object Lock/KMS/IAM 密钥配置、实际加密备份异地上传与另一台主机的恢复、WAL/PITR/RPO/RTO 证据及保留期治理。
+4. 正式域名与受信 CA、IAM/Vault 密钥轮换、生产级告警通知渠道、外部审计存证、性能和渗透测试及受保护镜像/发布链路。
+5. DBA 维护窗口内重建 PostgreSQL 容器应用启动时才能配置的安全约束，并在维护窗口前完成恢复演练。
+6. 完整三方签名的正式发布证据包与 Go/No-Go 审批。
+
+**上线结论保持 NO-GO**：继续使用开发环境，所有真实 SQL 写入开关维持关闭，生产人员与密钥缺失时不能绕开门禁。
