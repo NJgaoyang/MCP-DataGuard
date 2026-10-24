@@ -1,0 +1,66 @@
+# Additional defense-in-depth controls. Overlay onto the existing Compose stack:
+# docker compose -f deploy/compose.yaml -f deploy/compose.dev.yaml -f deploy/compose.public.yaml -f deploy/compose.hardened.yaml ...
+# Set resource ceilings from measured production capacity; defaults are for a small test VM.
+services:
+  gateway:
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=96m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    pids_limit: 256
+    mem_limit: ${DG_GATEWAY_MEMORY_LIMIT:-1024m}
+    cpus: ${DG_GATEWAY_CPU_LIMIT:-1.5}
+    stop_grace_period: 45s
+    init: true
+    logging: &bounded_logs
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+  workflow:
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=96m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    pids_limit: 256
+    mem_limit: ${DG_WORKFLOW_MEMORY_LIMIT:-1024m}
+    cpus: ${DG_WORKFLOW_CPU_LIMIT:-1.5}
+    stop_grace_period: 60s
+    init: true
+    logging: *bounded_logs
+  web:
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=32m,mode=1777
+      - /var/cache/nginx:rw,nosuid,nodev,size=32m
+      - /var/run:rw,nosuid,nodev,size=4m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    pids_limit: 96
+    mem_limit: ${DG_WEB_MEMORY_LIMIT:-256m}
+    cpus: ${DG_WEB_CPU_LIMIT:-0.75}
+    init: true
+    logging: *bounded_logs
+  public:
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=32m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: ${DG_PUBLIC_MEMORY_LIMIT:-256m}
+    cpus: ${DG_PUBLIC_CPU_LIMIT:-0.75}
+    logging: *bounded_logs
+  postgres:
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: ${DG_POSTGRES_MEMORY_LIMIT:-1536m}
+    cpus: ${DG_POSTGRES_CPU_LIMIT:-2}
+    stop_grace_period: 90s
+    logging: *bounded_logs
