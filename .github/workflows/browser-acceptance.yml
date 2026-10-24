@@ -20,11 +20,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: dataguard-web/package-lock.json
       - name: Install and build frontend
         run: |
-          npm --prefix dataguard-web ci --no-audit --no-fund
+          npm --prefix dataguard-web install --no-audit --no-fund
           npm --prefix dataguard-web run build
       - name: Install isolated browser test tools
         run: npm --prefix tests/browser install --no-audit --no-fund
