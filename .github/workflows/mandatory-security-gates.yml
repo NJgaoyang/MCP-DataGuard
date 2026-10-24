@@ -71,6 +71,8 @@ jobs:
           python3 bin/verify-local-backup-retention-policy.py
           bash bin/verify-signed-release-policy.sh
           bash bin/verify-staged-rollout-policy.sh
+          python3 -m unittest discover -s tests -p 'test_production_runtime_policy.py'
+          python3 -m py_compile bin/verify-production-runtime.py
           python3 -m unittest discover -s tests -p 'test_audit_checkpoint.py'
           python3 -m py_compile bin/export-audit-anchor.py bin/run-certified-mcp-read-load.py
           python3 -m unittest discover -s tests -p 'test_read_load_policy.py'

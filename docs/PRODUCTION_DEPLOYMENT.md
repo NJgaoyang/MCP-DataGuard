@@ -31,3 +31,7 @@ No offsite backup is requested; loss of entire production host remains an accept
 ## Read-only change-control gates
 
 `DG_PRODUCTION_CHANGE_ID=... DG_DEPLOY_STAGE=... bash bin/verify-production-deploy-preflight.sh` binds the signed manifest, actual checkout, production Compose images, named real evidence, and explicit stage flags without deploying. After an authorized manual Compose deployment, `bash bin/verify-production-runtime.sh` verifies that live containers match signed digest image inputs, role privileges, exposed ports and flags. Neither utility grants production authorization.
+
+### 运行态全面核验
+
+`verify-production-runtime.sh` 在核对三方 GPG 签名之后，检查生产 Compose 项目的每个容器和每个受信 Docker RepoDigest，**包括 closed/readonly 下仍在运行的旧 Workflow**。拒绝遗留开启 Outbox、旁路开启受控写入、未签名镜像、非法容器、宿主机暴露网关端口及明文 Docker Config.Env 密钥。它只读，不会暂停数据库或容器。
