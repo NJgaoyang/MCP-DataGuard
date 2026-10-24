@@ -42,7 +42,11 @@ public class AgentMcpApi {
     @RequestHeader(value="Authorization",required=false) String authorization,
     @RequestHeader(value="MCP-Protocol-Version",required=false) String protocol,
     @RequestHeader(value="Accept",required=false) String accept,
+    @RequestHeader(value="Origin",required=false) String origin,
     @RequestBody(required=false) Request req) {
+  String allowedOrigins=System.getenv().getOrDefault("DATAGUARD_MCP_ALLOWED_ORIGINS","");
+  if(origin!=null && java.util.Arrays.stream(allowedOrigins.split(",")).map(String::trim)
+      .noneMatch(origin::equals))return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
   String raw=authorization!=null&&authorization.startsWith("Bearer ")?authorization.substring(7):null;
   String user=tokens.resolve(raw);
   if(user==null)return unauthorized();
