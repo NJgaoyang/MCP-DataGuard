@@ -11,6 +11,16 @@ on:
       - 'bin/verify-real-postgres-commit-disconnect.sh'
       - 'bin/verify-signed-production-release.sh'
       - 'bin/verify-signed-release-policy.sh'
+      - 'bin/verify-local-backup-health.py'
+      - 'bin/verify-local-backup-health-policy.py'
+      - 'bin/prune-local-encrypted-backups.py'
+      - 'bin/verify-local-backup-retention-policy.py'
+      - 'bin/notify-operational-incidents.py'
+      - 'bin/verify-operational-alert-policy.py'
+      - 'deploy/systemd/dataguard-backup-health.service'
+      - 'deploy/systemd/dataguard-backup-health.timer'
+      - 'deploy/systemd/dataguard-operations-alert.service'
+      - 'deploy/systemd/dataguard-operations-alert.timer'
       - '.github/workflows/production-hardening.yml'
   workflow_dispatch:
 
@@ -109,3 +119,15 @@ jobs:
         run: |
           set -euo pipefail
           bash bin/verify-signed-release-policy.sh
+
+  local-backup-and-alert-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify local backups, safe retention and operational alerts
+        run: |
+          set -euo pipefail
+          python3 bin/verify-local-backup-health-policy.py
+          python3 bin/verify-local-backup-retention-policy.py
+          python3 bin/verify-operational-alert-policy.py
