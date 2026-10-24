@@ -59,6 +59,25 @@ class ExecutionRecoveryWatchdogIntegrationTest {
     VALUES (?,? ,?,'EXECUTING',?,?,now()+interval '5 minutes',
       'lost-worker',now()-interval '2 minutes',1)
     """,task,org,approval,"a".repeat(64),"b".repeat(64));
+  // Fault injection boundary: physical target COMMIT completes, but the
+  // simulated worker crashes before persisting the platform acknowledgement.
+  // This tests the most dangerous state: write DID occur yet the ticket
+  // remains EXECUTING with a lost/expired lease.
+  db.execute("""
+    CREATE TABLE IF NOT EXISTS public.write_chaos_probe(
+      task_id UUID PRIMARY KEY, amount INTEGER NOT NULL)
+    """);
+  db.update("INSERT INTO public.write_chaos_probe(task_id,amount) VALUES (?,100)",
+    task);
+  var tx=new org.springframework.transaction.support.TransactionTemplate(
+    new org.springframework.jdbc.datasource.DataSourceTransactionManager(
+      db.getDataSource()));
+  tx.executeWithoutResult(status->db.update("""
+    UPDATE public.write_chaos_probe SET amount=625 WHERE task_id=?
+    """,task));
+  assertEquals(625,db.queryForObject("""
+    SELECT amount FROM public.write_chaos_probe WHERE task_id=?
+    """,Integer.class,task),"The target transaction has physically committed");
   var watchdog=new ExecutionRecoveryWatchdog(db,true);
   watchdog.quarantineExpiredLeases();
   assertEquals("UNKNOWN",db.queryForObject("""
@@ -88,6 +107,10 @@ class ExecutionRecoveryWatchdogIntegrationTest {
   assertEquals(1,db.queryForObject("""
     SELECT attempt_no FROM dg_execution_task WHERE org_id=? AND id=?
     """,Integer.class,org,task));
+  assertEquals(625,db.queryForObject("""
+    SELECT amount FROM public.write_chaos_probe WHERE task_id=?
+    """,Integer.class,task),
+    "Uncertain committed write must not be automatically replayed or reverted");
  }
  @Test void disabledWatchdogNeverQueriesExecutionTasks(){
   JdbcTemplate db=org.mockito.Mockito.mock(JdbcTemplate.class);
