@@ -32,6 +32,33 @@ class ApprovalDecisionControllerTest {
   assertEquals(HttpStatus.BAD_REQUEST,ex.getStatusCode());
   verifyNoInteractions(jdbc);
  }
+ @Test void cancellationRejectsEmptyReasonWithoutDatabaseAccess(){
+  var error=assertThrows(ResponseStatusException.class,()->
+    controller.cancel(jwt,UUID.randomUUID(),
+      new ApprovalDecisionController.DecisionInput(" ",0)));
+  assertEquals(HttpStatus.BAD_REQUEST,error.getStatusCode());
+  verifyNoInteractions(jdbc);
+ }
+ @Test void cancellationRejectsStaleOrAlreadyScheduledRequests(){
+  when(jdbc.query(anyString(),any(RowMapper.class),any(Object[].class)))
+    .thenReturn(List.of());
+  var error=assertThrows(ResponseStatusException.class,()->
+    controller.cancel(jwt,UUID.randomUUID(),
+      new ApprovalDecisionController.DecisionInput("safe cancel",3)));
+  assertEquals(HttpStatus.CONFLICT,error.getStatusCode());
+  verify(jdbc,never()).update(anyString(),any(Object[].class));
+ }
+ @Test void cancellationWritesActionAuditAndOutboxTogether(){
+  UUID approval=UUID.randomUUID();
+  when(jdbc.query(anyString(),any(RowMapper.class),any(Object[].class)))
+    .thenReturn(List.of(approval));
+  when(jdbc.update(anyString(),any(Object[].class))).thenReturn(1);
+  var output=controller.cancel(jwt,approval,
+    new ApprovalDecisionController.DecisionInput("withdrawn",2));
+  assertEquals("CANCELLED",output.get("approvalStatus"));
+  assertEquals(false,output.get("sqlExecutionEnabled"));
+  verify(jdbc,times(4)).update(anyString(),any(Object[].class));
+ }
  @Test void unavailableOrStaleCannotBeRejected(){
   when(jdbc.query(anyString(),any(RowMapper.class),any(Object[].class))).thenReturn(List.of());
   var ex=assertThrows(ResponseStatusException.class,()->
