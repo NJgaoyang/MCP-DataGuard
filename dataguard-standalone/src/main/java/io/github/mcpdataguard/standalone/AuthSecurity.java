@@ -41,7 +41,7 @@ public class AuthSecurity {
        new HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED),
        PathPatternRequestMatcher.withDefaults().matcher("/api/**")))
    .authorizeHttpRequests(a->a
-      .requestMatchers("/login.html","/api/csrf","/favicon.ico","/login","/error").permitAll()
+      .requestMatchers("/login.html","/api/csrf","/favicon.ico","/login","/error","/mcp").permitAll()
       .anyRequest().authenticated())
    .formLogin(f->f.loginPage("/login.html").loginProcessingUrl("/auth/login")
       .successHandler((request,response,auth)->{
