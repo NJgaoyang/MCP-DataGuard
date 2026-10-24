@@ -36,3 +36,11 @@
 ## 当前结论
 
 **代码与开发机安全基础显著完善，但正式生产仍为 NO-GO。** 真正需要外部环境/人员配合的是业务测试账号/组织角色、生产数据库与域名、告警 Webhook、密钥管控、性能/渗透审核及负责人签署。无证据不得解除只读/写入及 Flowable 开关。
+
+## 最新代码与强制门禁增量（2026-10-24，待合并分支）
+
+- 原状态表的“尚无真实 Java Worker JVM SIGKILL”已过时：`ApprovedWritePipelineIntegrationTest` 实际启动独立 JVM，在 PostgreSQL COMMIT 后杀进程并验证 UNKNOWN、告警和不重试；但生产等价运行环境下的多种时序、网络分区和人员对账仍为 NO-GO。
+- 原状态表的“仅 Mock JWT”已过时：`NativeLoginFlowableOutboxIntegrationTest` 使用真实 NativeAuth BCrypt 登录、服务端 Bearer Session、Outbox/Flowable；但仍为隔离合成身份、内存 Flowable 引擎及直接 Controller 调用，**不等于生产真实 HTTP 用户联调**。
+- 常规 `mvn verify` 最新日志显示 SQL Core 7/0 skip、Workflow 10/3 skip、Server 91/22 skip。新的 `mandatory-security-gates.yml` 以无跳过的隔离核心安全门禁为发布必需候选；需在 GitHub 设置中把 `isolated-security` 与 `release-hardening` 标记为 required checks。设置生效前不能宣称仓库已有强制 PR 保护。
+- 新增 `verify-staged-rollout.sh`：四阶段开关校验、不可变提交绑定、非关闭阶段要求正式三方签名。该工具**不会更改生产环境**，现场部署和签字另行执行。
+- 上线交接及证据收集方法：`docs/PRODUCTION_ACCEPTANCE_EXECUTION.md`。生产环境和三方签名未提供时仍为 **NO-GO**。

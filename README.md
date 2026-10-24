@@ -53,3 +53,9 @@ bash bin/start-public-test.sh
 请勿直接连接生产数据库进行真实 SQL 操作。
 
 项目坚持完整开源，无商业 License。数据库驱动许可证需独立审查。
+
+## 生产发布资格与分阶段启用
+
+常规构建 CI 可能条件跳过需要真实数据库的用例；完整安全验收以 `.github/workflows/mandatory-security-gates.yml` 的 `isolated-security` 为准，必须无跳过。所有生产执行功能继续默认关闭。参见 [上线执行与证据手册](docs/PRODUCTION_ACCEPTANCE_EXECUTION.md) 和 [阶段策略检查](bin/verify-staged-rollout.sh)。
+
+**仓库代码通过 CI 不代表正式生产已获授权**；真实业务身份、正式数据库、告警、密钥、恢复演练、压测、安全签署和 GitHub 分支保护仍需独立现场验收。

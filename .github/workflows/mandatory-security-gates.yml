@@ -1,0 +1,79 @@
+name: Mandatory release security gates
+
+on:
+  push:
+    branches:
+      - dev20261022
+      - 'hardening/**'
+  pull_request:
+    branches:
+      - dev20261022
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-gates-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  isolated-security:
+    name: isolated-security
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - name: Explicitly cache Maven dependencies
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Pull disposable PostgreSQL 17
+        run: docker pull postgres:17
+      - name: Complete PostgreSQL, Flowable, MCP and JVM crash acceptance
+        env:
+          DG_E2E_PREFETCH_MAVEN: 'true'
+          DG_RUN_NATIVE_MCP_HTTP_E2E: 'true'
+          DG_RUN_MCP_READ_ALLOW_HTTP_E2E: 'true'
+          DG_RUN_REAL_TCP_COMMIT_E2E: 'true'
+          DG_RUN_WORKER_SIGKILL_E2E: 'true'
+        run: bash bin/verify-core-security-gates.sh
+      - name: Preserve failure evidence (not a release approval)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isolated-test-failures
+          path: |
+            dataguard-server/target/surefire-reports/
+            dataguard-workflow/target/surefire-reports/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  release-hardening:
+    name: release-hardening
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate hardened Compose and production notification safety
+        run: |
+          set -euo pipefail
+          bash bin/verify-hardened-compose.sh
+          python3 bin/verify-operational-alert-policy.py
+          python3 bin/verify-local-backup-health-policy.py
+          python3 bin/verify-local-backup-retention-policy.py
+          bash bin/verify-signed-release-policy.sh
+          bash bin/verify-staged-rollout-policy.sh
+      - name: Missing production evidence must fail closed
+        run: |
+          set -euo pipefail
+          dir="$(mktemp -d)"
+          chmod 700 "$dir"
+          trap 'rm -rf "$dir"' EXIT
+          if DG_READINESS_EVIDENCE_DIR="$dir" bash bin/check-production-readiness.sh; then
+            echo 'FAIL: no evidence wrongly permitted production release' >&2
+            exit 1
+          fi
+          echo 'PASS: no real production evidence means NO-GO'
