@@ -14,7 +14,7 @@ if [[ "${DG_E2E_PREFETCH_MAVEN:-false}" == "true" ]]; then
     -v "$ROOT:/workspace" -v "$CACHE:/root/.m2" -w /workspace \
     maven:3.9.11-eclipse-temurin-21 \
     mvn -B -ntp -pl dataguard-server,dataguard-workflow -am \
-      -Dtest=ApprovalOutboxIntegrationTest,ApprovalRecoveryIntegrationTest,ReadOnlyJdbcTlsIntegrationTest,AgentReadMcpIntegrationTest,CertifiedWriteJdbcTlsTest,ApprovedWritePipelineIntegrationTest,DeniedSqlAlertIntegrationTest,AuditIntegrityIntegrationTest \
+      -Dtest=ApprovalOutboxIntegrationTest,ApprovalRecoveryIntegrationTest,ReadOnlyJdbcTlsIntegrationTest,AgentReadMcpIntegrationTest,CertifiedWriteJdbcTlsTest,ApprovedWritePipelineIntegrationTest,DeniedSqlAlertIntegrationTest,ExecutionRecoveryWatchdogIntegrationTest,AuditIntegrityIntegrationTest \
       -Dsurefire.failIfNoSpecifiedTests=false test
 fi
 DG_RUN_FLOWABLE_OUTBOX_E2E=true \
@@ -33,6 +33,7 @@ files = {
     'ApprovedWritePipelineIntegrationTest',
     'AuditIntegrityIntegrationTest',
     'DeniedSqlAlertIntegrationTest',
+    'ExecutionRecoveryWatchdogIntegrationTest',
   ],
   'dataguard-workflow': [
     'ApprovalOutboxIntegrationTest',
@@ -52,6 +53,9 @@ for module, suites in files.items():
       raise SystemExit(f'FAIL: {module}/{suite} tests={executed}, skipped={skipped}, failed={failed}')
     print(f'PASSED_REAL_PG: {module}/{suite} ({executed} tests)')
 PY
+if [[ "${DG_RUN_NATIVE_MCP_HTTP_E2E:-false}" == "true" ]]; then
+  bash bin/verify-native-mcp-http.sh
+fi
 echo "FULL_ISOLATED_CORE_SECURITY_ACCEPTANCE_PASS"
 echo "Live read, write and workflow flags have NOT been enabled."
 echo "Additional gates required before production: external MCP client, browser E2E,"
