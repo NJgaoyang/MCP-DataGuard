@@ -61,7 +61,8 @@ public class ApprovalOutboxWorker {
      WHERE e.state='PENDING' AND e.available_at<=now() AND
        ((e.event_type='APPROVAL_REQUESTED' AND a.approval_status='PENDING')
         OR (e.event_type='APPROVAL_STEP_APPROVED' AND a.process_instance_id IS NOT NULL)
-        OR (e.event_type='APPROVAL_REJECTED' AND a.approval_status IN ('REJECTED','EXPIRED')))
+        OR (e.event_type='APPROVAL_REJECTED' AND a.approval_status IN ('REJECTED','EXPIRED'))
+        OR (e.event_type='APPROVAL_CANCELLED' AND a.approval_status='CANCELLED'))
      ORDER BY e.created_at,e.id
      LIMIT 1 FOR UPDATE OF e SKIP LOCKED
      """)){
@@ -116,13 +117,14 @@ public class ApprovalOutboxWorker {
       }
      }else if("APPROVAL_STEP_APPROVED".equals(type)){
       advance(c,org,approval,instanceId,action,reviewer,stage);
-     }else if("APPROVAL_REJECTED".equals(type)){
+     }else if("APPROVAL_REJECTED".equals(type)||"APPROVAL_CANCELLED".equals(type)){
       if(instanceId!=null){
        var active=runtime.createProcessInstanceQuery()
          .processInstanceId(instanceId).singleResult();
        if(active!=null){
         verifyTenant(instanceId,org);
-        runtime.deleteProcessInstance(instanceId,"REJECTED");
+        runtime.deleteProcessInstance(instanceId,
+          "APPROVAL_CANCELLED".equals(type)?"CANCELLED":"REJECTED");
        }
       }
      }else throw new IllegalStateException("Unexpected approval event");
