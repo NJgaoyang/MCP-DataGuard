@@ -1,0 +1,10 @@
+[Unit]
+Description=DataGuard local encrypted backup retention weekly
+
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00 UTC
+Persistent=true
+Unit=dataguard-backup-retention.service
+
+[Install]
+WantedBy=timers.target
