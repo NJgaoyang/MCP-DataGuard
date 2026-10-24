@@ -16,8 +16,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Safe approval rejection/cancellation workflow, independent of the write executor.
- * APPROVE is intentionally not exposed: Flowable task identity and signed execution
- * authorizations are not yet certified. Rejecting always leaves execution blocked.
+ * Only active, stage-matched human reviewers may approve or reject.
+ * Human decisions never directly authorize SQL execution; outbox synchronization
+ * must complete before a separate write execution can be released.
  */
 @RestController
 @RequestMapping("/api/v1/approvals")
@@ -37,23 +38,61 @@ public class ApprovalDecisionController {
  @Transactional
  public Map<String,Object> reject(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID approvalId,
                                     @RequestBody DecisionInput input){
-  UserPrincipal u=actor(jwt);
+  UserPrincipal u=users.requireUser(jwt);
   if(input==null || input.expectedVersion()<0 || input.reason()==null ||
       input.reason().isBlank() || input.reason().length()>1000)
    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Rejection reason required");
-  // Lock pending approval and verify reviewer is not the request's originating user.
-  List<Boolean> eligible=jdbc.query("""
+  // A reviewer is authorized by the CURRENT certified workflow stage,
+  // not by global administrator permissions.
+  record RejectionScope(boolean independent,String bpmn,String risk){}
+  List<RejectionScope> eligible=jdbc.query("""
    SELECT COALESCE(r.requester_user_id,
       (SELECT agent.owner_user_id FROM dg_agent agent
        WHERE agent.org_id=r.org_id AND agent.id=r.agent_id))
-      IS DISTINCT FROM ? AS eligible
-   FROM dg_sql_approval a JOIN dg_sql_request r ON r.org_id=a.org_id AND r.id=a.request_id
+      IS DISTINCT FROM ?,v.bpmn_xml,r.risk_level
+   FROM dg_sql_approval a JOIN dg_sql_request r
+      ON r.org_id=a.org_id AND r.id=a.request_id
+   JOIN dg_workflow_version v ON v.org_id=a.org_id AND v.id=a.workflow_version_id
    WHERE a.org_id=? AND a.id=? AND a.approval_status='PENDING'
      AND a.execution_status='NOT_SCHEDULED' AND a.expires_at>now()
-     AND a.version=? FOR UPDATE OF a
-   """,(rs,i)->rs.getBoolean("eligible"),u.userId(),u.orgId(),approvalId,input.expectedVersion());
-  if(eligible.size()!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Approval unavailable or stale");
-  if(!eligible.get(0))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Self review is forbidden");
+     AND a.process_instance_id IS NOT NULL AND a.version=?
+     AND v.status IN ('PUBLISHED','RETIRED') FOR UPDATE OF a
+   """,(rs,i)->new RejectionScope(rs.getBoolean(1),rs.getString(2),rs.getString(3)),
+     u.userId(),u.orgId(),approvalId,input.expectedVersion());
+  if(eligible.size()!=1)
+   throw new ResponseStatusException(HttpStatus.CONFLICT,"Approval unavailable or stale");
+  RejectionScope scope=eligible.get(0);
+  if(!scope.independent())
+   throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Self review is forbidden");
+  int reviewed=jdbc.queryForObject("""
+   SELECT count(*) FROM dg_sql_approval_action
+   WHERE org_id=? AND approval_id=? AND action='APPROVE'
+   """,Integer.class,u.orgId(),approvalId);
+  Boolean repeat=jdbc.queryForObject("""
+   SELECT EXISTS(SELECT 1 FROM dg_sql_approval_action
+     WHERE org_id=? AND approval_id=? AND action='APPROVE'
+       AND reviewer_user_id=?)
+   """,Boolean.class,u.orgId(),approvalId,u.userId());
+  if(Boolean.TRUE.equals(repeat))
+   throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Independent reviewer required");
+  boolean highRisk=List.of("HIGH","CRITICAL").contains(scope.risk());
+  String role;
+  try{
+   if(reviewed>=SafeApprovalGraph.requiredReviewers(scope.bpmn(),highRisk))
+    throw new SecurityException("No remaining review stage");
+   role=SafeApprovalGraph.roleAt(scope.bpmn(),reviewed+1,highRisk);
+  }catch(SecurityException ex){
+   throw new ResponseStatusException(HttpStatus.CONFLICT,"Uncertified reviewer stage");
+  }
+  Boolean assigned=jdbc.queryForObject("""
+   SELECT EXISTS(
+     SELECT 1 FROM dg_user_role ur JOIN dg_role r
+       ON r.org_id=ur.org_id AND r.id=ur.role_id
+     WHERE ur.org_id=? AND ur.user_id=? AND r.code=?
+   )
+   """,Boolean.class,u.orgId(),u.userId(),role);
+  if(!Boolean.TRUE.equals(assigned))
+   throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Reviewer role not assigned for current step");
   int updated=jdbc.update("""
    UPDATE dg_sql_approval
    SET approval_status='REJECTED',execution_status='CANCELLED',
@@ -125,7 +164,7 @@ public class ApprovalDecisionController {
  @Transactional
  public Map<String,Object> approve(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID approvalId,
                                     @RequestBody DecisionInput input){
-  UserPrincipal u=actor(jwt);
+  UserPrincipal u=users.requireUser(jwt);
   if(input==null || input.expectedVersion()<0 || input.reason()==null ||
      input.reason().isBlank() || input.reason().length()>1000)
    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Review reason required");
