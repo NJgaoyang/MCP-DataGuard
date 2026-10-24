@@ -31,6 +31,13 @@ class StarRocksReadGrantPolicyTest {
     "GRANT SELECT ON TABLE other.orders TO USER 'reader'@'%'"
   ),"ads","ads_order_kpi_day"));
  }
+ @Test void starRocksRequiresOnlyPublicActiveRole(){
+  assertTrue(StarRocksReadGrantPolicy.onlyPublicRole("public"));
+  assertTrue(StarRocksReadGrantPolicy.onlyPublicRole("`public`"));
+  assertFalse(StarRocksReadGrantPolicy.onlyPublicRole("db_admin,public"));
+  assertFalse(StarRocksReadGrantPolicy.onlyPublicRole(null));
+  assertFalse(StarRocksReadGrantPolicy.onlyPublicRole("role_read"));
+ }
  @Test void sourceTypeAndUrlsAreBounded() {
   assertEquals(ReadDatasourceDialect.STARROCKS,ReadDatasourceDialect.parse("starrocks"));
   assertEquals(ReadDatasourceDialect.MYSQL,ReadDatasourceDialect.parse(null));
