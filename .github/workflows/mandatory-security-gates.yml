@@ -71,6 +71,8 @@ jobs:
           python3 bin/verify-local-backup-retention-policy.py
           bash bin/verify-signed-release-policy.sh
           bash bin/verify-staged-rollout-policy.sh
+          python3 -m unittest discover -s tests -p 'test_audit_checkpoint.py'
+          python3 -m py_compile bin/export-audit-anchor.py
       - name: Missing production evidence must fail closed
         run: |
           set -euo pipefail

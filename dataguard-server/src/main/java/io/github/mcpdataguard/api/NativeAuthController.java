@@ -36,6 +36,9 @@ public class NativeAuthController {
   if(!orgCode.isEmpty() || input.organization()!=null){
    if(!orgCode.isEmpty()&&!orgCode.matches("[A-Za-z0-9_-]{2,64}"))throw invalid();
   }
+  // Bounded pre-BCrypt rate limit: applies even when no matching account exists.
+  if(!io.github.mcpdataguard.security.NativeLoginThrottle.shared().allow(orgCode,input.username()))
+   throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,"Login rate limited");
   List<Account> rows=jdbc.query("""
     SELECT u.org_id,u.id,u.password_hash,u.failed_login_attempts,u.login_locked_until,
            u.must_change_password
