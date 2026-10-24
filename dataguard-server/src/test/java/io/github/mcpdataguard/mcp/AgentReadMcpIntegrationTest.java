@@ -99,6 +99,12 @@ class AgentReadMcpIntegrationTest {
     SELECT count(*) FROM dg_audit_event e
     WHERE e.org_id=? AND e.event_type='SQL_READ_DONE'
     """,Long.class,org));
+  assertEquals(1L,db.queryForObject("""
+    SELECT count(*) FROM dg_sql_read_summary m JOIN dg_sql_request r
+      ON r.org_id=m.org_id AND r.id=m.request_id
+    WHERE m.org_id=? AND r.agent_id=? AND m.returned_rows=2
+      AND m.result_bytes>0 AND m.duration_ms>=0
+    """,Long.class,org,agent));
   // Revocation must take effect on the very next MCP call without a restart.
   db.update("UPDATE dg_agent_permission SET action='DENY' WHERE id=?",permission);
   Map<String,Object> denied=mcp.executeReadonly(source.toString(),"dataguard",
