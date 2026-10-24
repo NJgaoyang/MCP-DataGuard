@@ -19,6 +19,7 @@ for service in ("gateway","workflow","web","public","postgres"):
  assert float(s.get("cpus",0))>0,service
  assert s.get("logging",{}).get("options",{}).get("max-size")=="10m",service
  assert s.get("logging",{}).get("options",{}).get("max-file")=="5",service
+assert c["postgres"].get("memswap_limit")==c["postgres"]["mem_limit"], "PostgreSQL swap not bounded"
 for service in ("gateway","workflow","web","public"):
  s=c[service]
  assert s.get("read_only") is True,service
