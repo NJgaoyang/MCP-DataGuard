@@ -24,6 +24,12 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Free ephemeral runner disk for StarRocks BE
+        run: |
+          set -euo pipefail
+          # Disposable GitHub-hosted VM only, NEVER a development or production host.
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h /
       - name: Start isolated StarRocks 3.5.21 FE and BE
         run: |
           set -euo pipefail
@@ -42,6 +48,20 @@ jobs:
             docker logs --tail 50 dg-v2-starrocks-ci
             exit 1
           fi
+      - name: Wait for backend capacity
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 100);do
+            state="$(docker exec dg-v2-starrocks-ci mysql -h 127.0.0.1 -P 9030 -uroot -N -e 'SHOW BACKENDS' 2>/dev/null || true)"
+            if [[ "$state" == *"true"* && "$state" != *"false"* ]];then
+              echo STARROCKS_BACKEND_READY
+              exit 0
+            fi
+            sleep 2
+          done
+          docker exec dg-v2-starrocks-ci mysql -h 127.0.0.1 -P 9030 -uroot -e 'SHOW BACKENDS' || true
+          echo 'StarRocks BE not healthy (check disk availability)' >&2
+          exit 1
       - name: Create table and least-privilege user on REAL StarRocks
         run: |
           set -euo pipefail
