@@ -122,9 +122,7 @@ public class ReadApi {
    audit.log(requester,"SQL_READ","TABLE",id+"/"+table,"DENIED","no authorized columns",elapsedMs(started));
    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"No authorized columns");
   }
-  String projection=exposed.stream().sorted().map(c->"`"+Guard.identifier(c)+"`")
-    .collect(java.util.stream.Collectors.joining(","));
-  String sql="SELECT "+projection+" FROM `"+table+"` LIMIT "+input.limit();
+  String sql=ReadProjection.select(table,exposed,input.limit());
   // The target user MUST have only SELECT grants. Connection is read-only,
   // statement is read-only and any transport / audit error is fail-closed.
   List<Map<String,Object>> rows=new ArrayList<>();
