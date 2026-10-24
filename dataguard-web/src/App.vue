@@ -254,7 +254,7 @@ async function evaluateEffectivePolicies(){
 }
 
 const token=ref('');
-const loginForm=reactive({username:'',password:''});
+const loginForm=reactive({organization:'',username:'',password:''});
 const mustChange=ref(false);
 const forcedPasswordChange=ref(false);
 const changeForm=reactive({currentPassword:'',newPassword:''});
@@ -734,6 +734,7 @@ async function updatePassword(){
        <div class="auth-mobile-brand"><img class="auth-brand-mark" src="/dataguard-mark.svg" alt="" width="44" height="48"/><span class="auth-brand-copy"><strong class="brand-wordmark">Data<span>Guard</span></strong><small>数据守卫</small></span></div>
        <div class="auth-login-heading"><h2>登录管理平台</h2><p>请输入管理员分配的账号和密码</p></div>
        <a-form :model="loginForm" layout="vertical" @finish="login" class="auth-form">
+        <a-form-item label="组织编码（多租户时必填）" name="organization"><a-input v-model:value="loginForm.organization" autocomplete="organization" placeholder="单组织可留空" size="large" maxlength="64"/></a-form-item>
         <a-form-item label="账号" name="username" :rules="[{required:true,message:'请输入账号'}]"><a-input v-model:value="loginForm.username" autocomplete="username" placeholder="请输入账号" size="large"/></a-form-item>
         <a-form-item label="密码" name="password" :rules="[{required:true,message:'请输入密码'}]"><a-input-password v-model:value="loginForm.password" autocomplete="current-password" placeholder="请输入密码" size="large"/></a-form-item>
         <a-button html-type="submit" type="primary" block size="large" :loading="busy" class="auth-submit">登录</a-button>
