@@ -72,7 +72,7 @@ admin.check("/api/sources/"+source_id+"/enable","POST",{})
 bad_code,_=admin.post("/api/approvals",{"sourceId":source_id,
     "tableName":"never_allowlisted","approverId":reviewer_id,
     "reason":"Must be refused"})
-assert bad_code==403,bad_code
+assert bad_code==400,bad_code  # reviewer with temporary password cannot yet be assigned
 
 reviewer=Actor()
 first=reviewer.login("testreviewer","Temporary_2026!Reviewed")
@@ -90,6 +90,12 @@ second=reviewer.login("testreviewer","Changed_2026!Reviewed")
 assert second["mustChangePassword"] in (False,0)
 listed=admin.check("/api/users/approvers")
 assert any(x["id"]==reviewer_id for x in listed)
+
+# After the reviewer has changed their password, enforce the TABLE allowlist.
+code,_=admin.post("/api/approvals",{"sourceId":source_id,
+    "tableName":"never_allowlisted","approverId":reviewer_id,
+    "reason":"A real reviewer must still not permit a non-allowlisted table"})
+assert code==403,code
 
 ticket=admin.check("/api/approvals","POST",{
     "sourceId":source_id,"tableName":"ci_allowlisted_table",
