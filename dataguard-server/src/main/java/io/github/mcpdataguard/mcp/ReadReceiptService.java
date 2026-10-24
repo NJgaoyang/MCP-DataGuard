@@ -20,7 +20,14 @@ public class ReadReceiptService {
  @Transactional
  public void record(UUID org,UUID agent,UUID datasource,String database,String sql,
                     int rows,int bytes){
+  record(org,agent,datasource,database,sql,rows,bytes,0L);
+ }
+ /** Persists the sanitized P95 source row within the same audit transaction. */
+ @Transactional
+ public void record(UUID org,UUID agent,UUID datasource,String database,String sql,
+                    int rows,int bytes,long durationMs){
   if(org==null||agent==null||datasource==null||sql==null||
+      durationMs<0||durationMs>3600000||
       rows<0||rows>100||bytes<0||bytes>1048576)
    throw new IllegalArgumentException("Invalid read receipt");
   String fingerprint;
@@ -38,6 +45,13 @@ public class ReadReceiptService {
     """,id,agent,database,fingerprint,org,datasource);
   if(saved!=1)throw new SecurityException("Audit datasource not authorized");
   audit.appendRead(org,agent,id,fingerprint,rows,bytes);
+  // The metric row is committed atomically with the read receipt and hash chain.
+  // No SQL text, parameters, raw result or credentials are stored here.
+  jdbc.update("""
+    INSERT INTO dg_sql_read_summary
+      (org_id,request_id,returned_rows,result_bytes,truncated,duration_ms)
+    VALUES(?,?,?,?,false,?)
+    """,org,id,rows,bytes,durationMs);
   jdbc.update("""
     INSERT INTO dg_agent_usage_daily
      (org_id,agent_id,usage_day,request_count,returned_bytes)
