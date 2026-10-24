@@ -9,6 +9,7 @@ on:
       - 'bin/verify-encrypted-backup-restore.sh'
       - 'bin/verify-hardened-compose.sh'
       - 'bin/verify-real-postgres-commit-disconnect.sh'
+      - 'bin/verify-isolated-worker-sigkill.sh'
       - 'bin/verify-signed-production-release.sh'
       - 'bin/verify-signed-release-policy.sh'
       - 'bin/verify-local-backup-health.py'
@@ -131,3 +132,14 @@ jobs:
           python3 bin/verify-local-backup-health-policy.py
           python3 bin/verify-local-backup-retention-policy.py
           python3 bin/verify-operational-alert-policy.py
+
+  worker-client-sigkill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Kill isolated SQL client after durable PostgreSQL commit
+        run: |
+          set -euo pipefail
+          docker pull postgres:17
+          bash bin/verify-isolated-worker-sigkill.sh
