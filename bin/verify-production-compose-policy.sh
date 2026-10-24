@@ -7,7 +7,7 @@ trap 'rm -rf "$tmp"' EXIT
 printf 'ci_only_very_long_platform_secret\n' > "$tmp/p"
 printf 'ci_only_very_long_flowable_secret\n' > "$tmp/f"
 chmod 640 "$tmp/p" "$tmp/f"
-chown 0:10001 "$tmp/p" "$tmp/f"
+if [ "$(id -u)" = 0 ]; then chown 0:10001 "$tmp/p" "$tmp/f"; else sudo chown 0:10001 "$tmp/p" "$tmp/f"; fi
 printf '%s\n%s\n%s\n' '-----BEGIN CERTIFICATE-----' "$(printf a%.0s {1..64})" '-----END CERTIFICATE-----' > "$tmp/ca"
 chmod 644 "$tmp/ca"
 export DG_GATEWAY_IMAGE="example.invalid/dataguard/gateway@sha256:$(printf 'a%.0s' {1..64})"
