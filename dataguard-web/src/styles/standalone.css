@@ -178,3 +178,13 @@
 .dg-app .ant-btn-primary:hover,.ant-modal .ant-btn-primary:hover{background:#1d4ed8;border-color:#1d4ed8}
 .dg-app .ant-input,.dg-app .ant-input-affix-wrapper,.dg-app .ant-select-selector{border-color:#e2e8f0}
 @media(max-width:760px){.dg-sidebar{width:232px}.dg-topbar{left:0}.dg-main{margin-left:0;padding:80px 14px 24px}}
+
+/* V2 secure SQL console - no arbitrary SQL editing or elevated browser execution */
+.dg-v2-read-controls{margin:18px 0 12px}
+.dg-v2-read-columns{display:flex;align-items:center;min-height:34px;color:#475569;border:1px solid #e2e8f0;background:#f8fafc;border-radius:9px;padding:5px 12px;font-size:12px;overflow-wrap:anywhere}
+.dg-v2-read-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:16px 0 10px}
+.dg-v2-read-heading strong{font-size:14px;font-weight:650;color:#1f2937}
+.dg-v2-read-heading span{color:#64748b;font-size:12px}
+.dg-v2-read-preview{max-height:190px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:0 0 18px;background:#111827;color:#e0e7ff;border-radius:12px;padding:18px;font:13px/1.7 'JetBrains Mono',Consolas,monospace}
+.dg-v2-read-results{min-width:0;margin:12px 0 5px}
+@media(max-width:680px){.dg-v2-read-heading{align-items:flex-start;flex-direction:column}}
