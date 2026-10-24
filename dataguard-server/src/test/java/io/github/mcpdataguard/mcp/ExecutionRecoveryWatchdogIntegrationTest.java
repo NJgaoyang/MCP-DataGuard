@@ -111,6 +111,73 @@ class ExecutionRecoveryWatchdogIntegrationTest {
     SELECT amount FROM public.write_chaos_probe WHERE task_id=?
     """,Integer.class,task),
     "Uncertain committed write must not be automatically replayed or reverted");
+
+  // Real tenant-scoped human attestation after a committed-but-unacknowledged
+  // physical write. Agent owner cannot self-certify; two different independent
+  // operators must agree; no attestation ever unlocks another execution.
+  UUID operatorA=UUID.randomUUID(),operatorB=UUID.randomUUID(),otherOrg=UUID.randomUUID();
+  for(UUID reviewer:new UUID[]{operatorA,operatorB}){
+   db.update("""
+     INSERT INTO dg_user(id,org_id,username,display_name) VALUES(?,?,?,?)
+     """,reviewer,org,"reconcile_"+reviewer.toString().replace("-",""),"Operator");
+  }
+  var users=org.mockito.Mockito.mock(
+      io.github.mcpdataguard.security.UserPrincipalResolver.class);
+  var jwt=org.mockito.Mockito.mock(
+      org.springframework.security.oauth2.jwt.Jwt.class);
+  var reconcile=new io.github.mcpdataguard.api.ExecutionReconciliationController(db,users);
+  java.util.function.Function<UUID,io.github.mcpdataguard.security.UserPrincipalResolver.UserPrincipal> principal=
+    id->new io.github.mcpdataguard.security.UserPrincipalResolver.UserPrincipal(
+      org,id,"reconcile","Reconciliation Operator","native","local");
+  long version=db.queryForObject("""
+    SELECT version FROM dg_execution_task WHERE org_id=? AND id=?
+    """,Long.class,org,task);
+  org.mockito.Mockito.when(users.requireUser(jwt)).thenReturn(principal.apply(owner));
+  var forbidden=org.junit.jupiter.api.Assertions.assertThrows(
+    org.springframework.web.server.ResponseStatusException.class,
+    ()->reconcile.attest(jwt,task,
+      new io.github.mcpdataguard.api.ExecutionReconciliationController.Attestation(
+        "external:target-commit-proof-001","COMMITTED",version)));
+  assertEquals(403,forbidden.getStatusCode().value(),"Agent owner must not reconcile");
+  org.mockito.Mockito.when(users.requireUser(jwt)).thenReturn(principal.apply(operatorA));
+  var attested=reconcile.attest(jwt,task,
+    new io.github.mcpdataguard.api.ExecutionReconciliationController.Attestation(
+      "external:target-commit-proof-001","COMMITTED",version));
+  assertEquals("REQUIRES_FURTHER_INVESTIGATION",attested.get("disposition"));
+  assertEquals(false,attested.get("automaticReplayAllowed"));
+  var repeat=org.junit.jupiter.api.Assertions.assertThrows(
+     org.springframework.web.server.ResponseStatusException.class,
+     ()->reconcile.attest(jwt,task,
+       new io.github.mcpdataguard.api.ExecutionReconciliationController.Attestation(
+         "external:target-commit-proof-001","COMMITTED",version)));
+  assertEquals(409,repeat.getStatusCode().value(),"One operator cannot attest twice");
+  org.mockito.Mockito.when(users.requireUser(jwt)).thenReturn(
+    new io.github.mcpdataguard.security.UserPrincipalResolver.UserPrincipal(
+      otherOrg,operatorB,"external","Other organization","native","local"));
+  var tenant=org.junit.jupiter.api.Assertions.assertThrows(
+     org.springframework.web.server.ResponseStatusException.class,
+     ()->reconcile.attest(jwt,task,
+       new io.github.mcpdataguard.api.ExecutionReconciliationController.Attestation(
+         "external:target-commit-proof-002","COMMITTED",version)));
+  assertEquals(409,tenant.getStatusCode().value(),"Cross-organization task is not visible");
+  org.mockito.Mockito.when(users.requireUser(jwt)).thenReturn(principal.apply(operatorB));
+  var verified=reconcile.attest(jwt,task,
+    new io.github.mcpdataguard.api.ExecutionReconciliationController.Attestation(
+      "external:target-commit-proof-002","COMMITTED",version));
+  assertEquals("TWO_PERSON_EVIDENCE_AGREED",verified.get("disposition"));
+  assertEquals("UNKNOWN",verified.get("state"));
+  assertEquals(false,verified.get("automaticReplayAllowed"));
+  assertEquals(2L,db.queryForObject("""
+    SELECT count(*) FROM dg_system_event WHERE org_id=?
+      AND resource_type='EXECUTION_RECONCILIATION' AND resource_id=?
+      AND operation='WRITE_RECONCILIATION_ATTESTED'
+    """,Long.class,org,task.toString()));
+  assertEquals(1,db.queryForObject("""
+    SELECT attempt_no FROM dg_execution_task WHERE org_id=? AND id=?
+    """,Integer.class,org,task));
+  assertEquals(625,db.queryForObject("""
+    SELECT amount FROM public.write_chaos_probe WHERE task_id=?
+    """,Integer.class,task));
  }
  @Test void disabledWatchdogNeverQueriesExecutionTasks(){
   JdbcTemplate db=org.mockito.Mockito.mock(JdbcTemplate.class);
