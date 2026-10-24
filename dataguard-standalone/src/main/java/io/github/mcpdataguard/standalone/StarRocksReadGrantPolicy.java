@@ -18,8 +18,14 @@ final class StarRocksReadGrantPolicy {
  private StarRocksReadGrantPolicy(){}
  static boolean onlyDirectTableSelect(List<String> grants,String database,String table) {
   if(grants==null||grants.isEmpty())return false;
-  String object=Pattern.quote((Guard.identifier(database)+"."+Guard.identifier(table)).toUpperCase(Locale.ROOT));
+  String databaseName=Guard.identifier(database).toUpperCase(Locale.ROOT);
+  String object=Pattern.quote((databaseName+"."+Guard.identifier(table).toUpperCase(Locale.ROOT)));
   Pattern select=Pattern.compile("^GRANT SELECT ON TABLE "+object+" TO (?:USER )?[^;]+;?$");
+  // One read-only credential may serve several explicitly table-granted
+  // tables of the same database. The gateway still checks the platform
+  // allowlist, approval and owner/Agent grants for EACH requested table.
+  Pattern otherTableSelect=Pattern.compile("^GRANT SELECT ON TABLE "
+     +Pattern.quote(databaseName)+"\\.[A-Z][A-Z0-9_]{0,63} TO (?:USER )?[^;]+;?$");
   Pattern usage=Pattern.compile("^GRANT USAGE ON CATALOG DEFAULT_CATALOG TO (?:USER )?[^;]+;?$");
   boolean hasSelect=false;
   for(String raw:grants){
@@ -29,7 +35,8 @@ final class StarRocksReadGrantPolicy {
    // inheritance and any grant options rather than trying to expand a graph.
    if(normalized.contains(" WITH GRANT OPTION"))return false;
    if(select.matcher(normalized).matches())hasSelect=true;
-   else if(!usage.matcher(normalized).matches()
+   else if(!otherTableSelect.matcher(normalized).matches()
+     && !usage.matcher(normalized).matches()
      && !normalized.replace("'PUBLIC'","PUBLIC").matches("^GRANT PUBLIC TO [^;]+;?$"))
      return false;
   }
