@@ -1,3 +1,20 @@
+# MCP DataGuard V2 — MySQL 元数据 + MySQL / StarRocks 业务数据源
+
+> **开发分支：`refactor/dataguard-v2`。状态：开发中 / 生产 NO-GO。** 平台自身元数据和内嵌 Flowable 均存储在 MySQL；业务数据源只接入 MySQL 和 StarRocks。部署模式是 Java 21 Spring Boot 模块化单体 + Vue 3，JAR + systemd，**不需要 Docker**。
+
+V2 以 `dev202610241` 为基线，不覆盖老分支。Maven 根构建仍只包含 `dataguard-standalone`；PG 网关/Worker/旧 Compose 均为遗留参考，不属于 V2 部署链路。
+
+**V2 开发和验收资料**：
+
+- [完整初步代码审计及复用、清理清单](docs/V2_ARCHITECTURE_AUDIT.md)
+- [V2 已提交/待实现/未验收实时台账](docs/V2_IMPLEMENTATION_TRACKER.md)
+- [StarRocks 专用只读账号、TLS 和 DBA 验收要求](docs/V2_STARROCKS_DEPLOY.md)
+- [MySQL 单体原有部署文档](docs/STANDALONE_MYSQL.md)
+
+**第一阶段安全读取范围**：Agent Token → 系统用户 → Flowable 有效审批 → 表白名单 → 两级字段授权 → 物理数据库只读权限检查 → 生成固定单表、授权列 SELECT（最多 100 行）→ MySQL 审计。**暂不开放任意 SQL / JOIN / DML / DDL。** StarRocks 尚缺真实 FE 接入验收，不能仅凭 CI 通过声明可上生产。
+
+---
+
 # MCP DataGuard · MySQL 企业单体版
 
 > **当前默认架构（`dev202610241`）**：Java 21 / Spring Boot 4 单体应用、MySQL 8.4、内嵌 Flowable、企业内部多用户、表级正向白名单、操作审计和非 Docker 的 JAR + systemd 部署。**无 PostgreSQL 和多组织运行依赖**；旧版 PostgreSQL 相关代码仅保留为未参与默认构建的历史目录。
