@@ -43,7 +43,10 @@ public class ApprovalDecisionController {
    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Rejection reason required");
   // Lock pending approval and verify reviewer is not the request's originating user.
   List<Boolean> eligible=jdbc.query("""
-   SELECT r.requester_user_id IS DISTINCT FROM ? AS eligible
+   SELECT COALESCE(r.requester_user_id,
+      (SELECT agent.owner_user_id FROM dg_agent agent
+       WHERE agent.org_id=r.org_id AND agent.id=r.agent_id))
+      IS DISTINCT FROM ? AS eligible
    FROM dg_sql_approval a JOIN dg_sql_request r ON r.org_id=a.org_id AND r.id=a.request_id
    WHERE a.org_id=? AND a.id=? AND a.approval_status='PENDING'
      AND a.execution_status='NOT_SCHEDULED' AND a.expires_at>now()
@@ -128,7 +131,10 @@ public class ApprovalDecisionController {
    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Review reason required");
   record ReviewScope(boolean independent,String bpmn,String risk){}
   List<ReviewScope> eligible=jdbc.query("""
-   SELECT r.requester_user_id IS DISTINCT FROM ? AS eligible,
+   SELECT COALESCE(r.requester_user_id,
+       (SELECT agent.owner_user_id FROM dg_agent agent
+        WHERE agent.org_id=r.org_id AND agent.id=r.agent_id))
+       IS DISTINCT FROM ? AS eligible,
       v.bpmn_xml,r.risk_level
    FROM dg_sql_approval a
    JOIN dg_sql_request r ON r.org_id=a.org_id AND r.id=a.request_id
@@ -155,18 +161,23 @@ public class ApprovalDecisionController {
   if(previous.contains(u.userId()))
    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Independent second reviewer required");
   int nextStage=previous.size()+1;
-  if(scope.bpmn()!=null&&scope.bpmn().contains("safeWorkflowV2")){
-   String requiredRole=SafeApprovalGraph.roleAt(scope.bpmn(),nextStage,highRisk);
-   Boolean member=jdbc.queryForObject("""
+  // Every supported workflow, including legacy two-stage, must bind
+  // approval to the certified reviewer role for its CURRENT stage.
+  // An organization administrator is not implicitly an approver.
+  String requiredRole;
+  try{requiredRole=SafeApprovalGraph.roleAt(scope.bpmn(),nextStage,highRisk);}
+  catch(SecurityException ex){
+   throw new ResponseStatusException(HttpStatus.CONFLICT,"Uncertified reviewer stage");
+  }
+  Boolean member=jdbc.queryForObject("""
     SELECT EXISTS(
      SELECT 1 FROM dg_user_role ur JOIN dg_role role
        ON role.org_id=ur.org_id AND role.id=ur.role_id
      WHERE ur.org_id=? AND ur.user_id=? AND role.code=?
     )
     """,Boolean.class,u.orgId(),u.userId(),requiredRole);
-   if(!Boolean.TRUE.equals(member))
-    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Reviewer role not assigned for current step");
-  }
+  if(!Boolean.TRUE.equals(member))
+   throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Reviewer role not assigned for current step");
   UUID actionId=UUID.randomUUID();
   jdbc.update("""
    INSERT INTO dg_sql_approval_action
