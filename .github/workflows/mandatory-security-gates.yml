@@ -82,3 +82,19 @@ jobs:
             exit 1
           fi
           echo 'PASS: no real production evidence means NO-GO'
+
+  production-packaging:
+    name: production-packaging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate production-only Compose with synthetic restricted secrets
+        run: |
+          set -euo pipefail
+          bash bin/verify-production-compose-policy.sh
+      - name: Check protected credential entrypoint
+        run: |
+          set -euo pipefail
+          sh -n deploy/launch-with-secrets.sh
+          bash -n bin/verify-production-compose.sh bin/verify-production-compose-policy.sh
