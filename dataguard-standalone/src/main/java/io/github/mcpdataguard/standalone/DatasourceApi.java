@@ -70,4 +70,41 @@ public class DatasourceApi {
   audit.log(auth.getName(),"TABLE_REVOKED","TABLE",id+"/"+table,"SUCCESS","immediate");
   return Map.of("table",table,"allowed",false);
  }
+ public record AllowedColumn(String columnName){}
+ @GetMapping("/sources/{id}/allowlist/{table}/columns")
+ public List<Map<String,Object>> allowedColumns(Authentication auth,@PathVariable UUID id,@PathVariable String table){
+  Guard.requireAdmin(auth);
+  table=Guard.identifier(table);
+  return jdbc.queryForList("SELECT column_name AS columnName,enabled FROM read_column_allowlist WHERE source_id=? AND table_name=? ORDER BY column_name",
+      id.toString(),table);
+ }
+ @PostMapping("/sources/{id}/allowlist/{table}/columns")
+ public Map<String,Object> allowColumn(Authentication auth,@PathVariable UUID id,
+   @PathVariable String table,@RequestBody AllowedColumn input){
+  Guard.requireAdmin(auth);
+  table=Guard.identifier(table);
+  String column=Guard.identifier(input==null?null:input.columnName());
+  Integer present=jdbc.queryForObject("SELECT COUNT(*) FROM read_table_allowlist WHERE source_id=? AND table_name=? AND enabled=1",
+      Integer.class,id.toString(),table);
+  if(present==null||present!=1)
+   throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Grant table before granting columns");
+  String actor=jdbc.queryForObject("SELECT id FROM app_users WHERE username=?",String.class,auth.getName());
+  jdbc.update("INSERT INTO read_column_allowlist(id,source_id,table_name,column_name,enabled,created_by) VALUES(?,?,?,?,1,?) "+
+      "ON DUPLICATE KEY UPDATE enabled=1,created_by=VALUES(created_by)",
+      UUID.randomUUID().toString(),id.toString(),table,column,actor);
+  audit.log(auth.getName(),"COLUMN_ALLOWED","COLUMN",id+"/"+table+"/"+column,"SUCCESS","explicit disclosure");
+  return Map.of("column",column,"visible",true);
+ }
+ @DeleteMapping("/sources/{id}/allowlist/{table}/columns/{column}")
+ public Map<String,Object> revokeColumn(Authentication auth,@PathVariable UUID id,
+   @PathVariable String table,@PathVariable String column){
+  Guard.requireAdmin(auth);
+  table=Guard.identifier(table);
+  column=Guard.identifier(column);
+  jdbc.update("UPDATE read_column_allowlist SET enabled=0 WHERE source_id=? AND table_name=? AND column_name=?",
+      id.toString(),table,column);
+  audit.log(auth.getName(),"COLUMN_REVOKED","COLUMN",id+"/"+table+"/"+column,"SUCCESS","redact immediately");
+  return Map.of("column",column,"visible",false);
+ }
+
 }
