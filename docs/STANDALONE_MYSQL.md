@@ -69,3 +69,11 @@ sudo systemctl status dataguard-standalone --no-pager
 ```
 
 首次 Flowable 数据表初始化请由 DBA 在数据库变更窗口临时设置 `DATAGUARD_FLOWABLE_SCHEMA_UPDATE=true`，启动完成后立即恢复 false，后续不得让日常账户持有任意 DDL 权限。
+
+### 用户确认：备份不属于本次实施范围
+
+2026-10-24 决定：本项目**不实施备份/备份恢复功能或验收**，部署脚本不配置备份服务，后续开发计划不再列备份为必做项。此选择有 MySQL 数据丢失与故障后无法恢复的残余风险；运行与审计数据仍应设置必要保留、访问控制和磁盘监控。这一范围决定**不降低** TLS、最小权限、审批及审计要求。
+
+### 目标 MySQL 强制只读权限
+
+在执行任何表读取前，应用运行时执行 `SHOW GRANTS FOR CURRENT_USER()`。只允许 USAGE 和非全局 SELECT，拒绝 UPDATE、INSERT、DELETE、DDL、GRANT OPTION、ALL PRIVILEGES 及全局 SELECT。失败则拒绝查询。数据库管理员必须使用一个单独的 SELECT-only 账号，按白名单里的实际业务表授予 SELECT，不能复用 DataGuard 元数据管理账号。

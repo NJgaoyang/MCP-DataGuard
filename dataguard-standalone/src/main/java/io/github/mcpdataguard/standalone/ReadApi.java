@@ -90,6 +90,7 @@ public class ReadApi {
   try(var connection=DriverManager.getConnection(url,username,password)){
    connection.setReadOnly(true);
    connection.setAutoCommit(false);
+   MysqlReadGrantPolicy.requireReadOnlyGrants(connection);
    try(var stmt=connection.prepareStatement(sql,ResultSet.TYPE_FORWARD_ONLY,ResultSet.CONCUR_READ_ONLY)){
     stmt.setQueryTimeout(5);
     stmt.setMaxRows(input.limit());
