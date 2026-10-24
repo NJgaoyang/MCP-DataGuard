@@ -633,7 +633,7 @@ async function updatePassword(){
 
 </script>
 <template>
- <div class="shell" :class="{'auth-shell':!token||mustChange}">
+ <div class="shell" :class="{'auth-shell':!token||mustChange,'compact-page':!!token&&!mustChange&&selected!=='dashboard'}">
   <aside v-if="token&&!mustChange" class="sidebar">
    <div class="brand"><span class="symbol">M</span><div>MCP DataGuard<small>数据库安全管理</small></div></div>
    <span class="section">工作台</span>
@@ -833,7 +833,7 @@ async function updatePassword(){
       </a-table>
      </section>
 
-     <section v-else-if="selected==='flowable'" class="panel">
+     <section v-else-if="selected==='flowable'" class="panel flowable-panel">
       <div class="panel-heading"><h3>审批实例状态</h3><a-button size="small" @click="loadOperations();loadWorkflowDesigns()">刷新</a-button></div>
       <div class="panel-heading" style="margin-top:16px"><h3>可视化流程设计</h3>
        <a-button type="primary" @click="workflowDesignTarget=null;workflowDesignOpenReset()">新建两级审批流程</a-button>
