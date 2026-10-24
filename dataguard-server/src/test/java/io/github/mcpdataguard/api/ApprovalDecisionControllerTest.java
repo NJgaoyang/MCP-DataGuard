@@ -67,7 +67,14 @@ class ApprovalDecisionControllerTest {
   verify(jdbc,never()).update(anyString(),any(Object[].class));
  }
  @Test void selfReviewIsForbidden(){
-  when(jdbc.query(anyString(),any(RowMapper.class),any(Object[].class))).thenReturn(List.of(false));
+  when(jdbc.query(anyString(),any(RowMapper.class),any(Object[].class))).thenAnswer(inv->{
+   RowMapper<?> mapper=inv.getArgument(1);
+   java.sql.ResultSet rs=mock(java.sql.ResultSet.class);
+   when(rs.getBoolean(1)).thenReturn(false);
+   when(rs.getString(2)).thenReturn("synthetic");
+   when(rs.getString(3)).thenReturn("LOW");
+   return List.of(mapper.mapRow(rs,0));
+  });
   var ex=assertThrows(ResponseStatusException.class,()->
     controller.reject(jwt,UUID.randomUUID(),new ApprovalDecisionController.DecisionInput("unsafe",1)));
   assertEquals(HttpStatus.FORBIDDEN,ex.getStatusCode());
