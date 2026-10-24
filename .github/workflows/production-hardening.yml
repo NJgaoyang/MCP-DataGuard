@@ -9,6 +9,8 @@ on:
       - 'bin/verify-encrypted-backup-restore.sh'
       - 'bin/verify-hardened-compose.sh'
       - 'bin/verify-real-postgres-commit-disconnect.sh'
+      - 'bin/export-encrypted-backup-s3.sh'
+      - 'bin/verify-offsite-export-policy.sh'
       - '.github/workflows/production-hardening.yml'
   workflow_dispatch:
 
@@ -91,3 +93,13 @@ jobs:
           docker pull postgres:17
           bash bin/verify-real-postgres-commit-disconnect.sh
           echo "REAL_TCP_BEFORE_AFTER_COMMIT_GATE_PASS"
+
+  offsite-object-lock-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify immutable backup export rejects tampering and encryption downgrade
+        run: |
+          set -euo pipefail
+          bash bin/verify-offsite-export-policy.sh
