@@ -4,6 +4,7 @@ import io.github.mcpdataguard.security.UserPrincipalResolver;
 import io.github.mcpdataguard.security.UserPrincipalResolver.UserPrincipal;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentMatchers;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -21,7 +22,7 @@ class OperationsLiveControllerTest {
   UUID org=UUID.randomUUID(),user=UUID.randomUUID();
   when(users.requireUser(jwt)).thenReturn(
     new UserPrincipal(org,user,"admin","Admin","issuer","subject"));
-  when(db.queryForObject(anyString(),org.mockito.ArgumentMatchers.<RowMapper<long[]>>any(),eq(org)))
+  when(db.queryForObject(anyString(),ArgumentMatchers.<RowMapper<long[]>>any(),eq(org)))
     .thenReturn(new long[]{300,30,120});
   when(db.queryForObject(anyString(),eq(Long.class),eq(org))).thenReturn(2L,5L);
   var result=new OperationsLiveController(db,users).live(jwt);
