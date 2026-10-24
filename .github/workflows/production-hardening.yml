@@ -20,6 +20,8 @@ on:
       - 'bin/notify-operational-incidents.py'
       - 'bin/verify-operational-alert-policy.py'
       - 'bin/verify-operational-alert-https-e2e.py'
+      - 'bin/certify-postgres-readonly.sh'
+      - 'bin/verify-postgres-readonly-certification.sh'
       - 'deploy/systemd/dataguard-backup-health.service'
       - 'deploy/systemd/dataguard-backup-health.timer'
       - 'deploy/systemd/dataguard-operations-alert.service'
@@ -155,3 +157,14 @@ jobs:
           set -euo pipefail
           docker pull postgres:17
           bash bin/verify-isolated-worker-sigkill.sh
+
+  postgresql-role-certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify approved TLS PostgreSQL read-only role and reject UPDATE privilege
+        run: |
+          set -euo pipefail
+          docker pull postgres:17
+          bash bin/verify-postgres-readonly-certification.sh
