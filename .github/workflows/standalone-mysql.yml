@@ -51,6 +51,7 @@ jobs:
             exit 1
           fi
           python3 bin/test-standalone-login.py
+          python3 bin/test-standalone-approval.py
       - name: Reject PostgreSQL in default reactor
         run: |
           ! grep -q '<module>dataguard-server</module>' pom.xml
