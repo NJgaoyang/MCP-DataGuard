@@ -21,8 +21,10 @@ public class SqlRequestAuditService {
  private final JdbcTemplate jdbc;
  private final AgentPrincipalResolver agents;
  private final DeniedSqlAuditChain chain;
- public SqlRequestAuditService(JdbcTemplate jdbc,AgentPrincipalResolver agents,DeniedSqlAuditChain chain){
-  this.jdbc=jdbc;this.agents=agents;this.chain=chain;
+ private final DeniedSqlAlertService alerts;
+ public SqlRequestAuditService(JdbcTemplate jdbc,AgentPrincipalResolver agents,
+    DeniedSqlAuditChain chain,DeniedSqlAlertService alerts){
+  this.jdbc=jdbc;this.agents=agents;this.chain=chain;this.alerts=alerts;
  }
  @Transactional
  public void recordDeniedCheck(String datasourceId,String database,String sql,Map<String,Object> verdict){
@@ -48,6 +50,7 @@ public class SqlRequestAuditService {
    String reason=String.valueOf(verdict.getOrDefault("code","UNKNOWN"));
    if(!reason.matches("[A-Z0-9_]{1,100}"))reason="UNKNOWN";
    chain.append(a.orgId(),a.agentId(),requestId,fingerprint,reason);
+   alerts.record(a.orgId(),datasource,reason);
   }
  }
 }
