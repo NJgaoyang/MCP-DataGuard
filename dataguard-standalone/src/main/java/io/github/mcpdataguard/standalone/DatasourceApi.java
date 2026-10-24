@@ -104,6 +104,8 @@ public class DatasourceApi {
   List<Map<String,Object>> rows=jdbc.queryForList("SELECT host,port,database_name,read_username,password_env,encrypted_password,db_type FROM data_sources WHERE id=?",id.toString());
   if(rows.size()!=1)throw new ResponseStatusException(HttpStatus.NOT_FOUND);
   Map<String,Object> source=rows.get(0);
+  // Never allow an administrator's connection test to bypass outbound JDBC ACL.
+  ReadSourceHostPolicy.requireAllowed(String.valueOf(source.get("host")));
   String secret=secrets.resolve(id.toString(),source);
   ReadDatasourceDialect dialect=ReadDatasourceDialect.parse(source.get("db_type"));
   String url=dialect.url(String.valueOf(source.get("host")),
