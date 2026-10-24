@@ -29,7 +29,10 @@ enum ReadDatasourceDialect {
   return "jdbc:mysql://"+host+":"+port+"/"+database
     +"?sslMode=VERIFY_IDENTITY&connectionTimeZone=UTC&allowMultiQueries=false"
     +"&allowLoadLocalInfile=false&allowUrlInLocalInfile=false"
-    +"&connectTimeout=4000&socketTimeout=7000";
+    +"&connectTimeout=4000&socketTimeout=7000"
+    // FE may not implement MySQL SET SESSION TRANSACTION READ ONLY.
+    // The client-side flag is advisory; physical StarRocks grants are verified.
+    +(this==STARROCKS?"&readOnlyPropagatesToServer=false":"");
  }
  void enforceReadOnly(Connection connection,String database,String table) throws SQLException {
   connection.setReadOnly(true);
