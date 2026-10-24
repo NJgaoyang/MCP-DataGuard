@@ -1,0 +1,29 @@
+[Unit]
+Description=MCP DataGuard MySQL Standalone
+After=network-online.target mysql.service
+Wants=network-online.target
+[Service]
+Type=simple
+User=dataguard
+Group=dataguard
+WorkingDirectory=/opt/dataguard
+EnvironmentFile=/etc/dataguard/standalone.env
+ExecStart=/usr/bin/java -XX:MaxRAMPercentage=70 -jar /opt/dataguard/dataguard-standalone.jar
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/dataguard
+CapabilityBoundingSet=
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryMax=1500M
+TasksMax=256
+TimeoutStopSec=50
+StandardOutput=journal
+StandardError=journal
+[Install]
+WantedBy=multi-user.target
