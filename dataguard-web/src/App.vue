@@ -13,6 +13,12 @@ const userStatusFilter=ref('ALL');
 const sqlPolicies=ref<{id:string;code:string;name:string;status:string;version:number;latestVersion:number}[]>([]);
 const policyDialog=ref(false);
 const operationalSummary=ref<{deniedRequests:number;pendingApprovals:number;openAlerts:number}|null>(null);
+type LiveSummary={windowSeconds:number;sampledAt:string;requests:number;qps:number;failureRate:number;p95ReadLatencyMs:number;pendingApprovals:number;openAlerts:number};
+const liveSummary=ref<LiveSummary|null>(null);
+async function loadLiveSummary(){
+ try{liveSummary.value=await getData<LiveSummary>('/api/v1/operations/live');}
+ catch(e){liveSummary.value=null;error.value='查询近实时监控失败：'+(e as Error).message;}
+}
 type DailyTrend={day:string;requests:number;denied:number;completed:number;approvals:number;approved:number;alerts:number};
 const dailyTrends=ref<DailyTrend[]>([]);
 function trendPercent(value:number){
@@ -637,7 +643,7 @@ async function updatePassword(){
   <aside v-if="token&&!mustChange" class="sidebar">
    <div class="brand"><img class="brand-mark" src="/dataguard-mark.svg" alt="" width="42" height="46"/><div class="brand-copy"><strong class="brand-wordmark">Data<span>Guard</span></strong><small>数据守卫</small></div></div>
    <span class="section">工作台</span>
-   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='dashboard'){loadOperations();loadSecurityAlerts()};if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations();loadSecurityAlerts();loadTrends()};if(page[0]==='flowable'){loadOperations();loadDeadLetters();loadWorkflowDesigns()}}"><UiIcon :name="page[0]" :size="19"/><span>{{page[1]}}</span></button>
+   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='dashboard'){loadOperations();loadSecurityAlerts()};if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations();loadSecurityAlerts();loadTrends();loadLiveSummary()};if(page[0]==='flowable'){loadOperations();loadDeadLetters();loadWorkflowDesigns()}}"><UiIcon :name="page[0]" :size="19"/><span>{{page[1]}}</span></button>
   </aside>
   <main class="main">
    <header v-if="token&&!mustChange" class="bar"><div class="breadcrumb">工作台 <span>/</span> <strong>{{title}}</strong></div>
@@ -875,13 +881,22 @@ async function updatePassword(){
      </section>
      <section v-else-if="selected==='audit'" class="audit-workspace b2b-workspace">
  <header class="workspace-heading"><div><h2>SQL 审计与监控</h2><p>集中查看安全态势、请求记录及操作历史</p></div>
-  <a-button @click="loadAuditEvents();loadOperations();loadSecurityAlerts();loadTrends()">刷新数据</a-button>
+  <a-button @click="loadAuditEvents();loadOperations();loadSecurityAlerts();loadTrends();loadLiveSummary()">刷新数据</a-button>
  </header>
  <div v-if="operationalSummary" class="audit-summary">
   <div class="audit-kpi"><span class="audit-kpi-icon audit-blue"><UiIcon name="document" :size="19"/></span><span><small>被拒绝请求</small><strong>{{operationalSummary.deniedRequests}}</strong></span></div>
   <div class="audit-kpi"><span class="audit-kpi-icon audit-amber"><UiIcon name="clock" :size="19"/></span><span><small>待审批工单</small><strong>{{operationalSummary.pendingApprovals}}</strong></span></div>
   <div class="audit-kpi"><span class="audit-kpi-icon audit-rose"><UiIcon name="warning" :size="19"/></span><span><small>未处理安全告警</small><strong>{{operationalSummary.openAlerts}}</strong></span></div>
  </div>
+ <section v-if="liveSummary" class="workspace-surface">
+  <div class="workspace-section-title"><div><h3>近五分钟安全指标</h3><p>服务端汇总指标 · 点击“刷新数据”获取最新值</p></div><span class="workspace-count">5 分钟滚动窗口</span></div>
+  <div class="live-metrics">
+   <div><small>请求总数</small><strong>{{liveSummary.requests}}</strong></div>
+   <div><small>每秒请求量</small><strong>{{liveSummary.qps}}</strong></div>
+   <div><small>请求失败率</small><strong>{{(liveSummary.failureRate*100).toFixed(1)}}%</strong></div>
+   <div><small>只读执行 P95</small><strong>{{liveSummary.p95ReadLatencyMs}} <span>ms</span></strong></div>
+  </div>
+ </section>
  <section class="workspace-surface">
   <div class="workspace-section-title"><div><h3>近 14 天 SQL 请求趋势</h3><p>蓝色表示请求次数，红色表示拒绝次数</p></div></div>
   <div v-if="dailyTrends.length" class="trend-plot">
@@ -1631,4 +1646,13 @@ async function updatePassword(){
 .auth-mobile-brand .auth-brand-mark{width:44px;height:48px}
 .auth-mobile-brand .auth-brand-copy .brand-wordmark{font-size:18px}
 @media(max-width:1100px){.auth-brand-top .auth-brand-mark{width:48px;height:52px}.auth-brand-top .brand-wordmark{font-size:19px}}
+
+/* Five-minute aggregate metrics use compact typography and no fabricated data. */
+.shell:not(.auth-shell) .live-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.shell:not(.auth-shell) .live-metrics>div{display:flex;flex-direction:column;gap:7px;padding:12px 14px;background:#f7faff;border-radius:7px}
+.shell:not(.auth-shell) .live-metrics small{font-size:12px;color:#7486a1}
+.shell:not(.auth-shell) .live-metrics strong{font-size:23px;line-height:1.1;color:#193351}
+.shell:not(.auth-shell) .live-metrics strong span{font-size:11px;font-weight:500;color:#8394aa}
+@media(max-width:1000px){.shell:not(.auth-shell) .live-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:500px){.shell:not(.auth-shell) .live-metrics>div{padding:9px 10px}.shell:not(.auth-shell) .live-metrics strong{font-size:20px}}
 </style>
