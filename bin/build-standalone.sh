@@ -4,5 +4,4 @@ cd "$(dirname "$0")/.."
 command -v java >/dev/null
 command -v mvn >/dev/null
 mvn -B -ntp -pl dataguard-standalone -am clean verify
-mvn -B -ntp -pl dataguard-standalone spring-boot:repackage
 printf 'MONOLITH_BUILD_OK: %s\n' "dataguard-standalone/target/dataguard-standalone-0.5.0-SNAPSHOT.jar"
