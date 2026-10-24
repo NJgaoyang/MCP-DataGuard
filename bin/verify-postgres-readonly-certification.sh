@@ -24,8 +24,8 @@ docker exec -u postgres "$NAME" psql -U postgres -d dataguard -v ON_ERROR_STOP=1
  INSERT INTO public.readonly_probe VALUES(1,123);
  GRANT SELECT ON public.readonly_probe TO dg_cert_reader;" >/dev/null
 docker exec -u postgres "$NAME" sh -c 'cd "$PGDATA" &&
- openssl req -x509 -nodes -days 1 -newkey rsa:2048 -keyout server.key
- -out server.crt -subj /CN=localhost -addext subjectAltName=DNS:localhost
+ openssl req -x509 -nodes -days 1 -newkey rsa:2048 -keyout server.key \
+ -out server.crt -subj /CN=localhost -addext subjectAltName=DNS:localhost \
  >/dev/null 2>&1 && chmod 600 server.key &&
  cp server.crt /tmp/dg-cert-root.crt &&
  chmod 644 /tmp/dg-cert-root.crt &&
