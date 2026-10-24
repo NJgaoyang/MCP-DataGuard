@@ -25,10 +25,17 @@ public class AgentMcpApi {
   try{
    switch(req.method()){
     case "initialize" -> result=Map.of("protocolVersion","2025-03-26","capabilities",Map.of("tools",Map.of()),"serverInfo",Map.of("name","DataGuard-MySQL","version","0.5.0"));
-    case "tools/list" -> result=Map.of("tools",List.of(
-      Map.of("name","list_datasources","description","List enabled MySQL sources","inputSchema",Map.of("type","object","properties",Map.of())),
-      Map.of("name","get_schema","description","List positive allowlisted tables and approved visible columns","inputSchema",Map.of("type","object","properties",Map.of())),
-      Map.of("name","execute_readonly","description","Read one allowlisted approved MySQL table; fields redacted unless explicitly approved","inputSchema",Map.of("type","object","properties",Map.of("sourceId",Map.of("type","string"),"tableName",Map.of("type","string"),"limit",Map.of("type","integer")),"required",List.of("sourceId","tableName"))))));
+    case "tools/list" -> {
+      Map<String,Object> empty=Map.of("type","object","properties",Map.of());
+      Map<String,Object> args=Map.of("type","object",
+        "properties",Map.of("sourceId",Map.of("type","string"),
+          "tableName",Map.of("type","string"),"limit",Map.of("type","integer")),
+        "required",List.of("sourceId","tableName"));
+      result=Map.of("tools",List.of(
+        Map.of("name","list_datasources","description","List available MySQL sources","inputSchema",empty),
+        Map.of("name","get_schema","description","List approved table names","inputSchema",empty),
+        Map.of("name","execute_readonly","description","Read a bounded approved table","inputSchema",args)));
+    }
     case "tools/call" -> {
       Map<String,Object> p=req.params()==null?Map.of():req.params();
       String name=String.valueOf(p.getOrDefault("name",""));
