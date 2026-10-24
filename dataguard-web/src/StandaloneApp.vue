@@ -5,6 +5,7 @@ import {api,initializeSession,logout,roleLabel,strongPasswordRule,useActions,typ
 import AppIcon from './standalone/AppIcon.vue';
 import OverviewView from './standalone/OverviewView.vue';
 import SourcesView from './standalone/SourcesView.vue';
+import ReadConsoleView from './standalone/ReadConsoleView.vue';
 import ApprovalsView from './standalone/ApprovalsView.vue';
 import AgentsView from './standalone/AgentsView.vue';
 import UsersView from './standalone/UsersView.vue';
@@ -17,11 +18,11 @@ const theme={token:{colorPrimary:'#2563eb',colorPrimaryHover:'#3b82f6',colorPrim
 const me=ref<CurrentUser|null>(null),starting=ref(true),startupError=ref(''),tab=ref('dashboard'),mobileOpen=ref(false),analyticsOpen=ref(true),activeView=ref<{refresh?:()=>Promise<void>}|null>(null),refreshing=ref(false),passwordOpen=ref(false),passwordRef=ref<FormInstance>(),password=ref({currentPassword:'',newPassword:''});
 const {busy,perform}=useActions();
 const admin=computed(()=>me.value?.roleCode==='ADMIN');
-const titles:Record<string,string>={dashboard:'工作台',sources:'数据源管理',agents:'Agent 管理',policies:'SQL 安全规则',workflows:'审批流程',approvals:'审批中心',audit:'SQL 审计',alerts:'安全告警',users:'用户与权限',account:'账户设置'};
-const topMenus=computed(()=>[{id:'agents',title:'Agent 管理'},...(admin.value?[{id:'sources',title:'数据源管理'},{id:'policies',title:'SQL 安全规则'},{id:'workflows',title:'审批流程'}]:[]),{id:'approvals',title:'审批中心'}]);
+const titles:Record<string,string>={dashboard:'工作台',sources:'数据源管理',read:'SQL 查询',agents:'Agent 管理',policies:'SQL 安全规则',workflows:'审批流程',approvals:'审批中心',audit:'SQL 审计',alerts:'安全告警',users:'用户与权限',account:'账户设置'};
+const topMenus=computed(()=>[{id:'agents',title:'Agent 管理'},...(admin.value?[{id:'sources',title:'数据源管理'},{id:'read',title:'SQL 查询'},{id:'policies',title:'SQL 安全规则'},{id:'workflows',title:'审批流程'}]:[]),{id:'approvals',title:'审批中心'}]);
 const title=computed(()=>me.value?.mustChangePassword?'首次登录安全设置':titles[tab.value]||'数据概览');
 const group=computed(()=>['dashboard','audit','alerts'].includes(tab.value)?'安全运营':'访问管理');
-function navigate(page:string){if(!me.value||me.value.mustChangePassword)return;if(['sources','policies','workflows','users','audit','alerts'].includes(page)&&!admin.value)return;tab.value=page;mobileOpen.value=false;if(['dashboard','audit','alerts'].includes(page))analyticsOpen.value=true;window.scrollTo({top:0,behavior:'auto'})}
+function navigate(page:string){if(!me.value||me.value.mustChangePassword)return;if(['sources','read','policies','workflows','users','audit','alerts'].includes(page)&&!admin.value)return;tab.value=page;mobileOpen.value=false;if(['dashboard','audit','alerts'].includes(page))analyticsOpen.value=true;window.scrollTo({top:0,behavior:'auto'})}
 async function start(){starting.value=true;startupError.value='';try{me.value=await initializeSession();passwordOpen.value=Boolean(me.value.mustChangePassword)}catch(e){startupError.value=(e as Error).message}finally{starting.value=false}}
 async function refresh(){if(refreshing.value)return;refreshing.value=true;try{if(tab.value==='account')me.value=await api('/api/me');else await activeView.value?.refresh?.()}finally{refreshing.value=false}}
 function openPassword(){password.value={currentPassword:'',newPassword:''};passwordOpen.value=true}
@@ -56,6 +57,7 @@ onBeforeUnmount(()=>{window.removeEventListener('dataguard-password-required',pa
   <template v-else-if="me&&!me.mustChangePassword">
    <OverviewView v-if="tab==='dashboard'" ref="activeView" @navigate="navigate"/>
    <SourcesView v-else-if="tab==='sources'&&admin" ref="activeView"/>
+   <ReadConsoleView v-else-if="tab==='read'&&admin" ref="activeView"/>
    <ApprovalsView v-else-if="tab==='approvals'" ref="activeView" :user="me"/>
    <AgentsView v-else-if="tab==='agents'" ref="activeView"/>
    <UsersView v-else-if="tab==='users'&&admin" ref="activeView" :user="me"/>
