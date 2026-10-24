@@ -15,5 +15,5 @@ if grep -Eiq 'REPLACE_WITH|example[.]invalid' "$config"; then
   echo "Placeholder password in $config; edit before deploying." >&2
   exit 1
 fi
-docker compose --env-file "$config" -f deploy/compose.yaml -f deploy/compose.dev.yaml config --quiet
+docker compose --env-file "$config" -f deploy/compose.yaml -f deploy/compose.dev.yaml -f deploy/compose.hardened.yaml config --quiet
 echo "Docker and Compose configuration validated. This build has no production SQL execution."
