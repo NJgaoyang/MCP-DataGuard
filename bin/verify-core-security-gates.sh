@@ -63,7 +63,11 @@ if [[ "${DG_RUN_MCP_READ_ALLOW_HTTP_E2E:-false}" == "true" ]]; then
   # Never enable production flags or connect to existing deployment volumes.
   bash bin/verify-mcp-authorized-read-http.sh
 fi
+if [[ "${DG_RUN_REAL_TCP_COMMIT_E2E:-false}" == "true" ]]; then
+  # Disposable PostgreSQL plus a separate TCP client. It never touches live DBs.
+  bash bin/verify-real-postgres-commit-disconnect.sh
+fi
 echo "FULL_ISOLATED_CORE_SECURITY_ACCEPTANCE_PASS"
 echo "Live read, write and workflow flags have NOT been enabled."
 echo "Additional gates required before production: external MCP client, browser E2E,"
-echo "controlled network failure/commit chaos, live backup restore and security review."
+echo "independent signed release, offsite restore, load/penetration test and security review."
