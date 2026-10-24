@@ -66,7 +66,12 @@ class NativeLoginFlowableOutboxIntegrationTest {
     SELECT count(*) FROM dg_native_session WHERE org_id=? AND revoked_at IS NULL
     """,Long.class,org));
 
-  var engine=ProcessEngineConfiguration.createStandaloneInMemProcessEngineConfiguration()
+  // Other isolated integration suites also create fresh H2 engines whose
+  // numeric IDs restart from 1. The shared real PostgreSQL approval table
+  // requires globally unique Flowable instance identifiers across suites.
+  var flowConfig=ProcessEngineConfiguration.createStandaloneInMemProcessEngineConfiguration();
+  flowConfig.setIdGenerator(new org.flowable.common.engine.impl.persistence.StrongUuidGenerator());
+  var engine=flowConfig
     .setDatabaseSchemaUpdate(ProcessEngineConfiguration.DB_SCHEMA_UPDATE_TRUE)
     .buildProcessEngine();
   try {
