@@ -100,7 +100,7 @@ if [[ "${DG_RUN_FLOWABLE_OUTBOX_E2E:-false}" == "true" ]]; then
    -v "$ROOT:/workspace" -v "$CACHE:/root/.m2" -w /workspace \
    maven:3.9.11-eclipse-temurin-21 \
    mvn -B -o -ntp -pl dataguard-workflow -am \
-     -Dtest=ApprovalRecoveryIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false test
+     -Dtest=ApprovalRecoveryIntegrationTest,ReviewProcessAuthorizationIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false test
  echo "PASSED: approval timeout, eight retry attempts and high-severity dead-letter alert"
  echo "PASSED: SQL audit chain rejects tampered evidence and cross-tenant access"
  echo "PASSED: denied SQL alert deduplication, tenant isolation and acknowledge/reopen"
@@ -108,6 +108,7 @@ if [[ "${DG_RUN_FLOWABLE_OUTBOX_E2E:-false}" == "true" ]]; then
  echo "PASSED: stage-specific reviewer roles, agent owner self-review denial and outbox safety"
  echo "PASSED: multi-tenant native login account and session isolation"
  echo "PASSED: platform approval outbox to two-stage Flowable integration"
+ echo "PASSED: real Flowable task ownership, tenant isolation and rejection validation"
 fi
 if [[ "${DG_RUN_READ_TLS_E2E:-false}" == "true" ]]; then
  TLS_TMP="$(mktemp -d)"
