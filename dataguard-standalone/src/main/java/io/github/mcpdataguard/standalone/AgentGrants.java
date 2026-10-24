@@ -50,6 +50,38 @@ public final class AgentGrants {
     FROM agent_read_permissions WHERE token_id=? ORDER BY source_id,table_name
     """,parse(tokenId));
  }
+ public record ColumnGrantInput(String tokenId,String sourceId,String tableName,String columnName,boolean enabled){}
+ @PostMapping("/columns")
+ public Map<String,Object> grantColumn(Authentication auth,@RequestBody ColumnGrantInput input){
+  Guard.requireAdmin(auth);
+  if(input==null)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Missing column grant");
+  String token=parse(input.tokenId()), source=parse(input.sourceId());
+  String table=Guard.identifier(input.tableName()), column=Guard.identifier(input.columnName());
+  if(!allowed(token,source,table))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Agent table grant required");
+  Integer approved=jdbc.queryForObject("""
+    SELECT COUNT(*) FROM read_column_allowlist
+    WHERE source_id=? AND table_name=? AND column_name=? AND enabled=1
+    """,Integer.class,source,table,column);
+  if(approved==null||approved!=1)
+    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Owner-level column disclosure must already be allowed");
+  String actor=jdbc.queryForObject("SELECT id FROM app_users WHERE username=? AND enabled=1",
+      String.class,auth.getName());
+  jdbc.update("""
+    INSERT INTO agent_column_permissions(id,token_id,source_id,table_name,column_name,enabled,granted_by)
+    VALUES(?,?,?,?,?,?,?)
+    ON DUPLICATE KEY UPDATE enabled=VALUES(enabled),granted_by=VALUES(granted_by)
+    """,UUID.randomUUID().toString(),token,source,table,column,input.enabled(),actor);
+  audit.log(auth.getName(),"AGENT_COLUMN_GRANT","AGENT",token+"/"+source+"/"+table,
+      "SUCCESS",(input.enabled()?"ALLOW ":"REVOKE ")+column);
+  return Map.of("updated",true);
+ }
+ public boolean columnAllowed(String tokenId,String sourceId,String table,String column){
+  return allowed(tokenId,sourceId,table)&&Boolean.TRUE.equals(jdbc.queryForObject("""
+    SELECT EXISTS(SELECT 1 FROM agent_column_permissions
+      WHERE token_id=? AND source_id=? AND table_name=? AND LOWER(column_name)=LOWER(?)
+      AND enabled=1)
+    """,Boolean.class,tokenId,sourceId,table,column));
+ }
  private static String parse(String id){
   try{return UUID.fromString(id).toString();}
   catch(RuntimeException ex){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid UUID");}
