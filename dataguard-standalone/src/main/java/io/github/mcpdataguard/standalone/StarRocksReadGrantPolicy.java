@@ -44,7 +44,7 @@ final class StarRocksReadGrantPolicy {
  }
  static boolean onlyPublicRole(String activeRoles){
   return activeRoles!=null &&
-    "PUBLIC".equals(activeRoles.replaceAll("[`'\\\"\\s]","").toUpperCase(Locale.ROOT));
+    "PUBLIC".equals(activeRoles.replace("`","").replace("'","").replace("\\"","").replaceAll("\\s+","").toUpperCase(Locale.ROOT));
  }
  static void requireDirectTableSelect(Connection connection,String database,String table) throws SQLException {
   List<String> grants=new ArrayList<>();
