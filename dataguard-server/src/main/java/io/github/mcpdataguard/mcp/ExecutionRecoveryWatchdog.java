@@ -47,6 +47,14 @@ public class ExecutionRecoveryWatchdog {
      WHERE org_id=? AND id=? AND execution_status IN ('CLAIMED','EXECUTING')
      """,org,approval);
    jdbc.update("""
+     UPDATE dg_execution_attempt
+     SET phase='UNKNOWN',completed_at=now(),
+       error_code='WRITE_OUTCOME_UNCERTAIN',
+       error_category='REQUIRES_RECONCILIATION'
+     WHERE org_id=? AND task_id=?
+       AND phase IN ('CLAIMED','BEFORE_SEND','IN_FLIGHT')
+     """,org,id);
+   jdbc.update("""
      INSERT INTO dg_system_event(id,org_id,actor,operation,resource_type,resource_id)
      VALUES (?,?,'EXECUTION_WATCHDOG','WRITE_RESULT_UNKNOWN','EXECUTION_TASK',?)
      """,UUID.randomUUID(),org,id.toString());
