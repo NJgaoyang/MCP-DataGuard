@@ -28,18 +28,26 @@ public class NativeAuthController {
  @Transactional(noRollbackFor=ResponseStatusException.class)
  public AuthResult login(@RequestBody Login input){
   if(input==null || input.username()==null || !input.username().matches("[A-Za-z0-9_.@-]{3,128}")
-     || input.password()==null || input.password().length()>256)throw invalid();
+     || input.password()==null || input.password().isBlank() ||
+      input.password().length()>256)throw invalid();
+  // Organization code is mandatory when multiple organizations are active,
+  // and optional for backward compatibility with existing single-org logins.
+  String orgCode=input.organization()==null?"":input.organization().strip();
+  if(!orgCode.isEmpty() || input.organization()!=null){
+   if(!orgCode.isEmpty()&&!orgCode.matches("[A-Za-z0-9_-]{2,64}"))throw invalid();
+  }
   List<Account> rows=jdbc.query("""
     SELECT u.org_id,u.id,u.password_hash,u.failed_login_attempts,u.login_locked_until,
            u.must_change_password
     FROM dg_user u JOIN dg_organization o ON o.id=u.org_id
     WHERE o.status='ACTIVE' AND u.username=? AND u.status='ACTIVE'
-      AND (SELECT count(*) FROM dg_organization WHERE status='ACTIVE')=1
+      AND ((?='' AND (SELECT count(*) FROM dg_organization WHERE status='ACTIVE')=1)
+           OR (?<>'' AND o.code=?))
     FOR UPDATE OF u
     """,(rs,i)->new Account(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class),
      rs.getString(3),rs.getInt(4),
      rs.getTimestamp(5)==null?null:rs.getTimestamp(5).toInstant(),rs.getBoolean(6)),
-     input.username());
+     input.username(),orgCode,orgCode,orgCode);
   Account u=rows.size()==1?rows.get(0):null;
   if(u==null || u.hash()==null){
    NativeTokens.passwords().matches(input.password(),DUMMY);
