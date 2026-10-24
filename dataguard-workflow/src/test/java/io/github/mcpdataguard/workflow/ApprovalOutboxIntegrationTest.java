@@ -146,6 +146,47 @@ class ApprovalOutboxIntegrationTest {
      SELECT count(*) FROM platform.dg_outbox_event
       WHERE org_id=? AND state='PENDING'
      """,Long.class,org));
+   // Cancellation must stop the live Flowable instance and retain the
+   // cancelled platform status; it must never schedule write execution.
+   UUID cancelRequest=UUID.randomUUID(),cancelApproval=UUID.randomUUID();
+   db.update("""
+     INSERT INTO platform.dg_sql_request
+       (id,org_id,agent_id,datasource_id,tool_name,decision,request_status)
+     VALUES(?,?,?,?,'submit_change','REQUIRE_APPROVAL','PENDING_APPROVAL')
+     """,cancelRequest,org,agent,source);
+   db.update("""
+     INSERT INTO platform.dg_sql_approval
+       (id,org_id,request_id,workflow_version_id,approval_status,execution_status,expires_at)
+     VALUES(?,?,?,?,'PENDING','NOT_SCHEDULED',now()+interval '1 day')
+     """,cancelApproval,org,cancelRequest,workflowVersion);
+   db.update("""
+     INSERT INTO platform.dg_outbox_event(id,org_id,aggregate_type,aggregate_id,event_type,payload)
+     VALUES(?,?,'SQL_APPROVAL',?,'APPROVAL_REQUESTED','{}'::jsonb)
+     """,UUID.randomUUID(),org,cancelApproval);
+   dynamicWorker.poll();
+   String cancelInstance=db.queryForObject("""
+     SELECT process_instance_id FROM platform.dg_sql_approval WHERE id=?
+     """,String.class,cancelApproval);
+   assertNotNull(cancelInstance);
+   db.update("""
+     UPDATE platform.dg_sql_approval SET approval_status='CANCELLED',
+       execution_status='CANCELLED' WHERE org_id=? AND id=?
+     """,org,cancelApproval);
+   UUID cancelEvent=UUID.randomUUID();
+   db.update("""
+     INSERT INTO platform.dg_outbox_event(id,org_id,aggregate_type,aggregate_id,event_type,payload)
+     VALUES(?,?,'SQL_APPROVAL',?,'APPROVAL_CANCELLED','{}'::jsonb)
+     """,cancelEvent,org,cancelApproval);
+   dynamicWorker.poll();
+   assertTrue(engine.getRuntimeService().createProcessInstanceQuery()
+     .processInstanceId(cancelInstance).list().isEmpty(),
+     "Cancelled platform approval must terminate the matching Flowable instance");
+   assertEquals("PUBLISHED",db.queryForObject("""
+     SELECT state FROM platform.dg_outbox_event WHERE id=?
+     """,String.class,cancelEvent));
+   assertEquals("CANCELLED",db.queryForObject("""
+     SELECT execution_status FROM platform.dg_sql_approval WHERE id=?
+     """,String.class,cancelApproval));
    // A published definition whose bytes no longer match its immutable digest
    // must be rejected before creating a third process instance.
    UUID changedRequest=UUID.randomUUID(),changedApproval=UUID.randomUUID(),
