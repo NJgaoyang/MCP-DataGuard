@@ -1655,4 +1655,9 @@ async function updatePassword(){
 .shell:not(.auth-shell) .live-metrics strong span{font-size:11px;font-weight:500;color:#8394aa}
 @media(max-width:1000px){.shell:not(.auth-shell) .live-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:500px){.shell:not(.auth-shell) .live-metrics>div{padding:9px 10px}.shell:not(.auth-shell) .live-metrics strong{font-size:20px}}
+
+/* Scoped selector intentionally overrides the dashboard's scoped 62px bar.
+   Previously a global selector lost the cascade in real Chromium. */
+.shell.compact-page:not(.auth-shell) .bar{height:46px!important;min-height:46px!important;padding:0 18px!important}
+@media(max-width:760px){.shell.compact-page:not(.auth-shell) .bar{height:46px!important;min-height:46px!important;padding:0 9px!important}}
 </style>
