@@ -121,7 +121,8 @@ public class AgentMcpApi {
       audit.log(user,"MCP_AGENT_ACCESS","AGENT",tokenId+"/"+sourceId+"/"+table,"DENIED","table grant missing or disabled");
       throw new IllegalArgumentException("Agent table access denied");
     }
-    value=reader.mcpColumns(user,sourceId,table).stream().filter(col->grants.columnAllowed(tokenId,sourceId,table,String.valueOf(col.get("columnName")))).toList();
+    java.util.Set<String> columns=grants.allowedColumns(tokenId,sourceId,table);
+    value=reader.mcpColumns(user,sourceId,table).stream().filter(col->columns.contains(String.valueOf(col.get("columnName")).toLowerCase(java.util.Locale.ROOT))).toList();
    }
    case "execute_readonly" -> {
     if(!java.util.Set.of("sourceId","tableName","limit").containsAll(args.keySet())
@@ -136,13 +137,14 @@ public class AgentMcpApi {
     Map<String,Object> original=reader.read(auth,new ReadApi.ReadQuery(sourceId,table,(Integer)n));
     Object rawRows=original.get("rows");
     if(!(rawRows instanceof List<?> rows))throw new IllegalArgumentException("Invalid read response");
+    java.util.Set<String> columns=grants.allowedColumns(tokenId,sourceId,table);
     List<Map<String,Object>> filtered=new java.util.ArrayList<>();
     for(Object obj:rows){
       if(!(obj instanceof Map<?,?> row))throw new IllegalArgumentException("Invalid row response");
       Map<String,Object> safe=new java.util.LinkedHashMap<>();
       for(var entry:row.entrySet()){
         String column=String.valueOf(entry.getKey());
-        safe.put(column,grants.columnAllowed(tokenId,sourceId,table,column)
+        safe.put(column,columns.contains(column.toLowerCase(java.util.Locale.ROOT))
           ? entry.getValue() : "[REDACTED]");
       }
       filtered.add(safe);
