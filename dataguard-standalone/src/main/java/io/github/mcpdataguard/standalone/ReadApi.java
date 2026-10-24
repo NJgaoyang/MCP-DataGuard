@@ -24,7 +24,12 @@ public class ReadApi {
  private final DatasourceSecrets secrets;
  private final SqlReadPolicyGate sqlPolicy;
  public ReadApi(JdbcTemplate jdbc,AuditService audit,DatasourceSecrets secrets,SqlReadPolicyGate sqlPolicy){this.jdbc=jdbc;this.audit=audit;this.secrets=secrets;this.sqlPolicy=sqlPolicy;}
- public record ReadQuery(String sourceId,String tableName,int limit){}
+ public record ReadQuery(String sourceId,String tableName,int limit,
+    String filterColumn,String filterValue,String sortColumn,String sortDirection){
+   public ReadQuery(String sourceId,String tableName,int limit){
+    this(sourceId,tableName,limit,null,null,null,null);
+   }
+ }
  static Object mask(Object value,boolean permitted){
   if(!permitted||value==null||value instanceof byte[])return "[REDACTED]";
   if(value instanceof Number || value instanceof Boolean)return value;
@@ -129,7 +134,9 @@ public class ReadApi {
    audit.log(requester,"SQL_READ","TABLE",id+"/"+table,"DENIED","no authorized columns",elapsedMs(started));
    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"No authorized columns");
   }
-  String sql=ReadProjection.select(table,exposed,input.limit());
+  ReadProjection.Query projection=ReadProjection.build(table,exposed,input.limit(),
+    input.filterColumn(),input.filterValue(),input.sortColumn(),input.sortDirection());
+  String sql=projection.sql();
   // The target user MUST have only SELECT grants. Connection is read-only,
   // statement is read-only and any transport / audit error is fail-closed.
   List<Map<String,Object>> rows=new ArrayList<>();
@@ -137,6 +144,7 @@ public class ReadApi {
    dialect.begin(connection);
    dialect.enforceReadOnly(connection,database,table);
    try(var stmt=connection.prepareStatement(sql,ResultSet.TYPE_FORWARD_ONLY,ResultSet.CONCUR_READ_ONLY)){
+    if(projection.predicateValue()!=null)stmt.setString(1,projection.predicateValue());
     stmt.setQueryTimeout(5);
     stmt.setMaxRows(input.limit());
     try(var results=stmt.executeQuery()){
