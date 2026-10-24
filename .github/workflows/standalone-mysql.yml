@@ -30,15 +30,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: dataguard-web/package-lock.json
       - name: Build Vue + Ant Design standalone UI into the single JAR
         env:
           VITE_DATAGUARD_STANDALONE: 'true'
         run: |
           set -euo pipefail
           cd dataguard-web
-          npm ci
+          npm install --no-audit --no-fund
           npm run build
           test -s dist/index.html
           cd ..
