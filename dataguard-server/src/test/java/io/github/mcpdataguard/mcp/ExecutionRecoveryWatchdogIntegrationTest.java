@@ -35,8 +35,8 @@ class ExecutionRecoveryWatchdogIntegrationTest {
     """,datasource,org,owner);
   db.update("""
     INSERT INTO dg_workflow_template(id,org_id,code,name,created_by)
-    VALUES(?,?,?,'two_review','Two-stage review',?)
-    """,workflow,org,"Recovery workflow",owner);
+    VALUES(?,?,'two_review','Two-stage review',?)
+    """,workflow,org,owner);
   db.update("""
     INSERT INTO dg_workflow_version(id,org_id,workflow_id,revision,bpmn_xml,
       bpmn_digest,flowable_definition_key,status)
@@ -90,7 +90,6 @@ class ExecutionRecoveryWatchdogIntegrationTest {
     """,Integer.class,org,task));
  }
  @Test void disabledWatchdogNeverQueriesExecutionTasks(){
-  org.mockito.Mockito.clearAllCaches();
   JdbcTemplate db=org.mockito.Mockito.mock(JdbcTemplate.class);
   new ExecutionRecoveryWatchdog(db,false).quarantineExpiredLeases();
   org.mockito.Mockito.verifyNoInteractions(db);
