@@ -16,9 +16,10 @@ public class AgentMcpApi {
  private final AgentTokens tokens;
  private final ReadApi reader;
  private final AuditService audit;
+ private final AgentGrants grants;
  private final tools.jackson.databind.json.JsonMapper json=new tools.jackson.databind.json.JsonMapper();
- public AgentMcpApi(AgentTokens tokens,ReadApi reader,AuditService audit){
-  this.tokens=tokens;this.reader=reader;this.audit=audit;
+ public AgentMcpApi(AgentTokens tokens,ReadApi reader,AuditService audit,AgentGrants grants){
+  this.tokens=tokens;this.reader=reader;this.audit=audit;this.grants=grants;
  }
  public record Request(String jsonrpc,Object id,String method,Map<String,Object> params){}
  private static Map<String,Object> error(int code,String message){
@@ -45,6 +46,8 @@ public class AgentMcpApi {
   String raw=authorization!=null&&authorization.startsWith("Bearer ")?authorization.substring(7):null;
   String user=tokens.resolve(raw);
   if(user==null)return unauthorized();
+  String tokenId=tokens.resolveTokenId(raw);
+  if(tokenId==null)return unauthorized();
   if(!supports(protocol))return ResponseEntity.status(HttpStatus.BAD_REQUEST)
     .body(response(req==null?null:req.id(),"error",error(-32600,"Unsupported MCP protocol version")));
   if(accept!=null && !accept.contains("application/json") && !accept.contains("*/*"))
@@ -64,7 +67,7 @@ public class AgentMcpApi {
       "serverInfo",Map.of("name","DataGuard-MySQL","version","0.5.0"));
     case "ping" -> Map.of();
     case "tools/list" -> toolList();
-    case "tools/call" -> call(user,req.params());
+    case "tools/call" -> call(user,tokenId,req.params());
     default -> throw new IllegalArgumentException("Method not found");
    };
    return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON)
@@ -92,7 +95,7 @@ public class AgentMcpApi {
     Map.of("name","describe_table","description","Explicitly disclosed readable columns of an approved table (no physical metadata)","inputSchema",Map.of("type","object","properties",Map.of("sourceId",Map.of("type","string"),"tableName",Map.of("type","string")),"required",List.of("sourceId","tableName"))),
     Map.of("name","execute_readonly","description","Bounded SELECT for approved table and authorized columns","inputSchema",bounded)));
  }
- private Map<String,Object> call(String user,Map<String,Object> request) throws Exception {
+ private Map<String,Object> call(String user,String tokenId,Map<String,Object> request) throws Exception {
   if(request==null)throw new IllegalArgumentException("Missing arguments");
   Object arg=request.getOrDefault("arguments",Map.of());
   if(!(arg instanceof Map<?,?> args))throw new IllegalArgumentException("Invalid arguments");
@@ -101,16 +104,21 @@ public class AgentMcpApi {
   switch(name){
    case "list_datasources" -> {
     if(!args.isEmpty())throw new IllegalArgumentException("Unexpected args");
-    value=reader.mcpSources(user);
+    value=reader.mcpSources(user).stream().filter(s->reader.mcpSchema(user,String.valueOf(s.get("id")))
+      .stream().anyMatch(t->grants.allowed(tokenId,String.valueOf(s.get("id")),String.valueOf(t.get("tableName"))))).toList();
    }
    case "get_schema" -> {
     if(!args.keySet().equals(java.util.Set.of("sourceId")))throw new IllegalArgumentException("Invalid schema args");
-    value=reader.mcpSchema(user,String.valueOf(args.get("sourceId")));
+    String sourceId=String.valueOf(args.get("sourceId"));
+    value=reader.mcpSchema(user,sourceId).stream().filter(t->grants.allowed(tokenId,sourceId,String.valueOf(t.get("tableName")))).toList();
    }
    case "describe_table" -> {
     if(!args.keySet().equals(java.util.Set.of("sourceId","tableName")))
       throw new IllegalArgumentException("Invalid table description arguments");
-    value=reader.mcpColumns(user,String.valueOf(args.get("sourceId")),String.valueOf(args.get("tableName")));
+    String sourceId=String.valueOf(args.get("sourceId"));
+    String table=Guard.identifier(String.valueOf(args.get("tableName")));
+    if(!grants.allowed(tokenId,sourceId,table))throw new IllegalArgumentException("Agent table access denied");
+    value=reader.mcpColumns(user,sourceId,table);
    }
    case "execute_readonly" -> {
     if(!java.util.Set.of("sourceId","tableName","limit").containsAll(args.keySet())
@@ -118,9 +126,11 @@ public class AgentMcpApi {
       throw new IllegalArgumentException("Invalid read args");
     Object n=args.containsKey("limit")?args.get("limit"):10;
     if(!(n instanceof Integer))throw new IllegalArgumentException("Invalid limit");
+    String sourceId=String.valueOf(args.get("sourceId"));
+    String table=Guard.identifier(String.valueOf(args.get("tableName")));
+    if(!grants.allowed(tokenId,sourceId,table))throw new IllegalArgumentException("Agent table access denied");
     var auth=new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(user,"",List.of());
-    value=reader.read(auth,new ReadApi.ReadQuery(String.valueOf(args.get("sourceId")),
-      String.valueOf(args.get("tableName")),(Integer)n));
+    value=reader.read(auth,new ReadApi.ReadQuery(sourceId,table,(Integer)n));
    }
    default -> throw new IllegalArgumentException("Unsupported tool");
   }
