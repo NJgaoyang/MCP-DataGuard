@@ -75,6 +75,16 @@ public final class AgentGrants {
       "SUCCESS",(input.enabled()?"ALLOW ":"REVOKE ")+column);
   return Map.of("updated",true);
  }
+ public java.util.Set<String> allowedColumns(String tokenId,String sourceId,String table){
+  if(!allowed(tokenId,sourceId,table))return java.util.Set.of();
+  return new java.util.HashSet<>(jdbc.query("""
+    SELECT LOWER(c.column_name) FROM agent_column_permissions c
+    JOIN read_column_allowlist u ON u.source_id=c.source_id
+      AND u.table_name=c.table_name AND LOWER(u.column_name)=LOWER(c.column_name)
+    WHERE c.token_id=? AND c.source_id=? AND c.table_name=?
+      AND c.enabled=1 AND u.enabled=1
+    """,(rs,i)->rs.getString(1),tokenId,sourceId,table));
+ }
  public boolean columnAllowed(String tokenId,String sourceId,String table,String column){
   return allowed(tokenId,sourceId,table)&&Boolean.TRUE.equals(jdbc.queryForObject("""
     SELECT EXISTS(SELECT 1 FROM agent_column_permissions
