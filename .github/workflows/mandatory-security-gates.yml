@@ -32,8 +32,13 @@ jobs:
           cache: maven
       - name: Pull disposable PostgreSQL 17
         run: docker pull postgres:17
+      - name: Build the exact checkout gateway for real MCP protocol tests
+        run: |
+          docker build --file deploy/Dockerfile.backend --build-arg SERVICE=dataguard-server \
+            --tag deploy-gateway:release-e2e .
       - name: Complete PostgreSQL, Flowable, MCP and JVM crash acceptance
         env:
+          DG_MCP_GATEWAY_IMAGE: deploy-gateway:release-e2e
           DG_E2E_PREFETCH_MAVEN: 'true'
           DG_RUN_NATIVE_MCP_HTTP_E2E: 'true'
           DG_RUN_MCP_READ_ALLOW_HTTP_E2E: 'true'
