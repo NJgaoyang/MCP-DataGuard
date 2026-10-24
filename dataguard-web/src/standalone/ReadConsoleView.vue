@@ -7,6 +7,8 @@ import AppIcon from './AppIcon.vue';
 type ReadResult={decision:string;table:string;rows:Row[];rowCount:number;masking:string};
 const sources=ref<Row[]>([]),tables=ref<Row[]>([]),columns=ref<Row[]>([]);
 const sourceId=ref(''),tableName=ref(''),limit=ref(10);
+const filterColumn=ref<string|undefined>(),filterValue=ref(''),sortColumn=ref<string|undefined>(),sortDirection=ref('ASC');
+const columnOptions=computed(()=>approvedColumns.value.map(x=>({value:x,label:x})));
 const result=ref<ReadResult|null>(null),loading=ref(false),reading=ref(false),error=ref('');
 let requestSeq=0;
 const sourceOptions=computed(()=>sources.value.filter(r=>Boolean(r.enabled)).map(r=>({
@@ -20,11 +22,15 @@ const preview=computed(()=>{
  if(!tableName.value)return '-- 选择已授权的数据表后自动生成安全 SELECT';
  if(approvedColumns.value.length===0)return '-- 当前表没有允许披露的字段，拒绝执行';
  return 'SELECT '+approvedColumns.value.map(c=>'`'+c+'`').join(', ')
-  +' FROM `'+tableName.value+'` LIMIT '+limit.value+';';
+  +' FROM `'+tableName.value+'`'
+  +(filterColumn.value?' WHERE `'+filterColumn.value+'` = ?':'')
+  +(sortColumn.value?' ORDER BY `'+sortColumn.value+'` '+sortDirection.value:'')
+  +' LIMIT '+limit.value+';';
 });
 const dataColumns=computed(()=>Object.keys(result.value?.rows?.[0]||{}).map(key=>({title:key,dataIndex:key,key,ellipsis:true})));
 const canExecute=computed(()=>sourceId.value&&tableName.value&&approvedColumns.value.length>0
- &&Number.isInteger(limit.value)&&limit.value>=1&&limit.value<=100&&!reading.value);
+ &&Number.isInteger(limit.value)&&limit.value>=1&&limit.value<=100&&!reading.value
+ &&(!filterColumn.value||filterValue.value.length<=256));
 
 async function refresh(){
  const turn=++requestSeq;loading.value=true;error.value='';result.value=null;
@@ -45,7 +51,7 @@ watch(sourceId,async id=>{
  }catch(e){if(turn===requestSeq)showError(e)}
 });
 watch(tableName,async name=>{
- const turn=++requestSeq;columns.value=[];result.value=null;
+ const turn=++requestSeq;columns.value=[];result.value=null;filterColumn.value=undefined;filterValue.value='';sortColumn.value=undefined;
  if(!name||!sourceId.value)return;
  try{
   const rows=await api<Row[]>('/api/sources/'+encodeURIComponent(sourceId.value)+'/allowlist/'+encodeURIComponent(name)+'/columns');
@@ -59,7 +65,9 @@ async function execute(){
   // This is NOT an arbitrary SQL editor. The backend independently rebuilds
   // the column projection, verifies owner approval and target read-only grants.
   result.value=await api<ReadResult>('/api/read','POST',{
-   sourceId:sourceId.value,tableName:tableName.value,limit:limit.value
+   sourceId:sourceId.value,tableName:tableName.value,limit:limit.value,
+   ...(filterColumn.value?{filterColumn:filterColumn.value,filterValue:filterValue.value}:{}),
+   ...(sortColumn.value?{sortColumn:sortColumn.value,sortDirection:sortDirection.value}:{})
   });
  }catch(e){error.value=(e as Error).message;showError(e)}
  finally{reading.value=false}
@@ -84,6 +92,18 @@ onMounted(refresh);defineExpose({refresh});
      </a-form-item>
      <a-form-item label="允许披露的字段">
       <div class="dg-v2-read-columns">{{approvedColumns.length?approvedColumns.join(' · '):'暂无字段授权'}}</div>
+     </a-form-item>
+     <a-form-item label="筛选字段（可选）">
+      <a-select v-model:value="filterColumn" :options="columnOptions" placeholder="仅允许已授权字段" allow-clear/>
+     </a-form-item>
+     <a-form-item label="等值筛选参数">
+      <a-input v-model:value="filterValue" :maxlength="256" :disabled="!filterColumn" placeholder="参数绑定，不拼接进 SQL"/>
+     </a-form-item>
+     <a-form-item label="排序字段（可选）">
+      <a-select v-model:value="sortColumn" :options="columnOptions" placeholder="仅允许已授权字段" allow-clear/>
+     </a-form-item>
+     <a-form-item label="排序方向">
+      <a-select v-model:value="sortDirection" :disabled="!sortColumn" :options="[{label:'升序 ASC',value:'ASC'},{label:'降序 DESC',value:'DESC'}]"/>
      </a-form-item>
     </div>
    </a-form>
