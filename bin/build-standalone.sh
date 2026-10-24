@@ -8,7 +8,7 @@ command -v npm >/dev/null
 # Build the Vue console into Spring Boot static assets: no separate web server.
 (
   cd dataguard-web
-  npm ci
+  npm install --no-audit --no-fund
   VITE_DATAGUARD_STANDALONE=true npm run build
 )
 test -s dataguard-web/dist/index.html
