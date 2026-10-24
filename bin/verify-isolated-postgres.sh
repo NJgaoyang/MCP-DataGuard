@@ -118,12 +118,16 @@ if [[ "${DG_RUN_READ_TLS_E2E:-false}" == "true" ]]; then
  CACHE="${DG_M2_CACHE:-$HOME/.cache/mcp-dataguard/m2}"
  mkdir -p "$CACHE"
  docker run --rm --network "container:$NAME" -e DG_READ_JDBC_E2E=true \
+   -e DG_OUTBOX_E2E_URL=jdbc:postgresql://127.0.0.1:5432/dataguard \
+   -e DG_TARGET_E2E_READER_USER=dg_tls_reader \
+   -e DG_TARGET_E2E_READER_PASSWORD=test-only \
    -v "$ROOT:/workspace" -v "$CACHE:/root/.m2" \
    -v "$TLS_TMP/root.crt:/root/.postgresql/root.crt:ro" -w /workspace \
    maven:3.9.11-eclipse-temurin-21 \
    mvn -B -o -ntp -pl dataguard-server -am \
-     -Dtest=ReadOnlyJdbcTlsIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false test
+     -Dtest=ReadOnlyJdbcTlsIntegrationTest,AgentReadMcpIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false test
  echo "PASSED: JDBC verify-full TLS, physical roles, masking and resource budgets"
+ echo "PASSED: Agent MCP tool readonly query, column ACL, audit receipt and immediate revocation"
 fi
 if [[ "${DG_RUN_WRITE_TLS_E2E:-false}" == "true" ]]; then
  WRITE_TLS_TMP="$(mktemp -d)"
