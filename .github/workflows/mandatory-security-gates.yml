@@ -73,6 +73,8 @@ jobs:
           bash bin/verify-staged-rollout-policy.sh
           python3 -m unittest discover -s tests -p 'test_production_runtime_policy.py'
           python3 -m unittest discover -s tests -p 'test_production_public_https.py'
+          python3 -m unittest discover -s tests -p 'test_github_release_governance.py'
+          python3 -m py_compile bin/check-github-release-governance.py
           python3 -m py_compile bin/verify-production-public-https.py
           python3 -m py_compile bin/verify-production-runtime.py
           python3 -m unittest discover -s tests -p 'test_audit_checkpoint.py'

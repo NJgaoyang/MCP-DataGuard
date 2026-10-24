@@ -39,3 +39,7 @@ No offsite backup is requested; loss of entire production host remains an accept
 ### 公网 HTTPS 匿名验收
 
 已取得变更授权、正式 DNS/CA/TLS 证书后，由安全人员设置 `DG_PROD_HTTPS_ACCEPTANCE_APPROVED=yes` 和经认证的 `DG_PUBLIC_HOST`，执行 `python3 bin/verify-production-public-https.py`。脚本不携带口令/Token、不提交 SQL，只检查严格证书链、真实的 CSP（而非 Report-Only）、HSTS、防嵌入、防嗅探和匿名 `/api/v1/me`、`/mcp` 的 HTTP 401 与 no-store。不会对原服务器重启或写入。现有公网 IP 测试站并非正式 DNS，不能冒充通过。
+
+### GitHub 分支治理硬门禁
+
+生产变更前脚本将只读请求 GitHub API 核验 `dev20261022` 与 `main` 分支保护、独立 PR 审批、拒绝过期批准、对话解决、管理员同样遵守规则、禁止强推，以及所有指定的后端/前端/隔离安全/供应链 required checks。提供 `DG_GITHUB_RELEASE_TOKEN_FILE` 指向受限只读 GitHub Token 文件（绝对路径、0600），**不会输出 Token**。API 不可达、没有权限或分支未保护都将拒绝发布。当前仓库分支 `protected=false`，因此在管理员配置之前必须保持 NO-GO。

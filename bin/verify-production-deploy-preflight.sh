@@ -13,6 +13,8 @@ cd "$(dirname "$0")/.."
 if [[ -n "$(git status --porcelain)" ]];then
  echo "NO_GO: dirty production release worktree" >&2;exit 2
 fi
+# Verify live GitHub PR protection, independent review, and all required CI contexts.
+python3 bin/check-github-release-governance.py
 bash bin/verify-production-compose.sh
 bash bin/check-production-readiness.sh
 bash bin/verify-signed-production-release.sh
