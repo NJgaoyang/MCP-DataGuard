@@ -35,3 +35,7 @@ No offsite backup is requested; loss of entire production host remains an accept
 ### 运行态全面核验
 
 `verify-production-runtime.sh` 在核对三方 GPG 签名之后，检查生产 Compose 项目的每个容器和每个受信 Docker RepoDigest，**包括 closed/readonly 下仍在运行的旧 Workflow**。拒绝遗留开启 Outbox、旁路开启受控写入、未签名镜像、非法容器、宿主机暴露网关端口及明文 Docker Config.Env 密钥。它只读，不会暂停数据库或容器。
+
+### 公网 HTTPS 匿名验收
+
+已取得变更授权、正式 DNS/CA/TLS 证书后，由安全人员设置 `DG_PROD_HTTPS_ACCEPTANCE_APPROVED=yes` 和经认证的 `DG_PUBLIC_HOST`，执行 `python3 bin/verify-production-public-https.py`。脚本不携带口令/Token、不提交 SQL，只检查严格证书链、真实的 CSP（而非 Report-Only）、HSTS、防嵌入、防嗅探和匿名 `/api/v1/me`、`/mcp` 的 HTTP 401 与 no-store。不会对原服务器重启或写入。现有公网 IP 测试站并非正式 DNS，不能冒充通过。
