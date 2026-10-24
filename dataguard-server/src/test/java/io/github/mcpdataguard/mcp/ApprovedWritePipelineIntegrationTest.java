@@ -163,9 +163,7 @@ class ApprovedWritePipelineIntegrationTest {
     if(!workerProcess.isAlive())break;
     Thread.sleep(100);
    }
-   assertTrue(committed,"Java Worker must commit to PostgreSQL before SIGKILL; trace "+
-      java.nio.file.Files.readString(log).replaceAll("[\\r\\n]"," ").substring(0,
-       Math.min(200,java.nio.file.Files.readString(log).length())));
+   assertTrue(committed,"Java Worker must commit to PostgreSQL before SIGKILL");
    assertTrue(workerProcess.isAlive(),"Worker must still await platform ACK");
    assertEquals("EXECUTING",f.db().queryForObject(
       "SELECT task_state FROM dg_execution_task WHERE id=?",
