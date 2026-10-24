@@ -40,7 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           cd dataguard-web
-          npm install --no-audit --no-fund
+          npm ci --no-audit --no-fund
           npm run build
           test -s dist/index.html
           cd ..
@@ -89,7 +89,7 @@ jobs:
           python3 bin/test-standalone-login.py
           python3 bin/test-standalone-approval.py
       - name: Validate non-Docker systemd scripts
-        run: bash -n bin/build-standalone.sh bin/install-standalone-systemd.sh
+        run: bash -n bin/build-standalone.sh bin/install-standalone-systemd.sh bin/switch-to-v2-systemd.sh bin/start-dev-starrocks-docker.sh
       - name: Reject legacy PostgreSQL modules in default build
         run: |
           ! grep -q '<module>dataguard-server</module>' pom.xml
