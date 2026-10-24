@@ -68,7 +68,7 @@ public class AgentMcpApi {
    Map<String,Object> result=switch(req.method()){
     case "initialize" -> Map.of("protocolVersion",VERSION,
       "capabilities",Map.of("tools",Map.of()),
-      "serverInfo",Map.of("name","DataGuard-MySQL","version","0.5.0"));
+      "serverInfo",Map.of("name","MCP DataGuard","version","0.5.0"));
     case "ping" -> Map.of();
     case "tools/list" -> toolList();
     case "tools/call" -> call(user,tokenId,req.params());
@@ -137,11 +137,15 @@ public class AgentMcpApi {
     String sourceId=String.valueOf(args.get("sourceId"));
     String table=Guard.identifier(String.valueOf(args.get("tableName")));
     if(!grants.allowed(tokenId,sourceId,table))throw new IllegalArgumentException("Agent table access denied");
-    var auth=new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(user,"",List.of());
-    Map<String,Object> original=reader.read(auth,new ReadApi.ReadQuery(sourceId,table,(Integer)n));
+    java.util.Set<String> columns=grants.allowedColumns(tokenId,sourceId,table);
+    if(columns.isEmpty()){
+      audit.log(user,"MCP_AGENT_ACCESS","AGENT",tokenId+"/"+sourceId+"/"+table,"DENIED","no approved column grants");
+      throw new IllegalArgumentException("Agent has no approved columns");
+    }
+    Map<String,Object> original=reader.readForAgent(user,
+      new ReadApi.ReadQuery(sourceId,table,(Integer)n),columns);
     Object rawRows=original.get("rows");
     if(!(rawRows instanceof List<?> rows))throw new IllegalArgumentException("Invalid read response");
-    java.util.Set<String> columns=grants.allowedColumns(tokenId,sourceId,table);
     List<Map<String,Object>> filtered=new java.util.ArrayList<>();
     for(Object obj:rows){
       if(!(obj instanceof Map<?,?> row))throw new IllegalArgumentException("Invalid row response");
