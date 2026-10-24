@@ -56,6 +56,11 @@ PY
 if [[ "${DG_RUN_NATIVE_MCP_HTTP_E2E:-false}" == "true" ]]; then
   bash bin/verify-native-mcp-http.sh
 fi
+if [[ "${DG_RUN_MCP_READ_ALLOW_HTTP_E2E:-false}" == "true" ]]; then
+  # This creates a completely separate PG + Gateway with READ=true and WRITE=false.
+  # Never enable production flags or connect to existing deployment volumes.
+  bash bin/verify-mcp-authorized-read-http.sh
+fi
 echo "FULL_ISOLATED_CORE_SECURITY_ACCEPTANCE_PASS"
 echo "Live read, write and workflow flags have NOT been enabled."
 echo "Additional gates required before production: external MCP client, browser E2E,"
