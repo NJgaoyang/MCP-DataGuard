@@ -52,13 +52,19 @@ jobs:
       - name: Start disposable PostgreSQL with synthetic schema
         run: |
           set -euo pipefail
+          docker pull postgres:17
           docker run --rm -d --name dg-ci-backup-source --network none \
-            -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17
-          for i in $(seq 1 45); do
-            if docker exec -u postgres dg-ci-backup-source pg_isready -U postgres >/dev/null 2>&1; then break; fi
-            sleep 1
+            -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=dataguard postgres:17
+          ready=0
+          for i in $(seq 1 60); do
+            if docker exec -u postgres dg-ci-backup-source psql -U postgres -d dataguard \
+              -Atqc 'SELECT 1' 2>/dev/null | grep -qx 1; then ready=1; break; fi
+            sleep 2
           done
-          docker exec -u postgres dg-ci-backup-source createdb dataguard
+          if [ "$ready" != 1 ]; then
+            docker logs --tail 25 dg-ci-backup-source >&2 || true
+            exit 1
+          fi
           docker exec -i -u postgres dg-ci-backup-source psql -U postgres \
             -d dataguard -v ON_ERROR_STOP=1 <<'SQL'
           CREATE SCHEMA platform;
