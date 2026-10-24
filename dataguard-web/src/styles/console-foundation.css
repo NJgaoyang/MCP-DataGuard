@@ -309,3 +309,53 @@
   font-size:15px!important;
  }
 }
+
+/* DataGuard approved logo in the shared sidebar; text stays crisp at small sizes. */
+.shell:not(.auth-shell) .sidebar .brand{
+ display:flex;
+ align-items:center;
+ gap:8px;
+ overflow:hidden;
+}
+.shell:not(.auth-shell) .sidebar .brand-mark{
+ display:block;
+ width:42px;
+ height:46px;
+ flex:0 0 42px;
+ object-fit:contain;
+}
+.shell:not(.auth-shell) .sidebar .brand-copy{
+ display:flex;
+ flex-direction:column;
+ justify-content:center;
+ min-width:0;
+}
+.shell:not(.auth-shell) .sidebar .brand-copy .brand-wordmark{
+ white-space:nowrap;
+ display:block;
+ font-size:15px;
+ line-height:20px;
+ font-weight:740;
+ letter-spacing:-.55px;
+ color:#152b4c;
+}
+.shell:not(.auth-shell) .sidebar .brand-copy .brand-wordmark span{color:#096af0}
+.shell:not(.auth-shell) .sidebar .brand-copy small{
+ display:block;
+ margin-top:2px;
+ font-size:11px;
+ color:#6d83a3;
+ white-space:nowrap;
+}
+@media(max-width:760px){
+ .shell:not(.auth-shell) .sidebar .brand{
+  padding:4px 5px 18px!important;
+  justify-content:center;
+ }
+ .shell:not(.auth-shell) .sidebar .brand-mark{
+  width:42px;
+  height:46px;
+  flex:0 0 42px;
+ }
+ .shell:not(.auth-shell) .sidebar .brand-copy{display:none!important}
+}
