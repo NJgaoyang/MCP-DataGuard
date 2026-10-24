@@ -29,7 +29,7 @@ m={"schemaVersion":1,"gitCommit":"a"*40,
              for k in ("gateway","workflow","web")},
    "evidence":{k:"artifact://independently-reviewed/"+k
       for k in ("real_mcp_read","live_flowable_identity","physical_write_fault",
-       "offsite_object_lock_restore","wal_pitr_restore","penetration_test",
+       "local_encrypted_backup_restore","wal_pitr_restore","penetration_test",
        "production_load_test","secret_rotation","monitoring_and_alerts",
        "production_tls_and_network")}}
 open(sys.argv[1],"w").write(json.dumps(m))
