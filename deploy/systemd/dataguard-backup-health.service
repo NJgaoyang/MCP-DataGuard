@@ -1,0 +1,21 @@
+[Unit]
+Description=DataGuard local encrypted backup health and integrity check
+After=dataguard-postgres-backup.service
+ConditionPathExists=/etc/dataguard/backup.env
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+EnvironmentFile=/etc/dataguard/backup.env
+Environment=DG_BACKUP_MAX_AGE_HOURS=30
+Environment=DG_BACKUP_MIN_COPIES=2
+ExecStart=/usr/local/libexec/dataguard/verify-local-backup-health.py
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadOnlyPaths=/var/lib/dataguard/encrypted-backups
+StandardOutput=journal
+StandardError=journal
