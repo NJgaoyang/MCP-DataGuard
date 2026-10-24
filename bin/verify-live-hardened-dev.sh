@@ -34,5 +34,12 @@ wf="$(docker inspect deploy-workflow-1 --format '{{range .Config.Env}}{{println 
   { echo "Flowable experimental flags must remain off" >&2;exit 1; }
 [[ "$(docker inspect deploy-postgres-1 --format '{{.State.Running}}')" == true ]] ||
   { echo "PostgreSQL offline" >&2;exit 1; }
-echo "NOTE PostgreSQL resource hardening requires a separate DB maintenance window."
+pg_memory="$(docker inspect deploy-postgres-1 --format '{{.HostConfig.Memory}}')"
+pg_swap="$(docker inspect deploy-postgres-1 --format '{{.HostConfig.MemorySwap}}')"
+pg_pids="$(docker inspect deploy-postgres-1 --format '{{.HostConfig.PidsLimit}}')"
+[[ "$pg_memory" =~ ^[0-9]+$ && "$pg_memory" -ge 1073741824 &&
+   "$pg_swap" == "$pg_memory" && "$pg_pids" =~ ^[0-9]+$ &&
+   "$pg_pids" -gt 0 ]] ||
+ { echo "PostgreSQL live resource bounds missing" >&2;exit 1; }
+echo "PASS postgres: live CPU/memory/PID limits set; no-new-privileges requires restart"
 echo "LIVE_DEV_HARDENING_ACCEPTANCE_PASS"
