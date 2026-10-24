@@ -8,6 +8,7 @@ on:
       - 'bin/backup-postgres-encrypted.sh'
       - 'bin/verify-encrypted-backup-restore.sh'
       - 'bin/verify-hardened-compose.sh'
+      - 'bin/verify-real-postgres-commit-disconnect.sh'
       - '.github/workflows/production-hardening.yml'
   workflow_dispatch:
 
@@ -78,3 +79,14 @@ jobs:
       - name: Destroy disposable source
         if: always()
         run: docker rm -f dg-ci-backup-source >/dev/null 2>&1 || true
+
+  real-tcp-commit-chaos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inject real TCP failures around PostgreSQL COMMIT
+        run: |
+          set -euo pipefail
+          bash bin/verify-real-postgres-commit-disconnect.sh
+          echo "REAL_TCP_BEFORE_AFTER_COMMIT_GATE_PASS"
