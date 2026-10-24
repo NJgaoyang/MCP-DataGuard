@@ -43,11 +43,15 @@ with tempfile.TemporaryDirectory() as temp:
         assert header=="sha256="+hmac.new(key.read_bytes(),request.data,hashlib.sha256).hexdigest()
         sent.append(body)
         return Response()
+    class MockTransport:
+        def open(self,request,timeout):
+            return sender(request,timeout)
     with mock.patch.dict(os.environ,env,clear=False), \
       mock.patch.object(module.socket,"getaddrinfo",
         return_value=[(2,1,6,"",("8.8.8.8",443))]), \
       mock.patch.object(module,"read_counts",side_effect=lambda:counts), \
-      mock.patch.object(module.urllib.request,"urlopen",side_effect=sender):
+      mock.patch.object(module.urllib.request,"build_opener",
+        side_effect=lambda *handlers:MockTransport()):
         assert module.main()==0 and not sent
         print("PASS: zero incidents does not send notification")
         counts["unknownWrites"]=1
@@ -63,7 +67,7 @@ with tempfile.TemporaryDirectory() as temp:
             assert module.main()!=0 and len(sent)==2
         print("PASS: HTTP/loopback webhook rejected")
         counts["deadLetters"]=1
-        with mock.patch.object(module.urllib.request,"urlopen",side_effect=TimeoutError):
+        with mock.patch.object(module.urllib.request,"build_opener",side_effect=TimeoutError):
             assert module.main()!=0
         assert module.main()==0 and len(sent)==3
         print("PASS: failed delivery is retried without advancing dedup state")
