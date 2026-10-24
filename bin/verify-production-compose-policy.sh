@@ -31,6 +31,6 @@ must_fail floating-tag env DG_GATEWAY_IMAGE=example/gateway:latest bash bin/veri
 must_fail plaintext-transport env DG_PLATFORM_JDBC_URL='jdbc:postgresql://pg.test:5432/db?sslmode=require' bash bin/verify-production-compose.sh
 must_fail loopback-db env DG_PLATFORM_JDBC_URL='jdbc:postgresql://127.0.0.1:5432/db?sslmode=verify-full' bash bin/verify-production-compose.sh
 must_fail unreadable-secret env DG_PROD_PLATFORM_PASSWORD_FILE="$tmp/missing" bash bin/verify-production-compose.sh
-chmod 644 "$tmp/p"
+if [ "$(id -u)" = 0 ]; then chmod 644 "$tmp/p"; else sudo chmod 644 "$tmp/p"; fi
 must_fail world-readable-secret bash bin/verify-production-compose.sh
 echo "PRODUCTION_COMPOSE_NEGATIVE_POLICY_PASS"
