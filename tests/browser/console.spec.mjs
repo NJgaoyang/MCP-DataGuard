@@ -34,7 +34,7 @@ async function signIn(page){
  await expect(page.locator('.auth-login-heading')).toBeVisible();
  await page.locator('input[autocomplete="username"]').fill('ui-test');
  await page.locator('input[autocomplete="current-password"]').fill('Synthetic-Test-Only!Aa9');
- await page.getByRole('button',{name:/登录/}).last().click();
+ await page.locator('.auth-form button[type="submit"]').click();
  await expect(page.locator('.shell:not(.auth-shell)')).toBeVisible();
 }
 async function noHorizontalOverflow(page){
@@ -51,7 +51,7 @@ test('login renders new DataGuard logo without horizontal scrolling at mobile an
   await page.setViewportSize({width,height:820});
   await page.goto('/');
   await expect(page.locator('.auth-login-heading')).toBeVisible();
-  await expect(page.locator('.auth-layout img[src="/dataguard-mark.svg"]').first()).toBeVisible();
+  await expect(page.locator('.auth-layout img[src="/dataguard-mark.svg"]:visible').first()).toBeVisible();
   await noHorizontalOverflow(page);
  }
 });
