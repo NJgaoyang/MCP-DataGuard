@@ -83,9 +83,17 @@ class ApprovalRecoveryIntegrationTest {
       new ReviewProcessService(engine.getRuntimeService(),engine.getTaskService()),
       engine.getRuntimeService(),engine.getTaskService());
    for(int i=1;i<=8;i++){
-    worker.poll();
-    assertEquals(i,f.jdbc().queryForObject(
-      "SELECT attempts FROM dg_outbox_event WHERE id=?",Integer.class,event));
+    // A production Outbox queue contains unrelated tenants/events. A poll
+    // may legitimately consume another eligible event first, so assert
+    // THIS event's progress rather than assuming one poll per retry.
+    int attempts=0;
+    for(int round=0;round<20;round++){
+     worker.poll();
+     attempts=f.jdbc().queryForObject(
+       "SELECT attempts FROM dg_outbox_event WHERE id=?",Integer.class,event);
+     if(attempts>=i)break;
+    }
+    assertEquals(i,attempts,"Target event must make progress despite unrelated work");
     if(i<8)f.jdbc().update("UPDATE dg_outbox_event SET available_at=now() WHERE id=?",event);
    }
    assertEquals("FAILED",f.jdbc().queryForObject(
