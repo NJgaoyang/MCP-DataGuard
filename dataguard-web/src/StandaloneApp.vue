@@ -78,7 +78,7 @@ onMounted(async()=>{
  <aside class="side" v-if="!me?.mustChangePassword">
   <div class="brand"><span class="mark">D</span>DataGuard</div>
   <div class="sub">企业内部数据安全平台</div>
-  <a-menu v-model:selectedKeys="[tab]" mode="inline" class="nav" @click="onMenuClick">
+  <a-menu :selectedKeys="[tab]" mode="inline" class="nav" @click="onMenuClick">
    <a-menu-item v-for="[id,name] in menu" :key="id">{{name}}</a-menu-item>
   </a-menu>
   <div class="side-note">MySQL · Flowable · MCP</div>
