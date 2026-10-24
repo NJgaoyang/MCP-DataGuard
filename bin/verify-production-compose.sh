@@ -61,7 +61,7 @@ for role in s:
  assert x["read_only"] is True
  assert "no-new-privileges:true" in x["security_opt"]
  assert "ALL" in x.get("cap_drop",[])
- assert x.get("pids_limit",0)>0 and x.get("mem_limit",0)>0 and x.get("cpus",0)>0
+ assert int(x.get("pids_limit",0))>0 and int(x.get("mem_limit",0))>0 and float(x.get("cpus",0))>0
  assert x.get("logging",{}).get("options",{}).get("max-file")=="5"
  assert not x.get("build")
 for role in ("gateway","workflow","web"):
