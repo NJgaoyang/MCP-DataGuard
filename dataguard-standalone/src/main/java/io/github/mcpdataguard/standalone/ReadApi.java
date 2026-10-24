@@ -31,7 +31,15 @@ public class ReadApi {
   return "[REDACTED]";
  }
  public List<Map<String,Object>> mcpSources(String username){
-  return jdbc.queryForList("SELECT id,code,display_name AS displayName FROM data_sources WHERE enabled=1 ORDER BY code LIMIT 100");
+  return jdbc.queryForList("""
+   SELECT DISTINCT s.id,s.code,s.display_name AS displayName FROM data_sources s
+   JOIN read_table_allowlist w ON w.source_id=s.id AND w.enabled=1
+   JOIN approval_requests a ON a.source_id=s.id AND a.table_name=w.table_name
+   JOIN app_users u ON u.id=a.requester_user_id
+   WHERE s.enabled=1 AND a.status='APPROVED' AND a.expires_at>NOW(3)
+     AND u.username=? AND u.enabled=1 AND u.must_change_password=0
+   ORDER BY s.code LIMIT 100
+   """,username);
  }
  public List<Map<String,Object>> mcpSchema(String username,String source){
   UUID id=UUID.fromString(source);
