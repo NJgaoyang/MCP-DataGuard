@@ -56,7 +56,7 @@ for name in ("gateway","workflow","web"):
                      images.get(name,"")),name+" digest missing"
 evidence=m.get("evidence",{})
 gates=("real_mcp_read","live_flowable_identity","physical_write_fault",
-       "offsite_object_lock_restore","wal_pitr_restore","penetration_test",
+       "local_encrypted_backup_restore","wal_pitr_restore","penetration_test",
        "production_load_test","secret_rotation","monitoring_and_alerts",
        "production_tls_and_network")
 for gate in gates:
