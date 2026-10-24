@@ -13,11 +13,11 @@ import WorkflowsView from './standalone/WorkflowsView.vue';
 import AuditView from './standalone/AuditView.vue';
 import PagePanel from './standalone/PagePanel.vue';
 import './styles/standalone.css';
-const theme={token:{colorPrimary:'#12a594',colorPrimaryHover:'#0d9b8a',colorPrimaryActive:'#008573',colorPrimaryBg:'#e0f8f3',colorSuccess:'#12a594',colorWarning:'#ab6400',colorError:'#e5484d',colorInfo:'#0090ff',colorText:'#1c2024',colorTextSecondary:'#60646c',colorTextTertiary:'#8b8d98',colorBorder:'#e8e8ec',colorSplit:'#e8e8ec',colorBgContainer:'#ffffff',colorBgLayout:'#f0f0f3',borderRadius:6,fontSize:14,fontSizeSM:12,fontSizeLG:14,fontSizeXL:20,fontSizeHeading1:28,fontSizeHeading2:20,fontSizeHeading3:20,fontSizeHeading4:14,fontSizeHeading5:14,lineWidth:0.5,motion:false},components:{Table:{headerBg:'#f9f9fb',headerColor:'#60646c',rowHoverBg:'#f3fbf9',cellPaddingBlock:18,cellPaddingInline:20},Modal:{titleFontSize:20},Menu:{itemSelectedBg:'#e0f8f3',itemSelectedColor:'#008573'}}};
+const theme={token:{colorPrimary:'#2f75ff',colorPrimaryHover:'#448bff',colorPrimaryActive:'#2864d9',colorPrimaryBg:'#eaf2ff',colorSuccess:'#20bf82',colorWarning:'#ab6400',colorError:'#e5484d',colorInfo:'#2f75ff',colorText:'#1e2b4d',colorTextSecondary:'#65799f',colorTextTertiary:'#899bb7',colorBorder:'#e5edf8',colorSplit:'#e5edf8',colorBgContainer:'#ffffff',colorBgLayout:'#f3f7ff',borderRadius:10,fontSize:14,fontSizeSM:12,fontSizeLG:14,fontSizeXL:20,fontSizeHeading1:28,fontSizeHeading2:20,fontSizeHeading3:20,fontSizeHeading4:14,fontSizeHeading5:14,lineWidth:0.5,motion:false},components:{Table:{headerBg:'#f7faff',headerColor:'#65799f',rowHoverBg:'#f4f8ff',cellPaddingBlock:18,cellPaddingInline:20},Modal:{titleFontSize:20},Menu:{itemSelectedBg:'#eaf2ff',itemSelectedColor:'#2864d9'}}};
 const me=ref<CurrentUser|null>(null),starting=ref(true),startupError=ref(''),tab=ref('dashboard'),mobileOpen=ref(false),analyticsOpen=ref(true),activeView=ref<{refresh?:()=>Promise<void>}|null>(null),refreshing=ref(false),passwordOpen=ref(false),passwordRef=ref<FormInstance>(),password=ref({currentPassword:'',newPassword:''});
 const {busy,perform}=useActions();
 const admin=computed(()=>me.value?.roleCode==='ADMIN');
-const titles:Record<string,string>={dashboard:'数据概览',sources:'数据源管理',agents:'Agent 管理',policies:'SQL 安全规则',workflows:'审批流程',approvals:'审批中心',audit:'SQL 审计',alerts:'安全告警',users:'用户与权限',account:'账户设置'};
+const titles:Record<string,string>={dashboard:'安全总览',sources:'数据源管理',agents:'Agent 管理',policies:'SQL 安全规则',workflows:'审批流程',approvals:'审批中心',audit:'SQL 审计',alerts:'安全告警',users:'用户与权限',account:'账户设置'};
 const topMenus=computed(()=>[{id:'agents',title:'Agent 管理'},...(admin.value?[{id:'sources',title:'数据源管理'},{id:'policies',title:'SQL 安全规则'},{id:'workflows',title:'审批流程'}]:[]),{id:'approvals',title:'审批中心'}]);
 const title=computed(()=>me.value?.mustChangePassword?'首次登录安全设置':titles[tab.value]||'数据概览');
 const group=computed(()=>['dashboard','audit','alerts'].includes(tab.value)?'数据管理':'工作台');
@@ -37,10 +37,10 @@ onBeforeUnmount(()=>{window.removeEventListener('dataguard-password-required',pa
 <a-config-provider :theme="theme"><div class="dg-app">
  <button v-if="mobileOpen" class="dg-nav-mask" aria-label="关闭导航" @click="mobileOpen=false"/>
  <aside class="dg-sidebar" :class="{'is-open':mobileOpen}" aria-label="主导航">
-  <button class="dg-brand" @click="navigate('dashboard')"><img src="/dataguard-mark.svg" alt=""/><span><strong>DataGuard</strong><small>数据守卫</small></span></button>
+  <button class="dg-brand" @click="navigate('dashboard')"><img src="/dataguard-mark.svg" alt=""/><span><strong>MCP-DataGuard</strong><small>数据安全 · 可控访问</small></span></button>
   <div class="dg-nav-label">管理平台</div>
   <nav class="dg-navigation">
-   <button :disabled="!me||me.mustChangePassword" @click="navigate('dashboard')"><AppIcon name="dashboard"/><span>工作台</span><AppIcon name="right" class="dg-nav-chevron"/></button>
+   <button :disabled="!me||me.mustChangePassword" @click="navigate('dashboard')"><AppIcon name="dashboard"/><span>安全总览</span><AppIcon name="right" class="dg-nav-chevron"/></button>
    <button v-for="item in topMenus" :key="item.id" :class="{active:tab===item.id}" :aria-current="tab===item.id?'page':undefined" :disabled="!me||me.mustChangePassword" @click="navigate(item.id)"><AppIcon :name="item.id"/><span>{{item.title}}</span><AppIcon name="right" class="dg-nav-chevron"/></button>
    <button class="dg-nav-group" :aria-expanded="analyticsOpen" @click="analyticsOpen=!analyticsOpen"><AppIcon name="audit"/><span>数据管理</span><AppIcon name="down" class="dg-nav-chevron" :class="{rotated:analyticsOpen}"/></button>
    <template v-if="analyticsOpen"><button class="dg-nav-child" :class="{active:tab==='dashboard'}" :aria-current="tab==='dashboard'?'page':undefined" :disabled="!me||me.mustChangePassword" @click="navigate('dashboard')">数据概览</button><button v-if="admin" class="dg-nav-child" :class="{active:tab==='audit'}" :aria-current="tab==='audit'?'page':undefined" :disabled="me?.mustChangePassword" @click="navigate('audit')">SQL 审计</button><button v-if="admin" class="dg-nav-child" :class="{active:tab==='alerts'}" :aria-current="tab==='alerts'?'page':undefined" :disabled="me?.mustChangePassword" @click="navigate('alerts')">安全告警</button></template>
