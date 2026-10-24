@@ -126,21 +126,35 @@ jobs:
           docker build -f "${{ matrix.dockerfile }}" \
             --build-arg "SERVICE=${{ matrix.buildarg }}" \
             -t "dataguard-ci-${{ matrix.name }}:${{ github.sha }}" .
+      - name: Fetch version-locked scanner container
+        run: docker pull aquasec/trivy:0.65.0
       - name: Scan fixed HIGH/CRITICAL package vulnerabilities (fail closed)
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivy-cache"
+          timeout 900 docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock:ro \
+            -v "$RUNNER_TEMP/trivy-cache:/root/.cache/" \
+            aquasec/trivy:0.65.0 image \
+            --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+            --exit-code 1 --timeout 10m \
+            "dataguard-ci-${{ matrix.name }}:${{ github.sha }}"
+      - name: Generate CycloneDX image SBOM
+        run: |
+          set -euo pipefail
+          timeout 900 docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock:ro \
+            -v "$RUNNER_TEMP/trivy-cache:/root/.cache/" \
+            -v "$PWD:/sbom" \
+            aquasec/trivy:0.65.0 image \
+            --format cyclonedx \
+            --output "/sbom/sbom-${{ matrix.name }}.cyclonedx.json" \
+            "dataguard-ci-${{ matrix.name }}:${{ github.sha }}"
+          test -s "sbom-${{ matrix.name }}.cyclonedx.json"
+      - name: Preserve CycloneDX SBOM evidence
+        uses: actions/upload-artifact@v4
         with:
-          image-ref: dataguard-ci-${{ matrix.name }}:${{ github.sha }}
-          format: table
-          exit-code: '1'
-          ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: HIGH,CRITICAL
-          scanners: vuln
-          timeout: 10m0s
-      - name: Create auditable CycloneDX SBOM
-        uses: anchore/sbom-action@f8bdd1d8ac5e901a77a92f111440fdb1b593736b
-        with:
-          image: dataguard-ci-${{ matrix.name }}:${{ github.sha }}
-          format: cyclonedx-json
-          artifact-name: sbom-${{ matrix.name }}
-          output-file: sbom-${{ matrix.name }}.cyclonedx.json
+          name: sbom-${{ matrix.name }}
+          path: sbom-${{ matrix.name }}.cyclonedx.json
+          retention-days: 30
+          if-no-files-found: error
