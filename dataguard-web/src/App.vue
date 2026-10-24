@@ -135,8 +135,9 @@ async function verifyAuditStream(stream:string){
  }catch(e){error.value='验证审计链失败：'+(e as Error).message;}
 }
 const securityAlerts=ref<{id:string;status:string;severity:string;rule:string;observedAt:string}[]>([]);
+const securityAlertFilter=reactive({status:'',severity:'',rule:''});
 async function loadSecurityAlerts(){
- try{securityAlerts.value=await getData<typeof securityAlerts.value>('/api/v1/security-alerts');}
+ try{const params=new URLSearchParams({status:securityAlertFilter.status,severity:securityAlertFilter.severity,rule:securityAlertFilter.rule,limit:'100'});securityAlerts.value=await getData<typeof securityAlerts.value>('/api/v1/security-alerts?'+params.toString());}
  catch(e){error.value='查询告警失败：'+(e as Error).message;}
 }
 async function acknowledgeAlert(id:string){
@@ -148,6 +149,22 @@ async function acknowledgeAlert(id:string){
  finally{saving.value=false;}
 }
 
+async function resolveAlert(id:string){
+ saving.value=true;error.value='';
+ try{
+  await requestWrite('/api/v1/security-alerts/'+encodeURIComponent(id)+'/resolve','POST');
+  message.success('告警已解决');await loadSecurityAlerts();await loadOperations();
+ }catch(e){error.value=(e as Error).message;}finally{saving.value=false;}
+}
+async function cancelPendingApproval(row:{id:string;version:number}){
+ const reason='管理员在控制台取消未执行的审批申请';
+ saving.value=true;error.value='';
+ try{
+  await requestWrite('/api/v1/approvals/'+encodeURIComponent(row.id)+'/cancel',
+   'POST',{reason,expectedVersion:Number(row.version)});
+  message.success('申请已取消，执行保持禁止');await loadOperations();
+ }catch(e){error.value=(e as Error).message;}finally{saving.value=false;}
+}
 const approvalDialog=ref(false);
 const approving=ref({id:'',version:0});
 const approvalReason=ref('');
@@ -864,6 +881,7 @@ async function updatePassword(){
         <template v-if="column.key==='actions' && record.approvalStatus==='PENDING' && record.executionStatus==='NOT_SCHEDULED'">
          <a-button type="link" size="small" @click="approving={id:String(record.id),version:Number(record.version)};approvalDialog=true">审核通过</a-button>
          <a-button danger type="link" size="small" @click="rejectingApproval={id:String(record.id),version:Number(record.version)};rejectionDialog=true">拒绝</a-button>
+         <a-popconfirm title="确认取消此待审批申请？操作会留存审计记录且无法恢复。" ok-text="确认取消" cancel-text="返回" @confirm="cancelPendingApproval(record)"><a-button type="link" size="small">取消申请</a-button></a-popconfirm>
         </template>
        </template>
       </a-table>
@@ -919,10 +937,16 @@ async function updatePassword(){
  </section>
  <section class="workspace-surface">
   <div class="workspace-section-title"><div><h3>安全告警处置</h3><p>核查异常事件并保留处置记录</p></div><span class="workspace-count">{{securityAlerts.length}} 条</span></div>
+  <div class="security-alert-filters">
+   <a-select v-model:value="securityAlertFilter.status" style="width:135px" :options="[{value:'',label:'全部状态'},{value:'OPEN',label:'待处理'},{value:'ACKNOWLEDGED',label:'已确认'},{value:'RESOLVED',label:'已解决'}]" @change="loadSecurityAlerts"/>
+   <a-select v-model:value="securityAlertFilter.severity" style="width:135px" :options="[{value:'',label:'全部等级'},{value:'LOW',label:'低'},{value:'MEDIUM',label:'中'},{value:'HIGH',label:'高'},{value:'CRITICAL',label:'严重'}]" @change="loadSecurityAlerts"/>
+   <a-input v-model:value="securityAlertFilter.rule" placeholder="规则编码（大写）" style="max-width:200px" @pressEnter="loadSecurityAlerts"/>
+   <a-button @click="loadSecurityAlerts">筛选</a-button>
+  </div>
   <a-table row-key="id" size="small" :data-source="securityAlerts" :pagination="{pageSize:10}" :scroll="{x:660}"
    :columns="[{title:'安全规则',dataIndex:'rule'},{title:'风险等级',dataIndex:'severity'},{title:'处理状态',dataIndex:'status'},{title:'发生时间',dataIndex:'observedAt'},{title:'操作',key:'actions'}]">
    <template #bodyCell="{column,record}">
-    <template v-if="column.key==='actions'"><a-popconfirm v-if="record.status==='OPEN'" title="确认已查看这条安全告警？" ok-text="确认" cancel-text="返回" @confirm="acknowledgeAlert(record.id)"><a-button size="small" type="link">确认告警</a-button></a-popconfirm><span v-else class="muted-cell">—</span></template>
+    <template v-if="column.key==='actions'"><a-popconfirm v-if="record.status==='OPEN'" title="确认已查看这条安全告警？" ok-text="确认" cancel-text="返回" @confirm="acknowledgeAlert(record.id)"><a-button size="small" type="link">确认告警</a-button></a-popconfirm><a-popconfirm v-else-if="record.status==='ACKNOWLEDGED'" title="确认这条告警已排除？将保留处理审计。" ok-text="解决" cancel-text="返回" @confirm="resolveAlert(record.id)"><a-button type="link" size="small">解决告警</a-button></a-popconfirm><span v-else class="muted-cell">—</span></template>
     <template v-else-if="column.dataIndex==='severity'||column.dataIndex==='status'">{{localizedStatus(record[column.dataIndex])}}</template>
     <template v-else-if="column.dataIndex==='observedAt'">{{displayTime(record.observedAt)}}</template>
    </template>
@@ -1660,4 +1684,7 @@ async function updatePassword(){
    Previously a global selector lost the cascade in real Chromium. */
 .shell.compact-page:not(.auth-shell) .bar{height:46px!important;min-height:46px!important;padding:0 18px!important}
 @media(max-width:760px){.shell.compact-page:not(.auth-shell) .bar{height:46px!important;min-height:46px!important;padding:0 9px!important}}
+
+.shell:not(.auth-shell) .security-alert-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+@media(max-width:700px){.shell:not(.auth-shell) .security-alert-filters .ant-select{flex:1;min-width:120px}}
 </style>
