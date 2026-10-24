@@ -19,6 +19,7 @@ on:
       - 'bin/verify-local-backup-retention-policy.py'
       - 'bin/notify-operational-incidents.py'
       - 'bin/verify-operational-alert-policy.py'
+      - 'bin/verify-operational-alert-https-e2e.py'
       - 'deploy/systemd/dataguard-backup-health.service'
       - 'deploy/systemd/dataguard-backup-health.timer'
       - 'deploy/systemd/dataguard-operations-alert.service'
@@ -133,6 +134,7 @@ jobs:
           python3 bin/verify-local-backup-health-policy.py
           python3 bin/verify-local-backup-retention-policy.py
           python3 bin/verify-operational-alert-policy.py
+          python3 bin/verify-operational-alert-https-e2e.py
           bash -n bin/check-production-readiness.sh
           EVIDENCE_DIR=$(mktemp -d)
           chmod 700 "$EVIDENCE_DIR"
