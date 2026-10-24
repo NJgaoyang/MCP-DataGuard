@@ -160,6 +160,61 @@ public class ApprovalDecisionController {
   return Map.of("approvalId",approvalId.toString(),"approvalStatus","CANCELLED",
     "executionStatus","CANCELLED","sqlExecutionEnabled",false);
  }
+ /**
+  * Tenant-scoped personal approval inbox. A business reviewer needs only the
+  * role assigned to the CURRENT stage; no global identity:admin permission.
+  * Raw SQL, secret payloads and unrelated organizations are never returned.
+  */
+ @GetMapping("/my-inbox")
+ public List<Map<String,Object>> myInbox(@AuthenticationPrincipal Jwt jwt){
+  UserPrincipal u=users.requireUser(jwt);
+  List<String> reviewerRoles=jdbc.query("""
+    SELECT r.code FROM dg_user_role ur JOIN dg_role r
+      ON r.org_id=ur.org_id AND r.id=ur.role_id
+    WHERE ur.org_id=? AND ur.user_id=?
+    """,(rs,i)->rs.getString(1),u.orgId(),u.userId());
+  if(reviewerRoles.isEmpty())return List.of();
+  record Candidate(UUID id,long version,java.time.Instant expires,
+     String risk,String bpmn,int stages){}
+  List<Candidate> candidates=jdbc.query("""
+    SELECT a.id,a.version,a.expires_at,r.risk_level,v.bpmn_xml,
+      (SELECT count(*) FROM dg_sql_approval_action x
+       WHERE x.org_id=a.org_id AND x.approval_id=a.id AND x.action='APPROVE') AS stages
+    FROM dg_sql_approval a JOIN dg_sql_request r
+      ON r.org_id=a.org_id AND r.id=a.request_id
+    JOIN dg_workflow_version v
+      ON v.org_id=a.org_id AND v.id=a.workflow_version_id
+    WHERE a.org_id=? AND a.approval_status='PENDING'
+      AND a.execution_status='NOT_SCHEDULED' AND a.expires_at>now()
+      AND a.process_instance_id IS NOT NULL
+      AND v.status IN ('PUBLISHED','RETIRED')
+      AND COALESCE(r.requester_user_id,
+        (SELECT agent.owner_user_id FROM dg_agent agent
+         WHERE agent.org_id=r.org_id AND agent.id=r.agent_id))
+        IS DISTINCT FROM ?
+      AND NOT EXISTS(SELECT 1 FROM dg_sql_approval_action x
+       WHERE x.org_id=a.org_id AND x.approval_id=a.id
+         AND x.action='APPROVE' AND x.reviewer_user_id=?)
+    ORDER BY a.created_at,a.id LIMIT 100
+    """,(rs,i)->new Candidate(rs.getObject(1,UUID.class),rs.getLong(2),
+       rs.getTimestamp(3).toInstant(),rs.getString(4),rs.getString(5),rs.getInt(6)),
+       u.orgId(),u.userId(),u.userId());
+  List<Map<String,Object>> result=new java.util.ArrayList<>();
+  for(Candidate c:candidates){
+   boolean high=List.of("HIGH","CRITICAL").contains(c.risk());
+   try{
+    if(c.stages()>=SafeApprovalGraph.requiredReviewers(c.bpmn(),high))continue;
+    String role=SafeApprovalGraph.roleAt(c.bpmn(),c.stages()+1,high);
+    if(!reviewerRoles.contains(role))continue;
+    result.add(Map.of("approvalId",c.id().toString(),
+      "expectedVersion",c.version(),"stage",c.stages()+1,
+      "requiredRole",role,"risk",c.risk(),"expiresAt",c.expires().toString()));
+   }catch(SecurityException ignored){
+    // Invalid/uncertified BPMN cannot create an actionable review item.
+   }
+  }
+  return result;
+ }
  @PostMapping("/{approvalId}/approve")
  @Transactional
  public Map<String,Object> approve(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID approvalId,
