@@ -91,13 +91,22 @@ public class AgentMcpApi {
     "required",List.of("sourceId"));
   Map<String,Object> bounded=Map.of("type","object",
     "properties",Map.of("sourceId",Map.of("type","string"),
-      "tableName",Map.of("type","string"),"limit",Map.of("type","integer","minimum",1,"maximum",100)),
+      "tableName",Map.of("type","string"),"limit",Map.of("type","integer","minimum",1,"maximum",100),
+      "filterColumn",Map.of("type","string"),"filterValue",Map.of("type","string","maxLength",256),
+      "sortColumn",Map.of("type","string"),
+      "sortDirection",Map.of("type","string","enum",List.of("ASC","DESC"))),
     "required",List.of("sourceId","tableName"));
   return Map.of("tools",List.of(
     Map.of("name","list_datasources","description","Only sources with current approved allowlisted table access","inputSchema",empty),
     Map.of("name","get_schema","description","Approved allowlisted tables for requester","inputSchema",source),
     Map.of("name","describe_table","description","Explicitly disclosed readable columns of an approved table (no physical metadata)","inputSchema",Map.of("type","object","properties",Map.of("sourceId",Map.of("type","string"),"tableName",Map.of("type","string")),"required",List.of("sourceId","tableName"))),
     Map.of("name","execute_readonly","description","Bounded SELECT for approved table and authorized columns","inputSchema",bounded)));
+ }
+ private static String optionalString(Map<?,?> args,String key){
+  if(!args.containsKey(key))return null;
+  Object raw=args.get(key);
+  if(!(raw instanceof String value))throw new IllegalArgumentException("Invalid "+key);
+  return value;
  }
  private Map<String,Object> call(String user,String tokenId,Map<String,Object> request) throws Exception {
   if(request==null)throw new IllegalArgumentException("Missing arguments");
@@ -129,7 +138,8 @@ public class AgentMcpApi {
     value=reader.mcpColumns(user,sourceId,table).stream().filter(col->columns.contains(String.valueOf(col.get("columnName")).toLowerCase(java.util.Locale.ROOT))).toList();
    }
    case "execute_readonly" -> {
-    if(!java.util.Set.of("sourceId","tableName","limit").containsAll(args.keySet())
+    if(!java.util.Set.of("sourceId","tableName","limit","filterColumn","filterValue",
+       "sortColumn","sortDirection").containsAll(args.keySet())
        ||!args.containsKey("sourceId")||!args.containsKey("tableName"))
       throw new IllegalArgumentException("Invalid read args");
     Object n=args.containsKey("limit")?args.get("limit"):10;
@@ -143,7 +153,9 @@ public class AgentMcpApi {
       throw new IllegalArgumentException("Agent has no approved columns");
     }
     Map<String,Object> original=reader.readForAgent(user,
-      new ReadApi.ReadQuery(sourceId,table,(Integer)n),columns);
+      new ReadApi.ReadQuery(sourceId,table,(Integer)n,
+        optionalString(args,"filterColumn"),optionalString(args,"filterValue"),
+        optionalString(args,"sortColumn"),optionalString(args,"sortDirection")),columns);
     Object rawRows=original.get("rows");
     if(!(rawRows instanceof List<?> rows))throw new IllegalArgumentException("Invalid read response");
     List<Map<String,Object>> filtered=new java.util.ArrayList<>();
