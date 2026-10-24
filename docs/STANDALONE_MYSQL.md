@@ -77,3 +77,7 @@ sudo systemctl status dataguard-standalone --no-pager
 ### 目标 MySQL 强制只读权限
 
 在执行任何表读取前，应用运行时执行 `SHOW GRANTS FOR CURRENT_USER()`。只允许 USAGE 和非全局 SELECT，拒绝 UPDATE、INSERT、DELETE、DDL、GRANT OPTION、ALL PRIVILEGES 及全局 SELECT。失败则拒绝查询。数据库管理员必须使用一个单独的 SELECT-only 账号，按白名单里的实际业务表授予 SELECT，不能复用 DataGuard 元数据管理账号。
+
+### 无 Docker 的正式生产模式门禁
+
+先在**仅本机可访问的初始化模式**完成 `admin/123456` 的首次强制改密。随后，数据库配置为 `sslMode=VERIFY_IDENTITY`（同时在 JVM 环境中配置可信 MySQL CA）、HTTPS 反向代理和 `DATAGUARD_COOKIE_SECURE=true`，继续保持 `DATAGUARD_BIND=127.0.0.1`；最后设置 `DATAGUARD_PRODUCTION=true`。缺少任何一项或默认管理员尚未改密，启动即拒绝进入生产模式。只读业务库连接也必须 VERIFY_IDENTITY，且独立账号通过 SHOW GRANTS 验证无写入权限。**备份已按本次需求明确排除。**
