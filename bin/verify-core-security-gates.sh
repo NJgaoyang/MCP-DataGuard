@@ -14,7 +14,7 @@ if [[ "${DG_E2E_PREFETCH_MAVEN:-false}" == "true" ]]; then
     -v "$ROOT:/workspace" -v "$CACHE:/root/.m2" -w /workspace \
     maven:3.9.11-eclipse-temurin-21 \
     mvn -B -ntp -pl dataguard-server,dataguard-workflow -am \
-      -Dtest=ApprovalOutboxIntegrationTest,ApprovalRecoveryIntegrationTest,ReviewProcessAuthorizationIntegrationTest,ReadOnlyJdbcTlsIntegrationTest,AgentReadMcpIntegrationTest,CertifiedWriteJdbcTlsTest,ApprovedWritePipelineIntegrationTest,DeniedSqlAlertIntegrationTest,ExecutionRecoveryWatchdogIntegrationTest,ApprovalReviewerRoleIntegrationTest,NativeMultiTenantLoginIntegrationTest,AuditIntegrityIntegrationTest \
+      -Dtest=ApprovalOutboxIntegrationTest,ApprovalRecoveryIntegrationTest,ReviewProcessAuthorizationIntegrationTest,ReadOnlyJdbcTlsIntegrationTest,AgentReadMcpIntegrationTest,CertifiedWriteJdbcTlsTest,ApprovedWritePipelineIntegrationTest,DeniedSqlAlertIntegrationTest,ExecutionRecoveryWatchdogIntegrationTest,ApprovalReviewerRoleIntegrationTest,NativeMultiTenantLoginIntegrationTest,NativeLoginFlowableOutboxIntegrationTest,AuditIntegrityIntegrationTest \
       -Dsurefire.failIfNoSpecifiedTests=false test
 fi
 DG_RUN_FLOWABLE_OUTBOX_E2E=true \
@@ -36,6 +36,7 @@ files = {
     'ExecutionRecoveryWatchdogIntegrationTest',
     'ApprovalReviewerRoleIntegrationTest',
     'NativeMultiTenantLoginIntegrationTest',
+    'NativeLoginFlowableOutboxIntegrationTest',
   ],
   'dataguard-workflow': [
     'ApprovalOutboxIntegrationTest',
