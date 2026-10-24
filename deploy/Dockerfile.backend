@@ -5,6 +5,9 @@ ARG SERVICE=dataguard-server
 RUN mvn -B -ntp -pl "${SERVICE}" -am -DskipTests install && \
     mvn -B -ntp -pl "${SERVICE}" -DskipTests package spring-boot:repackage
 FROM eclipse-temurin:21-jre
+# Runtime Java service does not need the preinstalled ACME test binary.
+# Its embedded Go stdlib was flagged by the image vulnerability scanner.
+RUN rm -f /usr/bin/pebble
 WORKDIR /app
 ARG SERVICE=dataguard-server
 COPY --from=build /src/${SERVICE}/target/${SERVICE}-0.5.0-SNAPSHOT.jar /app/app.jar
