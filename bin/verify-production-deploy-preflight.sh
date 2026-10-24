@@ -20,7 +20,7 @@ bash bin/verify-staged-rollout.sh
 python3 - "$DG_RELEASE_MANIFEST" <<'PY'
 import json,os,sys
 m=json.load(open(sys.argv[1]))
-for role in ("gateway","workflow","web"):
+for role in ("gateway","workflow","web","caddy"):
  k="DG_"+role.upper()+"_IMAGE"
  if os.environ[k]!=m["images"][role]:
   sys.exit("NO_GO: Compose image differs from signed approved manifest: "+role)

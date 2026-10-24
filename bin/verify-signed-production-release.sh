@@ -51,7 +51,7 @@ m=json.loads(pathlib.Path(sys.argv[1]).read_text())
 assert m.get("schemaVersion")==1
 assert m.get("gitCommit")==sys.argv[2], "Manifest release SHA mismatch"
 images=m.get("images",{})
-for name in ("gateway","workflow","web"):
+for name in ("gateway","workflow","web","caddy"):
  assert re.fullmatch(r"[a-zA-Z0-9_./:-]+@sha256:[0-9a-f]{64}",
                      images.get(name,"")),name+" digest missing"
 evidence=m.get("evidence",{})

@@ -21,7 +21,7 @@ expected={
  "gateway":manifest["images"]["gateway"],
  "workflow":manifest["images"]["workflow"],
  "web":manifest["images"]["web"],
- "public":os.getenv("DG_CADDY_IMAGE","")
+ "public":manifest["images"]["caddy"]
 }
 for x in ("gateway","workflow","web","public"):
  name="DG_"+("CADDY" if x=="public" else x.upper())+"_IMAGE"

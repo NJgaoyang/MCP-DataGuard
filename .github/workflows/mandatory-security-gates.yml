@@ -96,6 +96,12 @@ jobs:
         run: |
           set -euo pipefail
           bash bin/verify-production-compose-policy.sh
+      - name: Validate production Caddyfile with the real Caddy parser
+        run: |
+          set -euo pipefail
+          docker run --rm -e DG_PUBLIC_HOST=dataguard.ci.example.org \
+            -v "$PWD/deploy/Caddyfile.production:/etc/caddy/Caddyfile:ro" \
+            caddy:2 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
       - name: Check protected credential entrypoint
         run: |
           set -euo pipefail

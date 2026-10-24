@@ -26,7 +26,7 @@ m={"schemaVersion":1,"gitCommit":"a"*40,
    "createdAt":now.strftime("%Y-%m-%dT%H:%M:%SZ"),
    "expiresAt":(now+datetime.timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ"),
    "images":{k:"registry.invalid/dataguard/"+k+"@sha256:"+"1"*64
-             for k in ("gateway","workflow","web")},
+             for k in ("gateway","workflow","web","caddy")},
    "evidence":{k:"artifact://independently-reviewed/"+k
       for k in ("real_mcp_read","live_flowable_identity","physical_write_fault",
        "local_encrypted_backup_restore","wal_pitr_restore","penetration_test",
