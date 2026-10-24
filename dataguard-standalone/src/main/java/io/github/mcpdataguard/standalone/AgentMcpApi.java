@@ -117,7 +117,10 @@ public class AgentMcpApi {
       throw new IllegalArgumentException("Invalid table description arguments");
     String sourceId=String.valueOf(args.get("sourceId"));
     String table=Guard.identifier(String.valueOf(args.get("tableName")));
-    if(!grants.allowed(tokenId,sourceId,table))throw new IllegalArgumentException("Agent table access denied");
+    if(!grants.allowed(tokenId,sourceId,table)){
+      audit.log(user,"MCP_AGENT_ACCESS","AGENT",tokenId+"/"+sourceId+"/"+table,"DENIED","table grant missing or disabled");
+      throw new IllegalArgumentException("Agent table access denied");
+    }
     value=reader.mcpColumns(user,sourceId,table);
    }
    case "execute_readonly" -> {
@@ -131,6 +134,7 @@ public class AgentMcpApi {
     if(!grants.allowed(tokenId,sourceId,table))throw new IllegalArgumentException("Agent table access denied");
     var auth=new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(user,"",List.of());
     value=reader.read(auth,new ReadApi.ReadQuery(sourceId,table,(Integer)n));
+    audit.log(user,"MCP_AGENT_READ","AGENT",tokenId+"/"+sourceId+"/"+table,"SUCCESS","bounded read request");
    }
    default -> throw new IllegalArgumentException("Unsupported tool");
   }
