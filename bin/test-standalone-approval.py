@@ -264,3 +264,25 @@ assert all(r['requester']=='admin' for r in handled),handled
 reviewer.check(source_path,expected=403)
 reviewer.check('/api/operations/live',expected=403)
 print('MYSQL_CONSOLE_DETAIL_EDIT_ANALYTICS_SCOPE_E2E_PASS')
+# StarRocks is a BUSINESS datasource definition stored in MySQL, not a second
+# platform metadata database. This exercises real HTTP/MySQL/Flyway persistence.
+starrocks=admin.check("/api/sources","POST",{
+    "code":"ci_starrocks","displayName":"CI StarRocks Metadata",
+    "host":"fe.example.internal","port":9030,"databaseName":"ads",
+    "readUsername":"dg_ro","passwordEnv":"DATAGUARD_TARGET_CI_STARROCKS_PASSWORD",
+    "dbType":"STARROCKS"})
+starrocks_detail=admin.check("/api/sources/"+starrocks["id"])
+assert starrocks_detail["dbType"]=="STARROCKS",starrocks_detail
+mysql_detail=admin.check(source_path)
+assert mysql_detail["dbType"]=="MYSQL",mysql_detail
+all_sources=admin.check("/api/sources")
+assert {r["dbType"] for r in all_sources}=={"MYSQL","STARROCKS"},all_sources
+# Bad driver types must never persist as business sources.
+invalid,body=admin.post("/api/sources",{
+    "code":"ci_reject_pg","displayName":"Postgres Unsupported",
+    "host":"127.0.0.1","port":5432,"databaseName":"pg",
+    "readUsername":"reader","passwordEnv":"DATAGUARD_TARGET_CI_UNSUPPORTED_PASSWORD",
+    "dbType":"POSTGRESQL"})
+assert invalid==400,(invalid,body[:200])
+print("V2_MYSQL_PLATFORM_STARROCKS_METADATA_HTTP_PERSISTENCE_PASS")
+
