@@ -137,6 +137,30 @@ unauth,body=mcp_request("wrong","tools/list")
 assert unauth==401,(unauth,body)
 ok,initialized=mcp_request(token,"initialize",{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"CI","version":"1.0"}})
 assert ok==200 and "result" in initialized,(ok,initialized)
+# MCP Streamable HTTP JSON response mode: notifications have no JSON-RPC id
+notification=urllib.request.Request(URL+"/mcp",
+  data=json.dumps({"jsonrpc":"2.0","method":"notifications/initialized"}).encode(),
+  headers={"Authorization":"Bearer "+token,"Content-Type":"application/json",
+           "Accept":"application/json, text/event-stream"},method="POST")
+with urllib.request.urlopen(notification,timeout=10) as nr:
+    assert nr.status==202 and not nr.read(),nr.status
+ok,ping=mcp_request(token,"ping")
+assert ok==200 and ping.get("id")==7 and ping.get("result")=={},(ok,ping)
+# Deny versions that were not negotiated.
+request=urllib.request.Request(URL+"/mcp",
+    data=json.dumps({"jsonrpc":"2.0","id":8,"method":"tools/list"}).encode(),
+    headers={"Authorization":"Bearer "+token,"Content-Type":"application/json",
+             "MCP-Protocol-Version":"2099-01-01"},method="POST")
+try:
+    urllib.request.urlopen(request,timeout=10)
+    raise AssertionError("invalid protocol accepted")
+except urllib.error.HTTPError as e:
+    assert e.code==400,e.code
+# Discovery must not reveal unapproved enabled sources.
+ok,scoped=mcp_request(token,"tools/call",{"name":"list_datasources","arguments":{}})
+assert ok==200 and scoped.get("result"),(ok,scoped)
+discovered=json.loads(scoped["result"]["content"][0]["text"])
+assert len(discovered)==1 and discovered[0]["id"]==source_id,discovered
 ok,listed_tools=mcp_request(token,"tools/list")
 assert ok==200 and {x["name"] for x in listed_tools["result"]["tools"]}>=set(["list_datasources","get_schema","execute_readonly"]),(ok,listed_tools)
 ok,denied=mcp_request(token,"tools/call",{"name":"execute_readonly","arguments":{"sourceId":source_id,"tableName":"never_allowlisted","limit":1}})
