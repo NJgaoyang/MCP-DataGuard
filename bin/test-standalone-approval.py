@@ -188,6 +188,24 @@ ok,one_column=mcp_request(token,"tools/call",{"name":"describe_table",
     "arguments":{"sourceId":source_id,"tableName":"ci_allowlisted_table"}})
 shown=json.loads(one_column["result"]["content"][0]["text"])
 assert ok==200 and len(shown)==1 and shown[0]["columnName"]=="safe_total",shown
+# Concurrent authorization/SQL-shape checks must remain deterministic.
+# These calls NEVER contact the target DB: no physical read is certified here.
+from concurrent.futures import ThreadPoolExecutor
+def concurrency_probe(i):
+    target="ci_allowlisted_table" if i % 2 == 0 else "ci_allowlisted_table; DROP TABLE app_users"
+    status,payload=mcp_request(token,"tools/call",{"name":"describe_table",
+        "arguments":{"sourceId":source_id,"tableName":target}})
+    if i % 2 == 0:
+        assert status==200 and "result" in payload,(i,status,payload)
+        values=json.loads(payload["result"]["content"][0]["text"])
+        assert len(values)==1 and values[0]["columnName"]=="safe_total",(i,values)
+    else:
+        assert status==200 and "error" in payload,(i,status,payload)
+with ThreadPoolExecutor(max_workers=4) as executor:
+    list(executor.map(concurrency_probe,range(16)))
+denials=[r for r in admin.check("/api/audit") if r["action"]=="MCP_REQUEST" and r["outcome"]=="DENIED"]
+assert len(denials)>=8,denials
+print("V2_MCP_COLUMN_AND_CONCURRENT_INJECTION_GUARDS_PASS")
 deleted_status,deleted_body=admin.call(
     "/api/sources/"+source_id+"/allowlist/ci_allowlisted_table/columns/safe_total",
     "DELETE",None,{"X-CSRF-TOKEN":admin.csrf()})
