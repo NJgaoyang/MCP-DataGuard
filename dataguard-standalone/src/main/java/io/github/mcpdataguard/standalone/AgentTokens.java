@@ -51,6 +51,15 @@ public class AgentTokens {
   audit.log(auth.getName(),"AGENT_TOKEN_REVOKED","AGENT",id.toString(),"SUCCESS","immediate");
   return Map.of("revoked",true);
  }
+ public String resolveTokenId(String bearer){
+  if(bearer==null||!bearer.matches("dg_[a-zA-Z0-9_-]{43}"))return null;
+  List<String> ids=jdbc.query("""
+    SELECT t.id FROM app_agent_tokens t JOIN app_users u ON u.id=t.owner_user_id
+    WHERE t.token_digest=? AND t.revoked_at IS NULL AND t.expires_at>NOW(3)
+      AND u.enabled=1 AND u.must_change_password=0
+    """,(rs,i)->rs.getString(1),digest(bearer));
+  return ids.size()==1?ids.get(0):null;
+ }
  public String resolve(String bearer){
   if(bearer==null||!bearer.matches("dg_[a-zA-Z0-9_-]{43}"))return null;
   List<String> users=jdbc.query("""
