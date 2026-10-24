@@ -2,7 +2,7 @@
 
 > **当前默认架构（`dev202610241`）**：Java 21 / Spring Boot 4 单体应用、MySQL 8.4、内嵌 Flowable、企业内部多用户、表级正向白名单、操作审计和非 Docker 的 JAR + systemd 部署。**无 PostgreSQL 和多组织运行依赖**；旧版 PostgreSQL 相关代码仅保留为未参与默认构建的历史目录。
 
-## 快速定位
+**MCP Agent 开发与缺口台账：** [已实现 / 未实现 / 验收状态](docs/MCP_AGENT_IMPLEMENTATION_TRACKER.md)。\n\n## 快速定位
 
 - 新版后端：`dataguard-standalone/`，默认根 Maven Reactor **只编译此模块**。
 - MySQL Flyway 基础表：`dataguard-standalone/src/main/resources/db/migration/V1__mysql_internal_baseline.sql`。
