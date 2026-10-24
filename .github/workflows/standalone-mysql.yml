@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Build Vue + Ant Design standalone UI into the single JAR
+      - name: Build Vue and Ant Design for standalone single JAR
         env:
           VITE_DATAGUARD_STANDALONE: 'true'
         run: |
@@ -42,14 +42,17 @@ jobs:
           cd ..
           cp dataguard-web/dist/index.html dataguard-standalone/src/main/resources/static/index.html
           cp -r dataguard-web/dist/assets dataguard-standalone/src/main/resources/static/
-      - name: Compile and test standalone (PostgreSQL modules excluded)
+      - name: Compile and test standalone
         run: mvn -B -ntp -pl dataguard-standalone -am clean verify
-      - name: Verify Vue assets packaged in the single runnable JAR
+      - name: Verify Vue assets embedded in executable JAR
         run: |
           set -euo pipefail
           JAR=dataguard-standalone/target/dataguard-standalone-0.5.0-SNAPSHOT.jar
           test -s "$JAR"
-          jar tf "$JAR" | grep -q '^BOOT-INF/classes/static/index.html
+          jar tf "$JAR" | grep -F 'BOOT-INF/classes/static/index.html'
+          jar tf "$JAR" | grep -F 'BOOT-INF/classes/static/assets/' | grep -F '.js'
+          echo VUE_MYSQL_SINGLE_JAR_PACKAGING_PASS
+      - name: Run single JVM against isolated MySQL
         env:
           DATAGUARD_MYSQL_URL: jdbc:mysql://127.0.0.1:3306/dataguard?sslMode=DISABLED&connectionTimeZone=UTC
           DATAGUARD_MYSQL_USER: dg_app
@@ -62,8 +65,8 @@ jobs:
           echo $! > /tmp/dg-standalone.pid
           ready=false
           for i in $(seq 1 100); do
-            if curl -fsS http://127.0.0.1:8080/api/csrf >/dev/null; then ready=true;break;fi
-            if ! kill -0 "$(cat /tmp/dg-standalone.pid)" 2>/dev/null; then break;fi
+            if curl -fsS http://127.0.0.1:8080/api/csrf >/dev/null; then ready=true; break; fi
+            if ! kill -0 "$(cat /tmp/dg-standalone.pid)" 2>/dev/null; then break; fi
             sleep 2
           done
           if [[ "$ready" != true ]]; then
@@ -72,70 +75,9 @@ jobs:
           fi
           python3 bin/test-standalone-login.py
           python3 bin/test-standalone-approval.py
-      - name: Validate non-Docker standalone scripts
+      - name: Validate non-Docker systemd scripts
         run: bash -n bin/build-standalone.sh bin/install-standalone-systemd.sh
-      - name: Reject PostgreSQL in default reactor
-        run: |
-          ! grep -q '<module>dataguard-server</module>' pom.xml
-          ! grep -q '<module>dataguard-workflow</module>' pom.xml
-          ! grep -q '<module>dataguard-sql-core</module>' pom.xml
-          jar tf "$JAR" | grep -q '^BOOT-INF/classes/static/assets/.*\.js
-        env:
-          DATAGUARD_MYSQL_URL: jdbc:mysql://127.0.0.1:3306/dataguard?sslMode=DISABLED&connectionTimeZone=UTC
-          DATAGUARD_MYSQL_USER: dg_app
-          DATAGUARD_MYSQL_PASSWORD: ci_test_app_only
-          DATAGUARD_FLOWABLE_SCHEMA_UPDATE: 'true'
-          DATAGUARD_BOOTSTRAP_ADMIN: 'true'
-        run: |
-          set -euo pipefail
-          java -jar dataguard-standalone/target/dataguard-standalone-0.5.0-SNAPSHOT.jar > /tmp/dg-standalone.log 2>&1 &
-          echo $! > /tmp/dg-standalone.pid
-          ready=false
-          for i in $(seq 1 100); do
-            if curl -fsS http://127.0.0.1:8080/api/csrf >/dev/null; then ready=true;break;fi
-            if ! kill -0 "$(cat /tmp/dg-standalone.pid)" 2>/dev/null; then break;fi
-            sleep 2
-          done
-          if [[ "$ready" != true ]]; then
-            grep -E 'ERROR|Exception|Caused by' /tmp/dg-standalone.log | head -25 || true
-            exit 1
-          fi
-          python3 bin/test-standalone-login.py
-          python3 bin/test-standalone-approval.py
-      - name: Validate non-Docker standalone scripts
-        run: bash -n bin/build-standalone.sh bin/install-standalone-systemd.sh
-      - name: Reject PostgreSQL in default reactor
-        run: |
-          ! grep -q '<module>dataguard-server</module>' pom.xml
-          ! grep -q '<module>dataguard-workflow</module>' pom.xml
-          ! grep -q '<module>dataguard-sql-core</module>' pom.xml
-          echo 'VUE_MYSQL_SINGLE_JAR_PACKAGING_PASS'
-      - name: Run monolith directly as one JVM against isolated MySQL
-        env:
-          DATAGUARD_MYSQL_URL: jdbc:mysql://127.0.0.1:3306/dataguard?sslMode=DISABLED&connectionTimeZone=UTC
-          DATAGUARD_MYSQL_USER: dg_app
-          DATAGUARD_MYSQL_PASSWORD: ci_test_app_only
-          DATAGUARD_FLOWABLE_SCHEMA_UPDATE: 'true'
-          DATAGUARD_BOOTSTRAP_ADMIN: 'true'
-        run: |
-          set -euo pipefail
-          java -jar dataguard-standalone/target/dataguard-standalone-0.5.0-SNAPSHOT.jar > /tmp/dg-standalone.log 2>&1 &
-          echo $! > /tmp/dg-standalone.pid
-          ready=false
-          for i in $(seq 1 100); do
-            if curl -fsS http://127.0.0.1:8080/api/csrf >/dev/null; then ready=true;break;fi
-            if ! kill -0 "$(cat /tmp/dg-standalone.pid)" 2>/dev/null; then break;fi
-            sleep 2
-          done
-          if [[ "$ready" != true ]]; then
-            grep -E 'ERROR|Exception|Caused by' /tmp/dg-standalone.log | head -25 || true
-            exit 1
-          fi
-          python3 bin/test-standalone-login.py
-          python3 bin/test-standalone-approval.py
-      - name: Validate non-Docker standalone scripts
-        run: bash -n bin/build-standalone.sh bin/install-standalone-systemd.sh
-      - name: Reject PostgreSQL in default reactor
+      - name: Reject legacy PostgreSQL modules in default build
         run: |
           ! grep -q '<module>dataguard-server</module>' pom.xml
           ! grep -q '<module>dataguard-workflow</module>' pom.xml
