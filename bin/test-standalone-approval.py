@@ -171,6 +171,27 @@ ok,listed_tools=mcp_request(token,"tools/list")
 assert ok==200 and {x["name"] for x in listed_tools["result"]["tools"]}>=set(["list_datasources","get_schema","execute_readonly"]),(ok,listed_tools)
 ok,denied=mcp_request(token,"tools/call",{"name":"execute_readonly","arguments":{"sourceId":source_id,"tableName":"never_allowlisted","limit":1}})
 assert ok==200 and "error" in denied,(ok,denied)
+# An Agent may discover a table but must not query or inspect any column
+# until BOTH the owner's and Agent's explicit column grants are present.
+ok,no_columns=mcp_request(token,"tools/call",{"name":"describe_table",
+    "arguments":{"sourceId":source_id,"tableName":"ci_allowlisted_table"}})
+assert ok==200 and json.loads(no_columns["result"]["content"][0]["text"])==[],no_columns
+ok,no_read=mcp_request(token,"tools/call",{"name":"execute_readonly",
+    "arguments":{"sourceId":source_id,"tableName":"ci_allowlisted_table","limit":1}})
+assert ok==200 and "error" in no_read,(ok,no_read)
+admin.check("/api/sources/"+source_id+"/allowlist/ci_allowlisted_table/columns","POST",
+    {"columnName":"safe_total"})
+admin.check("/api/agent-grants/columns","POST",{
+    "tokenId":agent["id"],"sourceId":source_id,
+    "tableName":"ci_allowlisted_table","columnName":"safe_total","enabled":True})
+ok,one_column=mcp_request(token,"tools/call",{"name":"describe_table",
+    "arguments":{"sourceId":source_id,"tableName":"ci_allowlisted_table"}})
+shown=json.loads(one_column["result"]["content"][0]["text"])
+assert ok==200 and len(shown)==1 and shown[0]["columnName"]=="safe_total",shown
+admin.check("/api/sources/"+source_id+"/allowlist/ci_allowlisted_table/columns/safe_total","DELETE")
+ok,revoked_column=mcp_request(token,"tools/call",{"name":"describe_table",
+    "arguments":{"sourceId":source_id,"tableName":"ci_allowlisted_table"}})
+assert ok==200 and json.loads(revoked_column["result"]["content"][0]["text"])==[],revoked_column
 admin.check("/api/agents/"+agent["id"]+"/revoke","POST",{})
 revoked,_=mcp_request(token,"tools/list")
 assert revoked==401,revoked
