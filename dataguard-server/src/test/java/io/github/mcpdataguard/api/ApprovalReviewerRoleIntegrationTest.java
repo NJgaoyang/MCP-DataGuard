@@ -129,5 +129,12 @@ class ApprovalReviewerRoleIntegrationTest {
   assertEquals(0L,db.queryForObject("""
     SELECT count(*) FROM dg_execution_task WHERE org_id=?
     """,Long.class,org));
+  // This test does not instantiate Flowable. The two fake pending events
+  // must not be consumed by subsequent real outbox integration tests sharing
+  // the same ephemeral PostgreSQL instance.
+  db.update("""
+    DELETE FROM dg_outbox_event WHERE org_id=? AND aggregate_id=?
+      AND event_type='APPROVAL_STEP_APPROVED'
+    """,org,approval);
  }
 }
