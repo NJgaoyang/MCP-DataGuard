@@ -9,7 +9,8 @@ class StarRocksReadGrantPolicyTest {
   assertTrue(StarRocksReadGrantPolicy.onlyDirectTableSelect(List.of(
     "GRANT USAGE ON CATALOG default_catalog TO USER 'reader'@'%'",
     "GRANT 'public' TO 'reader'@'%'",
-    "GRANT SELECT ON TABLE `ads`.`ads_order_kpi_day` TO USER 'reader'@'%'"
+    "GRANT SELECT ON TABLE `ads`.`ads_order_kpi_day` TO USER 'reader'@'%'",
+    "GRANT SELECT ON TABLE ads.another_approved_table TO USER 'reader'@'%'"
   ),"ads","ads_order_kpi_day"));
  }
  @Test void rejectsRolesWildcardsAndWrites() {
