@@ -1,3 +1,28 @@
+# MCP DataGuard · MySQL 企业单体版
+
+> **当前默认架构（`dev202610241`）**：Java 21 / Spring Boot 4 单体应用、MySQL 8.4、内嵌 Flowable、企业内部多用户、表级正向白名单、操作审计和非 Docker 的 JAR + systemd 部署。**无 PostgreSQL 和多组织运行依赖**；旧版 PostgreSQL 相关代码仅保留为未参与默认构建的历史目录。
+
+## 快速定位
+
+- 新版后端：`dataguard-standalone/`，默认根 Maven Reactor **只编译此模块**。
+- MySQL Flyway 基础表：`dataguard-standalone/src/main/resources/db/migration/V1__mysql_internal_baseline.sql`。
+- 入口：`io.github.mcpdataguard.standalone.DataGuardApplication`。
+- 新版内置管理页面：`dataguard-standalone/src/main/resources/static/`。
+- 安装与迁移说明：[MySQL 单体版手册](docs/STANDALONE_MYSQL.md)。
+- 持续集成：[MySQL monolith acceptance](.github/workflows/standalone-mysql.yml)。
+
+全新空库第一次运行会生成 `admin/123456`（仅建议本机初始化），账号密码以 BCrypt 存储，首次登录必须改为至少 12 位复杂密码。**不会在重启时重置密码**。生产必须使用 TLS 入口并确认没有暴露初始化账号。
+
+## 已实现与限制
+
+当前实现 MySQL 元数据、内部用户和审批角色、内嵌 Flowable 指定用户任务、数据源配置、表白名单、审批前置读取、默认全字段 REDACTED 脱敏、操作审计和独立非 Docker 运行方式。
+
+**注意**：这是全新 MySQL 基线而非旧版所有能力已无损迁移。旧 PostgreSQL Gateway/Worker、Agent MCP Token、生产级可选字段脱敏与旧数据迁移尚未完成新架构替换；不得将旧生产门禁或 PG 集成测试结果视作 MySQL 版本验收。当前生产状态 NO-GO。
+
+---
+
+## 历史版本说明（仅 dev20261022 PostgreSQL 架构参考）
+
 # MCP DataGuard
 
 > **dev20261022 · v0.5 开发版**。核心安全功能仍在开发中；SQL 读执行、写入执行默认禁用。
