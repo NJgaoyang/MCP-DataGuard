@@ -12,6 +12,8 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,6 +37,9 @@ public class AuthSecurity {
  @Bean SecurityFilterChain filterChain(HttpSecurity http, JdbcTemplate jdbc, AuditService audit,
    ForcedPasswordFilter force) throws Exception {
   http
+   .exceptionHandling(e->e.defaultAuthenticationEntryPointFor(
+       new HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED),
+       new AntPathRequestMatcher("/api/**")))
    .authorizeHttpRequests(a->a
       .requestMatchers("/login.html","/api/csrf","/favicon.ico","/login","/error").permitAll()
       .anyRequest().authenticated())
