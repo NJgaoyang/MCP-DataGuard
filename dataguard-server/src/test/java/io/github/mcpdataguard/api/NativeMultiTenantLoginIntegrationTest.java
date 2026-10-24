@@ -68,5 +68,17 @@ class NativeMultiTenantLoginIntegrationTest {
   assertEquals(2L,db.queryForObject("""
     SELECT count(*) FROM dg_native_session WHERE org_id IN (?,?)
     """,Long.class,orgA,orgB));
+  assertEquals(1L,db.queryForObject("""
+    SELECT count(*) FROM dg_system_event
+    WHERE org_id=? AND actor=? AND operation='NATIVE_LOGIN_SUCCEEDED'
+    """,Long.class,orgA,userA.toString()));
+  assertEquals(1L,db.queryForObject("""
+    SELECT count(*) FROM dg_system_event
+    WHERE org_id=? AND actor=? AND operation='NATIVE_LOGIN_FAILED'
+    """,Long.class,orgB,userB.toString()));
+  assertEquals(0L,db.queryForObject("""
+    SELECT count(*) FROM dg_system_event
+    WHERE org_id=? AND operation='NATIVE_LOGIN_FAILED'
+    """,Long.class,orgA));
  }
 }
