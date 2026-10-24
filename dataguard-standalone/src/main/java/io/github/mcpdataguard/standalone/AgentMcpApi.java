@@ -89,6 +89,7 @@ public class AgentMcpApi {
   return Map.of("tools",List.of(
     Map.of("name","list_datasources","description","Only sources with current approved allowlisted table access","inputSchema",empty),
     Map.of("name","get_schema","description","Approved allowlisted tables for requester","inputSchema",source),
+    Map.of("name","describe_table","description","Explicitly disclosed readable columns of an approved table (no physical metadata)","inputSchema",Map.of("type","object","properties",Map.of("sourceId",Map.of("type","string"),"tableName",Map.of("type","string")),"required",List.of("sourceId","tableName"))),
     Map.of("name","execute_readonly","description","Bounded SELECT for approved table and authorized columns","inputSchema",bounded)));
  }
  private Map<String,Object> call(String user,Map<String,Object> request) throws Exception {
@@ -105,6 +106,11 @@ public class AgentMcpApi {
    case "get_schema" -> {
     if(!args.keySet().equals(java.util.Set.of("sourceId")))throw new IllegalArgumentException("Invalid schema args");
     value=reader.mcpSchema(user,String.valueOf(args.get("sourceId")));
+   }
+   case "describe_table" -> {
+    if(!args.keySet().equals(java.util.Set.of("sourceId","tableName")))
+      throw new IllegalArgumentException("Invalid table description arguments");
+    value=reader.mcpColumns(user,String.valueOf(args.get("sourceId")),String.valueOf(args.get("tableName")));
    }
    case "execute_readonly" -> {
     if(!java.util.Set.of("sourceId","tableName","limit").containsAll(args.keySet())
