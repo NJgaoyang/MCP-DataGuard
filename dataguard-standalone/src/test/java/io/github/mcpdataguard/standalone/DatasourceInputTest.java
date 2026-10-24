@@ -11,6 +11,12 @@ class DatasourceInputTest {
   assertDoesNotThrow(()->DatasourceApi.validateSource(input("DATAGUARD_TARGET_TEST_PASSWORD",null)));
   assertFalse(input(null,"123456").toString().contains("123456"));
  }
+ @Test void validatesMySqlAndStarRocksButNeverPostgreSql(){
+  assertDoesNotThrow(()->DatasourceApi.validateSource(
+    new DatasourceApi.NewSource("bi","BI","192.168.197.129",9030,"ads","readonly",null,"test","STARROCKS")));
+  assertThrows(ResponseStatusException.class,()->DatasourceApi.validateSource(
+    new DatasourceApi.NewSource("pg","PG","192.168.197.129",5432,"db","readonly",null,"test","POSTGRESQL")));
+ }
  @Test void rejectsWrongFieldAndAmbiguousCredentialsWithUsefulMessage(){
   var error=assertThrows(ResponseStatusException.class,()->DatasourceApi.validateSource(input("123456",null)));
   assertTrue(error.getReason().contains("密码环境变量"));
