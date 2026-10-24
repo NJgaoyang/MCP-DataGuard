@@ -64,6 +64,22 @@ echo "PASSED: execution role certification rejects gained UPDATE privilege"
 docker exec -u postgres "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -d dataguard \
  -Atqc "SELECT count(*) FROM information_schema.tables WHERE table_schema='platform' AND table_name IN ('dg_sql_approval','dg_outbox_event','dg_audit_event','dg_sql_request')" | grep -qx '4'
 echo "PASSED: approval, outbox, audit and SQL request schema"
+# Data recovery must be proven with a disposable copy, never with the live
+# deploy_pg_data volume. The backup stays inside the --network none container.
+docker exec -u postgres "$NAME" pg_dump -Fc --no-acl --no-owner \
+  -n platform -d dataguard -f /tmp/dg-isolated-acceptance.dump
+docker exec -u postgres "$NAME" createdb -O postgres dataguard_recovery
+docker exec -u postgres "$NAME" pg_restore --no-acl --no-owner --exit-on-error \
+  -d dataguard_recovery /tmp/dg-isolated-acceptance.dump
+docker exec -u postgres "$NAME" psql -v ON_ERROR_STOP=1 -U postgres \
+  -d dataguard_recovery -Atqc 'SELECT amount FROM platform.readonly_probe WHERE id=1' \
+  | grep -qx '123'
+docker exec -u postgres "$NAME" psql -v ON_ERROR_STOP=1 -U postgres \
+  -d dataguard_recovery -Atqc "SELECT count(*) FROM information_schema.tables \
+    WHERE table_schema='platform' AND table_name IN \
+    ('dg_sql_approval','dg_audit_event','dg_alert_event','dg_execution_task')" \
+  | grep -qx '4'
+echo "PASSED: isolated pg_dump/pg_restore recovered schema and synthetic sample"
 if [[ "${DG_RUN_FLOWABLE_OUTBOX_E2E:-false}" == "true" ]]; then
  CACHE="${DG_M2_CACHE:-$HOME/.cache/mcp-dataguard/m2}"
  mkdir -p "$CACHE"
