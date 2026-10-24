@@ -54,13 +54,17 @@ public class NativeAuthController {
    throw invalid();
   }
   Instant now=Instant.now();
-  if(u.lock()!=null && u.lock().isAfter(now))throw invalid();
+  if(u.lock()!=null && u.lock().isAfter(now)){
+   loginEvent(u,"NATIVE_LOGIN_LOCKED");
+   throw invalid();
+  }
   if(!NativeTokens.passwords().matches(input.password(),u.hash())){
    int failures=u.lock()!=null?1:u.failures()+1;
    jdbc.update("""
     UPDATE dg_user SET failed_login_attempts=?,login_locked_until=?,updated_at=now()
      WHERE org_id=? AND id=?
     """,failures,failures>=5?java.sql.Timestamp.from(now.plusSeconds(900)):null,u.orgId(),u.userId());
+   loginEvent(u,failures>=5?"NATIVE_LOGIN_LOCKED":"NATIVE_LOGIN_FAILED");
    throw invalid();
   }
   jdbc.update("""
@@ -72,6 +76,7 @@ public class NativeAuthController {
     INSERT INTO dg_native_session(id,org_id,user_id,token_digest,expires_at)
     VALUES (?,?,?,?,now()+interval '8 hours')
     """,UUID.randomUUID(),u.orgId(),u.userId(),NativeTokens.digest(bearer));
+  loginEvent(u,"NATIVE_LOGIN_SUCCEEDED");
   return new AuthResult(bearer,"Bearer",28800,u.mustChange());
  }
  @PostMapping("/password")
@@ -119,6 +124,18 @@ public class NativeAuthController {
    """,(rs,i)->new Principal(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class)),id);
   if(rows.size()!=1)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Native user required");
   return rows.get(0);
+ }
+ /**
+  * Records only event category and local account ID. Never logs bearer,
+  * username, password, IP-derived identity or password-hash material.
+  * Transaction is explicitly configured to commit expected login failures.
+  */
+ private void loginEvent(Account account,String operation){
+  jdbc.update("""
+    INSERT INTO dg_system_event(id,org_id,actor,operation,resource_type,resource_id)
+    VALUES (?,?,? ,?,'USER',?)
+    """,UUID.randomUUID(),account.orgId(),account.userId().toString(),
+    operation,account.userId().toString());
  }
  private static ResponseStatusException invalid(){
   return new ResponseStatusException(HttpStatus.UNAUTHORIZED,"Invalid credentials");
