@@ -38,6 +38,16 @@ class StarRocksReadGrantPolicyTest {
   assertFalse(StarRocksReadGrantPolicy.onlyPublicRole(null));
   assertFalse(StarRocksReadGrantPolicy.onlyPublicRole("role_read"));
  }
+ @Test void plaintextIsRestrictedToExplicitLoopbackLab(){
+  String lab=ReadDatasourceDialect.STARROCKS.url("127.0.0.1",9030,"ads",true,false);
+  assertTrue(lab.contains("sslMode=DISABLED"),lab);
+  assertTrue(ReadDatasourceDialect.STARROCKS.url("localhost",9030,"ads",true,true)
+    .contains("sslMode=VERIFY_IDENTITY"));
+  assertTrue(ReadDatasourceDialect.STARROCKS.url("fe.internal",9030,"ads",true,false)
+    .contains("sslMode=VERIFY_IDENTITY"));
+  assertTrue(ReadDatasourceDialect.MYSQL.url("127.0.0.1",3306,"ods",true,false)
+    .contains("sslMode=VERIFY_IDENTITY"));
+ }
  @Test void sourceTypeAndUrlsAreBounded() {
   assertEquals(ReadDatasourceDialect.STARROCKS,ReadDatasourceDialect.parse("starrocks"));
   assertEquals(ReadDatasourceDialect.MYSQL,ReadDatasourceDialect.parse(null));
