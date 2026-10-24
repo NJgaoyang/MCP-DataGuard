@@ -27,3 +27,7 @@ The platform DB must be fully migrated with audited backup/rollback before launc
 ## Non-goals and remaining external requirements
 
 No offsite backup is requested; loss of entire production host remains an accepted *only if signed* residual risk. This Compose cannot configure external DB ACL, cert authority, real staff accounts, pager service, GPG signers, Vault/KMS, image registry access or penetration test vendors. Their evidence is mandatory before GO.
+
+## Read-only change-control gates
+
+`DG_PRODUCTION_CHANGE_ID=... DG_DEPLOY_STAGE=... bash bin/verify-production-deploy-preflight.sh` binds the signed manifest, actual checkout, production Compose images, named real evidence, and explicit stage flags without deploying. After an authorized manual Compose deployment, `bash bin/verify-production-runtime.sh` verifies that live containers match signed digest image inputs, role privileges, exposed ports and flags. Neither utility grants production authorization.
