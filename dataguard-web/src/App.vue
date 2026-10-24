@@ -635,7 +635,7 @@ async function updatePassword(){
 <template>
  <div class="shell" :class="{'auth-shell':!token||mustChange,'compact-page':!!token&&!mustChange&&selected!=='dashboard'}">
   <aside v-if="token&&!mustChange" class="sidebar">
-   <div class="brand"><span class="symbol">D</span><div>DataGuard<small>数据守卫</small></div></div>
+   <div class="brand"><img class="brand-mark" src="/dataguard-mark.svg" alt="" width="42" height="46"/><div class="brand-copy"><strong class="brand-wordmark">Data<span>Guard</span></strong><small>数据守卫</small></div></div>
    <span class="section">工作台</span>
    <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='dashboard'){loadOperations();loadSecurityAlerts()};if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations();loadSecurityAlerts();loadTrends()};if(page[0]==='flowable'){loadOperations();loadDeadLetters();loadWorkflowDesigns()}}"><UiIcon :name="page[0]" :size="19"/><span>{{page[1]}}</span></button>
   </aside>
@@ -670,7 +670,7 @@ async function updatePassword(){
 
     <section v-if="!token" class="auth-layout">
      <div class="auth-brand-panel">
-      <div class="auth-brand-top"><span class="auth-mark">M</span><span>MCP DataGuard</span></div>
+      <div class="auth-brand-top"><img class="auth-brand-mark" src="/dataguard-mark.svg" alt="" width="58" height="63"/><span class="auth-brand-copy"><strong class="brand-wordmark">Data<span>Guard</span></strong><small>数据守卫</small></span></div>
       <div class="auth-brand-body">
        <div class="auth-eyebrow">DATA ACCESS GOVERNANCE</div>
        <h1>让每一次数据访问<br>安全、可控、可追溯</h1>
@@ -681,11 +681,11 @@ async function updatePassword(){
         <div><span class="capability-icon">03</span><div><strong>变更审批管控</strong><small>高风险操作审批与全链路追踪</small></div></div>
        </div>
       </div>
-      <div class="auth-brand-foot">MCP DataGuard · 数据库安全管理</div>
+      <div class="auth-brand-foot">DataGuard · 数据守卫</div>
      </div>
      <div class="auth-form-panel">
       <div class="auth-login-card">
-       <div class="auth-mobile-brand"><span class="auth-mark">M</span> MCP DataGuard</div>
+       <div class="auth-mobile-brand"><img class="auth-brand-mark" src="/dataguard-mark.svg" alt="" width="44" height="48"/><span class="auth-brand-copy"><strong class="brand-wordmark">Data<span>Guard</span></strong><small>数据守卫</small></span></div>
        <div class="auth-login-heading"><h2>登录管理平台</h2><p>请输入管理员分配的账号和密码</p></div>
        <a-form :model="loginForm" layout="vertical" @finish="login" class="auth-form">
         <a-form-item label="账号" name="username" :rules="[{required:true,message:'请输入账号'}]"><a-input v-model:value="loginForm.username" autocomplete="username" placeholder="请输入账号" size="large"/></a-form-item>
@@ -694,18 +694,18 @@ async function updatePassword(){
        </a-form>
        <p class="auth-support">如需开通账号或重置密码，请联系系统管理员</p>
       </div>
-      <div class="auth-copyright">© 2026 MCP DataGuard</div>
+      <div class="auth-copyright">© 2026 DataGuard</div>
      </div>
     </section>
     <section v-else-if="mustChange" class="auth-layout">
      <div class="auth-brand-panel">
-      <div class="auth-brand-top"><span class="auth-mark">M</span><span>MCP DataGuard</span></div>
+      <div class="auth-brand-top"><img class="auth-brand-mark" src="/dataguard-mark.svg" alt="" width="58" height="63"/><span class="auth-brand-copy"><strong class="brand-wordmark">Data<span>Guard</span></strong><small>数据守卫</small></span></div>
       <div class="auth-brand-body"><div class="auth-eyebrow">ACCOUNT SECURITY</div><h1>安全始于身份认证</h1><p>保护企业数据资产，建立可信访问边界。</p></div>
-      <div class="auth-brand-foot">MCP DataGuard · 数据库安全管理</div>
+      <div class="auth-brand-foot">DataGuard · 数据守卫</div>
      </div>
      <div class="auth-form-panel">
       <div class="auth-login-card">
-       <div class="auth-mobile-brand"><span class="auth-mark">M</span> MCP DataGuard</div>
+       <div class="auth-mobile-brand"><img class="auth-brand-mark" src="/dataguard-mark.svg" alt="" width="44" height="48"/><span class="auth-brand-copy"><strong class="brand-wordmark">Data<span>Guard</span></strong><small>数据守卫</small></span></div>
        <div class="auth-login-heading"><h2>{{forcedPasswordChange?'首次登录，请修改密码':'修改登录密码'}}</h2><p>新密码至少 12 位，包含大小写字母、数字及特殊字符</p></div>
        <a-form :model="changeForm" layout="vertical" @finish="updatePassword" class="auth-form">
         <a-form-item label="当前密码" name="currentPassword" :rules="[{required:true,message:'请输入当前密码'}]"><a-input-password v-model:value="changeForm.currentPassword" autocomplete="current-password" size="large"/></a-form-item>
@@ -714,7 +714,7 @@ async function updatePassword(){
         <a-button v-if="!forcedPasswordChange" block size="large" class="auth-cancel" @click="cancelPasswordChange">返回工作台</a-button>
        </a-form>
       </div>
-      <div class="auth-copyright">© 2026 MCP DataGuard</div>
+      <div class="auth-copyright">© 2026 DataGuard</div>
      </div>
     </section>
     <a-alert v-if="error" type="warning" show-icon :message="error" class="alert"/>
@@ -1619,4 +1619,16 @@ async function updatePassword(){
     padding:0 4px 18px!important;
   }
 }
+
+/* Reusable approved DataGuard shield/database brand artwork on authentication views. */
+.auth-brand-top{gap:12px;min-height:60px}
+.auth-brand-mark{width:54px;height:59px;flex:none;object-fit:contain}
+.auth-brand-copy{display:flex;flex-direction:column;min-width:0;gap:2px}
+.auth-brand-copy .brand-wordmark{display:block;font-size:20px;line-height:1.2;font-weight:760;letter-spacing:-.5px;color:#142a4c}
+.auth-brand-copy .brand-wordmark span{color:#086af1}
+.auth-brand-copy small{display:block;font-size:12px;line-height:1.4;color:#687f9c;font-weight:500}
+.auth-mobile-brand{gap:9px}
+.auth-mobile-brand .auth-brand-mark{width:44px;height:48px}
+.auth-mobile-brand .auth-brand-copy .brand-wordmark{font-size:18px}
+@media(max-width:1100px){.auth-brand-top .auth-brand-mark{width:48px;height:52px}.auth-brand-top .brand-wordmark{font-size:19px}}
 </style>
