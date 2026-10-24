@@ -102,8 +102,8 @@ public class ReadApi {
    throw ex;
   }
   String host=(String)source.get("host");
-  String allowed=System.getenv().getOrDefault("DATAGUARD_READ_HOSTS","127.0.0.1,localhost");
-  if(!Set.of(allowed.split(",")).contains(host)){
+  if(!ReadSourceHostPolicy.allowed(host,
+      System.getenv().getOrDefault("DATAGUARD_READ_HOSTS","127.0.0.1,localhost"))){
    audit.log(requester,"SQL_READ","TABLE",id+"/"+table,"DENIED","source host not approved",elapsedMs(started));
    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Datasource host is not approved");
   }
