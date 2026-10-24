@@ -6,10 +6,11 @@ import './styles/console-polish.css';
 import './styles/workspaces.css';
 import './styles/console-foundation.css';
 import App from './App.vue';
+import StandaloneApp from './StandaloneApp.vue';
 
 // One provider for every page, dialog, confirmation and pagination control.
 const app=createApp({
- render:()=>h(ConfigProvider,{locale:zhCN},{default:()=>h(App)})
+ render:()=>h(ConfigProvider,{locale:zhCN},{default:()=>h(import.meta.env.VITE_DATAGUARD_STANDALONE==='true'?StandaloneApp:App)})
 });
 app.use(Antd);
 app.mount('#app');
