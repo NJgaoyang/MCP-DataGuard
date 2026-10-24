@@ -1,0 +1,45 @@
+server:
+  address: ${DATAGUARD_BIND:127.0.0.1}
+  port: ${DATAGUARD_PORT:8080}
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: strict
+        secure: ${DATAGUARD_COOKIE_SECURE:false}
+      timeout: 8h
+spring:
+  application:
+    name: dataguard-standalone
+  datasource:
+    url: ${DATAGUARD_MYSQL_URL:jdbc:mysql://127.0.0.1:3306/dataguard?sslMode=REQUIRED&connectionTimeZone=UTC}
+    username: ${DATAGUARD_MYSQL_USER:dataguard}
+    password: ${DATAGUARD_MYSQL_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 12
+      connection-timeout: 8000
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          no-store: true
+flowable:
+  database-schema-update: ${DATAGUARD_FLOWABLE_SCHEMA_UPDATE:false}
+  async-executor-activate: false
+dataguard:
+  read:
+    allowed-hosts: ${DATAGUARD_READ_HOSTS:127.0.0.1,localhost}
+    max-rows: 100
+    timeout-seconds: 5
+  bootstrap:
+    enabled: ${DATAGUARD_BOOTSTRAP_ADMIN:true}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
