@@ -22,7 +22,8 @@ public class ReadApi {
  private final JdbcTemplate jdbc;
  private final AuditService audit;
  private final DatasourceSecrets secrets;
- public ReadApi(JdbcTemplate jdbc,AuditService audit,DatasourceSecrets secrets){this.jdbc=jdbc;this.audit=audit;this.secrets=secrets;}
+ private final SqlReadPolicyGate sqlPolicy;
+ public ReadApi(JdbcTemplate jdbc,AuditService audit,DatasourceSecrets secrets,SqlReadPolicyGate sqlPolicy){this.jdbc=jdbc;this.audit=audit;this.secrets=secrets;this.sqlPolicy=sqlPolicy;}
  public record ReadQuery(String sourceId,String tableName,int limit){}
  static Object mask(Object value,boolean permitted){
   if(!permitted||value==null||value instanceof byte[])return "[REDACTED]";
@@ -94,6 +95,12 @@ public class ReadApi {
   if(ds.size()!=1){
    audit.log(requester,"SQL_READ","TABLE",id+"/"+table,"DENIED","not allowlisted or approved",elapsedMs(started));
    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Table is not allowlisted and approved");
+  }
+  // SQL policies are restrictive. A rule may DENY but never grant access.
+  try{sqlPolicy.enforce(table);}
+  catch(ResponseStatusException ex){
+   audit.log(requester,"SQL_READ","TABLE",id+"/"+table,"DENIED","published SQL policy",elapsedMs(started));
+   throw ex;
   }
   Map<String,Object> source=ds.get(0);
   String password;
