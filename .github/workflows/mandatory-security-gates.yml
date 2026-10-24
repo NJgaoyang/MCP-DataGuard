@@ -98,3 +98,47 @@ jobs:
           set -euo pipefail
           sh -n deploy/launch-with-secrets.sh
           bash -n bin/verify-production-compose.sh bin/verify-production-compose-policy.sh
+
+  supply-chain:
+    name: supply-chain-${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: gateway
+            dockerfile: deploy/Dockerfile.backend
+            buildarg: dataguard-server
+          - name: workflow
+            dockerfile: deploy/Dockerfile.backend
+            buildarg: dataguard-workflow
+          - name: web
+            dockerfile: deploy/Dockerfile.web
+            buildarg: dataguard-web
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build source-commit image for vulnerability inspection
+        run: |
+          set -euo pipefail
+          docker build -f "${{ matrix.dockerfile }}" \
+            --build-arg "SERVICE=${{ matrix.buildarg }}" \
+            -t "dataguard-ci-${{ matrix.name }}:${{ github.sha }}" .
+      - name: Scan fixed HIGH/CRITICAL package vulnerabilities (fail closed)
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
+        with:
+          image-ref: dataguard-ci-${{ matrix.name }}:${{ github.sha }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: HIGH,CRITICAL
+          scanners: vuln
+          timeout: 10m0s
+      - name: Create auditable CycloneDX SBOM
+        uses: anchore/sbom-action@f8bdd1d8ac5e901a77a92f111440fdb1b593736b
+        with:
+          image: dataguard-ci-${{ matrix.name }}:${{ github.sha }}
+          format: cyclonedx-json
+          artifact-name: sbom-${{ matrix.name }}
+          output-file: sbom-${{ matrix.name }}.cyclonedx.json
