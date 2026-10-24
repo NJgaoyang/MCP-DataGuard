@@ -6,6 +6,10 @@ on:
     branches: [dev202610241, refactor/dataguard-v2]
 permissions:
   contents: read
+# One verified result per branch tip; cancel obsolete commits during iterative refactoring.
+concurrency:
+  group: standalone-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   mysql-standalone:
     runs-on: ubuntu-latest
