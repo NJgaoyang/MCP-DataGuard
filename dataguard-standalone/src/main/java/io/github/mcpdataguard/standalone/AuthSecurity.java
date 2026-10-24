@@ -37,6 +37,7 @@ public class AuthSecurity {
  @Bean SecurityFilterChain filterChain(HttpSecurity http, JdbcTemplate jdbc, AuditService audit,
    ForcedPasswordFilter force) throws Exception {
   http
+   .csrf(csrf->csrf.ignoringRequestMatchers(PathPatternRequestMatcher.withDefaults().matcher("/mcp")))
    .exceptionHandling(e->e.defaultAuthenticationEntryPointFor(
        new HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED),
        PathPatternRequestMatcher.withDefaults().matcher("/api/**")))
