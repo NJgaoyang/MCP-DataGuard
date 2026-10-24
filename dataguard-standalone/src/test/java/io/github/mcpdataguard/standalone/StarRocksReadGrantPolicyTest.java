@@ -8,6 +8,7 @@ class StarRocksReadGrantPolicyTest {
  @Test void acceptsExactTableSelect() {
   assertTrue(StarRocksReadGrantPolicy.onlyDirectTableSelect(List.of(
     "GRANT USAGE ON CATALOG default_catalog TO USER 'reader'@'%'",
+    "GRANT 'public' TO 'reader'@'%'",
     "GRANT SELECT ON TABLE `ads`.`ads_order_kpi_day` TO USER 'reader'@'%'"
   ),"ads","ads_order_kpi_day"));
  }
