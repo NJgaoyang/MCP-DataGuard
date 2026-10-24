@@ -67,15 +67,24 @@ public class ReadApi {
  }
  @PostMapping
  public Map<String,Object> read(Authentication auth,@RequestBody ReadQuery input){
+  return executeRead(auth.getName(),input,null);
+ }
+ /** Agent-only column intersection is enforced before any target SQL is sent. */
+ Map<String,Object> readForAgent(String owner,ReadQuery input,Set<String> agentColumns){
+  if(agentColumns==null||agentColumns.isEmpty())
+   throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Agent has no authorized columns");
+  return executeRead(owner,input,agentColumns);
+ }
+ private Map<String,Object> executeRead(String requester,ReadQuery input,Set<String> agentColumns){
   long started=System.nanoTime();
   if(input==null||input.limit()<1||input.limit()>100)
    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Read limit must be 1..100");
   String table=Guard.identifier(input.tableName());
   String id=UUID.fromString(input.sourceId()).toString();
-  String actor=jdbc.queryForObject("SELECT id FROM app_users WHERE username=? AND enabled=1",String.class,auth.getName());
+  String actor=jdbc.queryForObject("SELECT id FROM app_users WHERE username=? AND enabled=1",String.class,requester);
   // A table must be BOTH explicitly allowlisted AND individually approved for this requester.
   List<Map<String,Object>> ds=jdbc.queryForList("""
-    SELECT s.host,s.port,s.database_name,s.read_username,s.password_env,s.encrypted_password
+    SELECT s.host,s.port,s.database_name,s.read_username,s.password_env,s.encrypted_password,s.db_type
     FROM data_sources s JOIN read_table_allowlist w
       ON w.source_id=s.id AND w.table_name=? AND w.enabled=1
     WHERE s.id=? AND s.enabled=1 AND EXISTS(
@@ -83,38 +92,45 @@ public class ReadApi {
         a.table_name=? AND a.requester_user_id=? AND a.status='APPROVED' AND a.expires_at>NOW(3))
     """,table,id,table,actor);
   if(ds.size()!=1){
-   audit.log(auth.getName(),"SQL_READ","TABLE",id+"/"+table,"DENIED","not allowlisted or approved",elapsedMs(started));
+   audit.log(requester,"SQL_READ","TABLE",id+"/"+table,"DENIED","not allowlisted or approved",elapsedMs(started));
    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Table is not allowlisted and approved");
   }
   Map<String,Object> source=ds.get(0);
   String password;
   try{password=secrets.resolve(id,source);}catch(ResponseStatusException ex){
-   audit.log(auth.getName(),"SQL_READ","TABLE",id+"/"+table,"ERROR","read credential not configured",elapsedMs(started));
+   audit.log(requester,"SQL_READ","TABLE",id+"/"+table,"ERROR","read credential not configured",elapsedMs(started));
    throw ex;
   }
   String host=(String)source.get("host");
   String allowed=System.getenv().getOrDefault("DATAGUARD_READ_HOSTS","127.0.0.1,localhost");
   if(!Set.of(allowed.split(",")).contains(host)){
-   audit.log(auth.getName(),"SQL_READ","TABLE",id+"/"+table,"DENIED","source host not approved",elapsedMs(started));
+   audit.log(requester,"SQL_READ","TABLE",id+"/"+table,"DENIED","source host not approved",elapsedMs(started));
    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Datasource host is not approved");
   }
   String database=Guard.identifier((String)source.get("database_name"));
   String username=(String)source.get("read_username");
   int port=((Number)source.get("port")).intValue();
-  String url="jdbc:mysql://"+host+":"+port+"/"+database+
-     "?sslMode=VERIFY_IDENTITY&connectionTimeZone=UTC&allowMultiQueries=false&allowLoadLocalInfile=false&allowUrlInLocalInfile=false&socketTimeout=7000&connectTimeout=4000";
+  ReadDatasourceDialect dialect=ReadDatasourceDialect.parse(source.get("db_type"));
+  String url=dialect.url(host,port,database);
   Set<String> exposed=new HashSet<>(jdbc.query("""
     SELECT LOWER(column_name) FROM read_column_allowlist
     WHERE source_id=? AND table_name=? AND enabled=1
     """,(rs,i)->rs.getString(1),id,table));
-  String sql="SELECT * FROM `"+table+"` LIMIT "+input.limit();
+  // Do not even retrieve disallowed physical columns over JDBC.
+  if(agentColumns!=null)exposed.retainAll(agentColumns);
+  if(exposed.isEmpty()){
+   audit.log(requester,"SQL_READ","TABLE",id+"/"+table,"DENIED","no authorized columns",elapsedMs(started));
+   throw new ResponseStatusException(HttpStatus.FORBIDDEN,"No authorized columns");
+  }
+  String projection=exposed.stream().sorted().map(c->"`"+Guard.identifier(c)+"`")
+    .collect(java.util.stream.Collectors.joining(","));
+  String sql="SELECT "+projection+" FROM `"+table+"` LIMIT "+input.limit();
   // The target user MUST have only SELECT grants. Connection is read-only,
   // statement is read-only and any transport / audit error is fail-closed.
   List<Map<String,Object>> rows=new ArrayList<>();
   try(var connection=DriverManager.getConnection(url,username,password)){
-   connection.setReadOnly(true);
-   connection.setAutoCommit(false);
-   MysqlReadGrantPolicy.requireReadOnlyGrants(connection);
+   dialect.begin(connection);
+   dialect.enforceReadOnly(connection,database,table);
    try(var stmt=connection.prepareStatement(sql,ResultSet.TYPE_FORWARD_ONLY,ResultSet.CONCUR_READ_ONLY)){
     stmt.setQueryTimeout(5);
     stmt.setMaxRows(input.limit());
@@ -133,14 +149,14 @@ public class ReadApi {
      }
     }
    }
-   connection.rollback();
+   dialect.finish(connection);
   }catch(java.sql.SQLException ex){
-   audit.log(auth.getName(),"SQL_READ","TABLE",id+"/"+table,"ERROR","read failed",elapsedMs(started));
+   audit.log(requester,"SQL_READ","TABLE",id+"/"+table,"ERROR","read failed",elapsedMs(started));
    throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"Datasource read failed");
   }
-  audit.log(auth.getName(),"SQL_READ","TABLE",id+"/"+table,"SUCCESS","rows="+rows.size(),elapsedMs(started));
+  audit.log(requester,"SQL_READ","TABLE",id+"/"+table,"SUCCESS","rows="+rows.size(),elapsedMs(started));
   return Map.of("decision","ALLOW","table",table,"rows",rows,"rowCount",rows.size(),
-    "masking",exposed.isEmpty()?"REDACT_ALL_DEFAULT":"EXPLICIT_COLUMN_ALLOWLIST");
+    "masking","EXPLICIT_COLUMN_PROJECTION");
  }
  private static long elapsedMs(long started){return Math.max(0,(System.nanoTime()-started)/1_000_000);}
 }
