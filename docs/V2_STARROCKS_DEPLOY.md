@@ -25,7 +25,9 @@ GRANT SELECT ON TABLE ads.ads_order_kpi_day TO USER 'dg_ro'@'%';
 -- 可能需要的 default_catalog USAGE 和系统内置 public 角色。
 ```
 
-程序对于不认识的 StarRocks 权限格式、额外角色、宽泛 SELECT、管理/写入权限、授予选项均拒绝。内置 public 角色允许存在，但必须确认它没有任何权限；不可由平台自动修改 StarRocks 用户或角色。
+程序对于不认识的 StarRocks 权限格式、额外角色、宽泛 SELECT、管理/写入权限、授予选项均拒绝。运行时仅使用低权限账号可执行的 `SHOW GRANTS FOR CURRENT_USER()` 和 `SELECT CURRENT_ROLE()`，要求当前激活角色只有 `public`；不会给运行账户赋予 `user_admin`。
+
+**DBA 必须独立验收 `public`**：StarRocks 的 `public` 角色可被修改，普通只读账号不能执行 `SHOW GRANTS FOR ROLE public`。此管理员检查应由 DBA 使用受控账号执行并留存证据；只有确认 `public` 没有写入或管理权限后才能在生产启用该数据源。不能误称应用运行时已证明 `public` 安全。
 
 ## 验收脚本化测试需求
 
