@@ -64,6 +64,10 @@ class ExecutionRecoveryWatchdogIntegrationTest {
     VALUES (?,? ,?,'EXECUTING',?,?,now()+interval '5 minutes',
       'lost-worker',now()-interval '2 minutes',1)
     """,task,org,approval,"a".repeat(64),"b".repeat(64));
+  db.update("""
+    INSERT INTO dg_execution_attempt(id,org_id,task_id,attempt_no,phase)
+    VALUES(?,?,?,?, 'IN_FLIGHT')
+    """,UUID.randomUUID(),org,task,1);
   // Fault injection boundary: physical target COMMIT completes, but the
   // simulated worker crashes before persisting the platform acknowledgement.
   // This tests the most dangerous state: write DID occur yet the ticket
@@ -104,6 +108,12 @@ class ExecutionRecoveryWatchdogIntegrationTest {
   assertEquals(1,db.queryForObject("""
     SELECT attempt_no FROM dg_execution_task WHERE org_id=? AND id=?
     """,Integer.class,org,task));
+  assertEquals("UNKNOWN",db.queryForObject("""
+    SELECT phase FROM dg_execution_attempt WHERE org_id=? AND task_id=?
+    """,String.class,org,task));
+  assertEquals("WRITE_OUTCOME_UNCERTAIN",db.queryForObject("""
+    SELECT error_code FROM dg_execution_attempt WHERE org_id=? AND task_id=?
+    """,String.class,org,task));
   assertEquals(1L,db.queryForObject("""
     SELECT count(*) FROM dg_alert_event a JOIN dg_alert_rule r
        ON a.org_id=r.org_id AND a.rule_id=r.id
