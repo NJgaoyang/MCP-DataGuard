@@ -285,4 +285,25 @@ invalid,body=admin.post("/api/sources",{
     "dbType":"POSTGRESQL"})
 assert invalid==400,(invalid,body[:200])
 print("V2_MYSQL_PLATFORM_STARROCKS_METADATA_HTTP_PERSISTENCE_PASS")
+# Policy decisions are now ENFORCED, not merely a configuration simulation.
+# The test uses an approved and table-allowlisted source and expects the
+# explicit policy denial before opening any connection to the target database.
+policy=admin.check("/api/sql-policies","POST",{
+    "code":"ci_read_deny","name":"CI realtime enforcement"})
+policy_id=policy["id"]
+version=admin.check("/api/sql-policies/"+policy_id+"/versions","POST",{
+    "decision":"DENY","priority":5,"table":"ci_allowlisted_table",
+    "environment":"PROD","operation":"SELECT"})
+assert version["revision"]==1,version
+published=admin.check("/api/sql-policies/"+policy_id+"/publish","POST",{"expectedVersion":1})
+assert published["status"]=="ACTIVE",published
+status,body=admin.post("/api/read",{
+    "sourceId":source_id,"tableName":"ci_allowlisted_table","limit":1})
+assert status==403 and b"policy" in body.lower(),(status,body[:200])
+assert any(row["action"]=="SQL_READ" and row["outcome"]=="DENIED"
+    and "policy" in str(row.get("detail","")).lower()
+    for row in admin.check("/api/audit")), "Published policy denial must be audited"
+admin.check("/api/sql-policies/"+policy_id+"/disable","POST",{"expectedVersion":2})
+print("V2_PUBLISHED_SQL_DENY_ENFORCED_AND_AUDITED_PASS")
+
 
