@@ -12,6 +12,7 @@ on:
       - 'bin/verify-isolated-worker-sigkill.sh'
       - 'bin/verify-signed-production-release.sh'
       - 'bin/verify-signed-release-policy.sh'
+      - 'bin/check-production-readiness.sh'
       - 'bin/verify-local-backup-health.py'
       - 'bin/verify-local-backup-health-policy.py'
       - 'bin/prune-local-encrypted-backups.py'
@@ -132,6 +133,15 @@ jobs:
           python3 bin/verify-local-backup-health-policy.py
           python3 bin/verify-local-backup-retention-policy.py
           python3 bin/verify-operational-alert-policy.py
+          bash -n bin/check-production-readiness.sh
+          EVIDENCE_DIR=$(mktemp -d)
+          chmod 700 "$EVIDENCE_DIR"
+          if DG_READINESS_EVIDENCE_DIR="$EVIDENCE_DIR" bash bin/check-production-readiness.sh; then
+            echo "FAIL: missing release evidence incorrectly authorized launch" >&2
+            exit 1
+          fi
+          rm -r "$EVIDENCE_DIR"
+          echo "PRODUCTION_EMPTY_EVIDENCE_NO_GO_PASS"
 
   worker-client-sigkill:
     runs-on: ubuntu-latest
