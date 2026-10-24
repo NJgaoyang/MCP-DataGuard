@@ -128,7 +128,7 @@ jobs:
             --build-arg "SERVICE=${{ matrix.buildarg }}" \
             -t "dataguard-ci-${{ matrix.name }}:${{ github.sha }}" .
       - name: Fetch version-locked scanner container
-        run: docker pull aquasec/trivy:0.65.0
+        run: docker pull aquasec/trivy:0.76.1
       - name: Scan fixed HIGH/CRITICAL package vulnerabilities (fail closed)
         run: |
           set -euo pipefail
@@ -136,7 +136,7 @@ jobs:
           timeout 900 docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock:ro \
             -v "$RUNNER_TEMP/trivy-cache:/root/.cache/" \
-            aquasec/trivy:0.65.0 image \
+            aquasec/trivy:0.76.1 image \
             --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
             --exit-code 1 --timeout 10m \
             "dataguard-ci-${{ matrix.name }}:${{ github.sha }}"
@@ -147,7 +147,7 @@ jobs:
             -v /var/run/docker.sock:/var/run/docker.sock:ro \
             -v "$RUNNER_TEMP/trivy-cache:/root/.cache/" \
             -v "$PWD:/sbom" \
-            aquasec/trivy:0.65.0 image \
+            aquasec/trivy:0.76.1 image \
             --format cyclonedx \
             --output "/sbom/sbom-${{ matrix.name }}.cyclonedx.json" \
             "dataguard-ci-${{ matrix.name }}:${{ github.sha }}"
