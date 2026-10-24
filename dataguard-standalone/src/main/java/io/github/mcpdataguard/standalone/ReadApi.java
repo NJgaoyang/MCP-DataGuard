@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.Set;
+import java.util.HashSet;
+import java.util.Locale;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
@@ -21,6 +23,13 @@ public class ReadApi {
  private final AuditService audit;
  public ReadApi(JdbcTemplate jdbc,AuditService audit){this.jdbc=jdbc;this.audit=audit;}
  public record ReadQuery(String sourceId,String tableName,int limit){}
+ static Object mask(Object value,boolean permitted){
+  if(!permitted||value==null||value instanceof byte[])return "[REDACTED]";
+  if(value instanceof Number || value instanceof Boolean)return value;
+  if(value instanceof CharSequence text)
+   return text.length()>256?text.subSequence(0,256).toString():text.toString();
+  return "[REDACTED]";
+ }
  @PostMapping
  public Map<String,Object> read(Authentication auth,@RequestBody ReadQuery input){
   if(input==null||input.limit()<1||input.limit()>100)
@@ -35,7 +44,7 @@ public class ReadApi {
       ON w.source_id=s.id AND w.table_name=? AND w.enabled=1
     WHERE s.id=? AND s.enabled=1 AND EXISTS(
        SELECT 1 FROM approval_requests a WHERE a.source_id=s.id AND
-        a.table_name=? AND a.requester_user_id=? AND a.status='APPROVED')
+        a.table_name=? AND a.requester_user_id=? AND a.status='APPROVED' AND a.expires_at>NOW(3))
     """,table,id,table,actor);
   if(ds.size()!=1){
    audit.log(auth.getName(),"SQL_READ","TABLE",id+"/"+table,"DENIED","not allowlisted or approved");
@@ -55,6 +64,10 @@ public class ReadApi {
   int port=((Number)source.get("port")).intValue();
   String url="jdbc:mysql://"+host+":"+port+"/"+database+
      "?sslMode=VERIFY_IDENTITY&connectionTimeZone=UTC&allowMultiQueries=false&allowLoadLocalInfile=false&allowUrlInLocalInfile=false&socketTimeout=7000&connectTimeout=4000";
+  Set<String> exposed=new HashSet<>(jdbc.query("""
+    SELECT LOWER(column_name) FROM read_column_allowlist
+    WHERE source_id=? AND table_name=? AND enabled=1
+    """,(rs,i)->rs.getString(1),id,table));
   String sql="SELECT * FROM `"+table+"` LIMIT "+input.limit();
   // The target user MUST have only SELECT grants. Connection is read-only,
   // statement is read-only and any transport / audit error is fail-closed.
@@ -73,7 +86,8 @@ public class ReadApi {
        String column=metadata.getColumnLabel(col);
        // Fail closed on sensitive columns: never return raw data from an
        // unclassified schema. The policy below deliberately redacts all fields.
-       row.put(column,"[REDACTED]");
+       row.put(column,mask(results.getObject(col),
+           exposed.contains(column.toLowerCase(Locale.ROOT))));
       }
       rows.add(row);
      }
@@ -85,6 +99,7 @@ public class ReadApi {
    throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"Datasource read failed");
   }
   audit.log(auth.getName(),"SQL_READ","TABLE",id+"/"+table,"SUCCESS","rows="+rows.size());
-  return Map.of("decision","ALLOW","table",table,"rows",rows,"rowCount",rows.size(),"masking","REDACT_ALL_DEFAULT");
+  return Map.of("decision","ALLOW","table",table,"rows",rows,"rowCount",rows.size(),
+    "masking",exposed.isEmpty()?"REDACT_ALL_DEFAULT":"EXPLICIT_COLUMN_ALLOWLIST");
  }
 }
