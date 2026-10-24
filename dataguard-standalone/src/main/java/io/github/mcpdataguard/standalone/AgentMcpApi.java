@@ -41,11 +41,11 @@ public class AgentMcpApi {
        case "execute_readonly" -> {
         if(!a.keySet().stream().allMatch(k->List.of("sourceId","tableName","limit").contains(k)))
          throw new IllegalArgumentException("Only fixed bounded table reads supported");
-        Object limit=a.getOrDefault("limit",10);
+        Object limit=a.containsKey("limit")?a.get("limit"):10;
         if(!(limit instanceof Integer))throw new IllegalArgumentException("Invalid integer limit");
         var auth=new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(user,"",List.of());
         Map<String,Object> response=reader.read(auth,new ReadApi.ReadQuery(String.valueOf(a.get("sourceId")),String.valueOf(a.get("tableName")),(Integer)limit));
-        result=Map.of("content",List.of(Map.of("type","text","text",new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(response))));
+        result=Map.of("content",List.of(Map.of("type","text","text",new tools.jackson.databind.json.JsonMapper().writeValueAsString(response))));
        }
        default -> throw new IllegalArgumentException("Unknown MCP tool");
       }
