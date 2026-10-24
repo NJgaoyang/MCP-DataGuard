@@ -53,7 +53,12 @@ export DG_RELEASE_BUSINESS_FPR="$BIZ"
 bash "$ROOT/bin/verify-signed-production-release.sh" > "$DIR/positive.log"
 grep -q PRODUCTION_SIGNED_RELEASE_EVIDENCE_GATE_PASS "$DIR/positive.log"
 echo "PASS: independent security/DBA/business cryptographic signatures"
-sed -i 's/artifact:\\/\\/independently-reviewed/artifact:\\/\\/tampered-evidence-replaced/g' "$DIR/release.json"
+python3 - "$DIR/release.json" <<'PY'
+from pathlib import Path
+p=Path(__import__("sys").argv[1])
+s=p.read_text().replace("artifact://independently-reviewed","artifact://tampered-evidence-replaced")
+p.write_text(s)
+PY
 if bash "$ROOT/bin/verify-signed-production-release.sh" >"$DIR/tamper.log" 2>&1;then
  echo "FAIL: a tampered evidence manifest was accepted" >&2;exit 1
 fi
