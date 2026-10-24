@@ -88,5 +88,6 @@ jobs:
       - name: Inject real TCP failures around PostgreSQL COMMIT
         run: |
           set -euo pipefail
+          docker pull postgres:17
           bash bin/verify-real-postgres-commit-disconnect.sh
           echo "REAL_TCP_BEFORE_AFTER_COMMIT_GATE_PASS"
