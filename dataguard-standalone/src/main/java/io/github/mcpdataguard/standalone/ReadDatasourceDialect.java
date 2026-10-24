@@ -21,13 +21,21 @@ enum ReadDatasourceDialect {
  }
  int defaultPort(){return this==MYSQL?3306:9030;}
  String url(String host,int port,String database) {
+  return url(host,port,database,
+    "true".equalsIgnoreCase(System.getenv().getOrDefault("DATAGUARD_DEV_STARROCKS_PLAINTEXT","false")),
+    "true".equalsIgnoreCase(System.getenv().getOrDefault("DATAGUARD_PRODUCTION","false")));
+ }
+ String url(String host,int port,String database,boolean devPlaintext,boolean production) {
   if(host==null||!host.matches("[A-Za-z0-9.-]{1,253}")||port<1||port>65535)
    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid target host or port");
   Guard.identifier(database);
-  // StarRocks is accessed via its MySQL-compatible FE query port. Require TLS
-  // hostname verification; never silently downgrade to an unverified connection.
+  // Only an EXPLICIT, NON-PRODUCTION, LOOPBACK Docker lab may use no TLS.
+  // Production always verifies the StarRocks/MySQL server certificate.
+  boolean labPlaintext=this==STARROCKS&&devPlaintext&&!production&&
+    ("127.0.0.1".equals(host)||"localhost".equals(host));
   return "jdbc:mysql://"+host+":"+port+"/"+database
-    +"?sslMode=VERIFY_IDENTITY&connectionTimeZone=UTC&allowMultiQueries=false"
+    +"?sslMode="+(labPlaintext?"DISABLED":"VERIFY_IDENTITY")
+    +"&connectionTimeZone=UTC&allowMultiQueries=false"
     +"&allowLoadLocalInfile=false&allowUrlInLocalInfile=false"
     +"&connectTimeout=4000&socketTimeout=7000"
     // FE may not implement MySQL SET SESSION TRANSACTION READ ONLY.
