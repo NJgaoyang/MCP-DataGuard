@@ -14,7 +14,7 @@
 
 ### 1. MySQL 数据库
 
-使用 MySQL 8.4+，建立 UTF8MB4 库并创建独立运行用户；生产环境必须限制来源 IP、启用 MySQL TLS、禁用匿名账号、使用独立备份策略，确保只允许此应用访问元数据表。示意：
+使用 MySQL 8.4+，建立 UTF8MB4 库并创建独立运行用户；生产环境必须限制来源 IP、启用 MySQL TLS、禁用匿名账号，确保只允许此应用访问元数据表。示意：
 
 ```sql
 CREATE DATABASE dataguard CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
@@ -51,7 +51,7 @@ systemctl enable --now dataguard-standalone.service
 
 ### 5. 上线阻断
 
-正式上线前必须通过真实 MySQL 8.4/Flowable 审批、登录锁定与 Session 撤销、并发权限收回、备份恢复、内网 TLS、审计留存和完整端到端检查。不要将“成功编译”视为生产 GO。
+正式上线前必须通过真实 MySQL 8.4/Flowable 审批、登录锁定与 Session 撤销、并发权限收回、内网 TLS、审计留存和完整端到端检查。不要将“成功编译”视为生产 GO。
 ### 字段最小授权与审批到期
 
 即使表在正向白名单里，读取也必须持有该**申请人自己**的未到期 Flowable 已批准记录。查询值默认全字段 `REDACTED`；只有 `read_column_allowlist` 中管理员明确批准的字段可显示（文本最多 256 字符，二进制和非安全类型仍保持脱敏）。撤销列授权、撤销表白名单后下一次读取即时生效。管理员不可直接通过变更请求者的用户名获得他人的审批权限。
