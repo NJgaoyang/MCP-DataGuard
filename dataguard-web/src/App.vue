@@ -3,7 +3,7 @@ import {ref,computed,reactive,onMounted,onUnmounted} from 'vue';
 import {message} from 'ant-design-vue';
 import UiIcon from './components/UiIcon.vue';
 const pages=[
- ['dashboard','总览仪表盘'],['agents','Agent 管理'],['datasources','数据源管理'],
+ ['dashboard','总览仪表盘'],['my-approvals','我的待审批'],['agents','Agent 管理'],['datasources','数据源管理'],
  ['rules','SQL 安全规则'],['flowable','Flowable 审批'],['audit','SQL 审计与监控'],
  ['users','用户与权限']
 ];
@@ -32,6 +32,12 @@ async function loadTrends(){
 
 const sqlRequestRows=ref<Record<string,unknown>[]>([]);
 const approvalRows=ref<Record<string,unknown>[]>([]);
+type MyApproval={approvalId:string;expectedVersion:number;stage:number;requiredRole:string;risk:string;expiresAt:string};
+const myApprovalRows=ref<MyApproval[]>([]);
+async function loadMyInbox(){
+ try{myApprovalRows.value=await getData<MyApproval[]>('/api/v1/approvals/my-inbox');}
+ catch(e){error.value='读取本人待审批任务失败：'+(e as Error).message;}
+}
 const workflowDesigns=ref<{id:string;code:string;name:string;version:number;revision:number;publishedRevision:number}[]>([]);
 const workflowDesignerOpen=ref(false);
 const workflowDesignTarget=ref<{id:string;version:number}|null>(null);
@@ -199,7 +205,7 @@ async function approveTask(){
     {reason:approvalReason.value,expectedVersion:approving.value.version});
   approvalDialog.value=false;approvalReason.value='';
   message.success('审批已记录，正在通过可靠事件同步到 Flowable；不会执行写 SQL');
-  await loadOperations();
+  await loadMyInbox();if(selected.value==='flowable')await loadOperations();
  }catch(e){error.value=(e as Error).message;}
  finally{saving.value=false;}
 }
@@ -213,7 +219,7 @@ async function rejectApproval(){
   await requestWrite('/api/v1/approvals/'+encodeURIComponent(rejectingApproval.value.id)+'/reject','POST',
     {reason:rejectionReason.value,expectedVersion:rejectingApproval.value.version});
   rejectionDialog.value=false;rejectionReason.value='';message.success('工单已拒绝并阻止执行');
-  await loadOperations();
+  await loadMyInbox();if(selected.value==='flowable')await loadOperations();
  }catch(e){error.value=(e as Error).message;}
  finally{saving.value=false;}
 }
@@ -683,7 +689,7 @@ async function updatePassword(){
   <aside v-if="token&&!mustChange" class="sidebar">
    <div class="brand"><img class="brand-mark" src="/dataguard-mark.svg" alt="" width="42" height="46"/><div class="brand-copy"><strong class="brand-wordmark">Data<span>Guard</span></strong><small>数据守卫</small></div></div>
    <span class="section">工作台</span>
-   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='dashboard'){loadOperations();loadSecurityAlerts()};if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations();loadSecurityAlerts();loadTrends();loadLiveSummary()};if(page[0]==='flowable'){loadOperations();loadDeadLetters();loadWorkflowDesigns()}}"><UiIcon :name="page[0]" :size="19"/><span>{{page[1]}}</span></button>
+   <button v-for="page in pages" :key="page[0]" :class="['nav',{active:selected===page[0]}]" @click="if(!mustChange){selected=page[0];if(page[0]==='dashboard'){loadOperations();loadSecurityAlerts()};if(page[0]==='users')loadAdmin();if(page[0]==='rules')loadPolicies();if(page[0]==='audit'){loadAuditEvents();loadOperations();loadSecurityAlerts();loadTrends();loadLiveSummary()};if(page[0]==='flowable'){loadOperations();loadDeadLetters();loadWorkflowDesigns()};if(page[0]==='my-approvals')loadMyInbox()}"><UiIcon :name="page[0]==='my-approvals'?'flowable':page[0]" :size="19"/><span>{{page[1]}}</span></button>
   </aside>
   <main class="main">
    <header v-if="token&&!mustChange" class="bar"><div class="breadcrumb">工作台 <span>/</span> <strong>{{title}}</strong></div>
@@ -874,6 +880,26 @@ async function updatePassword(){
          <a-popconfirm v-if="record.status!=='DISABLED'" title="确认停用数据源？" ok-text="停用" cancel-text="取消" @confirm="disableDatasource(record)">
           <a-button size="small" type="link" danger>停用</a-button>
          </a-popconfirm>
+        </template>
+       </template>
+      </a-table>
+     </section>
+
+     <section v-else-if="selected==='my-approvals'" class="panel flowable-panel">
+      <div class="panel-heading">
+       <div><h3>我的待审批</h3><p style="margin:8px 0 0;color:var(--text-secondary)">仅显示当前节点由本人所属角色处理的工单。审核不会直接执行 SQL。</p></div>
+       <a-button size="small" @click="loadMyInbox()">刷新</a-button>
+      </div>
+      <a-table row-key="approvalId" size="small" :data-source="myApprovalRows"
+       :pagination="{pageSize:10}" :scroll="{x:760}"
+       :columns="[{title:'工单编号',dataIndex:'approvalId'},{title:'审批节点',dataIndex:'stage'},
+        {title:'所需角色',dataIndex:'requiredRole'},{title:'风险等级',dataIndex:'risk'},
+        {title:'到期时间',dataIndex:'expiresAt'},{title:'操作',key:'actions'}]">
+       <template #bodyCell="{column,record}">
+        <span v-if="column.dataIndex==='expiresAt'">{{displayTime(record.expiresAt)}}</span>
+        <template v-else-if="column.key==='actions'">
+         <a-button size="small" type="link" @click="approving={id:record.approvalId,version:Number(record.expectedVersion)};approvalDialog=true">审核通过</a-button>
+         <a-button size="small" type="link" danger @click="rejectingApproval={id:record.approvalId,version:Number(record.expectedVersion)};rejectionDialog=true">拒绝</a-button>
         </template>
        </template>
       </a-table>
