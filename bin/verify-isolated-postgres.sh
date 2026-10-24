@@ -78,7 +78,7 @@ if [[ "${DG_RUN_FLOWABLE_OUTBOX_E2E:-false}" == "true" ]]; then
    -v "$ROOT:/workspace" -v "$CACHE:/root/.m2" -w /workspace \
    maven:3.9.11-eclipse-temurin-21 \
    mvn -B -o -ntp -pl dataguard-server -am \
-     -Dtest=AuditIntegrityIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false test
+     -Dtest=AuditIntegrityIntegrationTest,DeniedSqlAlertIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false test
  docker run --rm --network "container:$NAME" \
    -e DG_OUTBOX_E2E_URL=jdbc:postgresql://127.0.0.1:5432/dataguard \
    -v "$ROOT:/workspace" -v "$CACHE:/root/.m2" -w /workspace \
@@ -87,6 +87,7 @@ if [[ "${DG_RUN_FLOWABLE_OUTBOX_E2E:-false}" == "true" ]]; then
      -Dtest=ApprovalRecoveryIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false test
  echo "PASSED: approval timeout, eight retry attempts and high-severity dead-letter alert"
  echo "PASSED: SQL audit chain rejects tampered evidence and cross-tenant access"
+ echo "PASSED: denied SQL alert deduplication, tenant isolation and acknowledge/reopen"
  echo "PASSED: platform approval outbox to two-stage Flowable integration"
 fi
 if [[ "${DG_RUN_READ_TLS_E2E:-false}" == "true" ]]; then
