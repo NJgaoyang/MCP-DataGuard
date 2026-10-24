@@ -11,6 +11,8 @@ on:
       - 'bin/verify-real-postgres-commit-disconnect.sh'
       - 'bin/export-encrypted-backup-s3.sh'
       - 'bin/verify-offsite-export-policy.sh'
+      - 'bin/verify-signed-production-release.sh'
+      - 'bin/verify-signed-release-policy.sh'
       - '.github/workflows/production-hardening.yml'
   workflow_dispatch:
 
@@ -103,3 +105,13 @@ jobs:
         run: |
           set -euo pipefail
           bash bin/verify-offsite-export-policy.sh
+
+  signed-release-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify 3 independent cryptographic production approvals
+        run: |
+          set -euo pipefail
+          bash bin/verify-signed-release-policy.sh
