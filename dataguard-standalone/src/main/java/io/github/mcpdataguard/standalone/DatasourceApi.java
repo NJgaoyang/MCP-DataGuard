@@ -20,7 +20,8 @@ public class DatasourceApi {
  private final DatasourceSecrets secrets;
  public DatasourceApi(JdbcTemplate jdbc,AuditService audit,DatasourceSecrets secrets){this.jdbc=jdbc;this.audit=audit;this.secrets=secrets;}
  @GetMapping("/sources")
- public List<Map<String,Object>> sources(){
+ public List<Map<String,Object>> sources(Authentication auth){
+  Guard.requireAdmin(auth);
   return jdbc.queryForList("SELECT s.id,s.code,s.display_name AS displayName,s.host,s.port,s.database_name AS databaseName,s.db_type AS dbType,s.enabled,(SELECT COUNT(*) FROM read_table_allowlist w WHERE w.source_id=s.id AND w.enabled=1) allowedTables FROM data_sources s ORDER BY s.code");
  }
  public record NewSource(String code,String displayName,String host,int port,String databaseName,String readUsername,String passwordEnv,String password,String dbType){
