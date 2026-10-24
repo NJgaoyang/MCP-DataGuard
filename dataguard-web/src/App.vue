@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {ref,computed,reactive} from 'vue';
+import {ref,computed,reactive,onMounted,onUnmounted} from 'vue';
 import {message} from 'ant-design-vue';
 import UiIcon from './components/UiIcon.vue';
 const pages=[
@@ -140,6 +140,18 @@ async function loadSecurityAlerts(){
  try{const params=new URLSearchParams({status:securityAlertFilter.status,severity:securityAlertFilter.severity,rule:securityAlertFilter.rule,limit:'100'});securityAlerts.value=await getData<typeof securityAlerts.value>('/api/v1/security-alerts?'+params.toString());}
  catch(e){error.value='查询告警失败：'+(e as Error).message;}
 }
+// Poll only when the authenticated audit workspace is visible.
+let liveRefreshTimer:ReturnType<typeof setInterval>|undefined;
+onMounted(()=>{
+ liveRefreshTimer=setInterval(()=>{
+  if(token.value&&!mustChange.value&&selected.value==='audit'&&
+    document.visibilityState==='visible'){
+   void loadLiveSummary();
+   void loadSecurityAlerts();
+  }
+ },30000);
+});
+onUnmounted(()=>{if(liveRefreshTimer!==undefined)clearInterval(liveRefreshTimer);});
 async function acknowledgeAlert(id:string){
  saving.value=true;error.value='';
  try{
@@ -164,6 +176,17 @@ async function cancelPendingApproval(row:{id:string;version:number}){
    'POST',{reason,expectedVersion:Number(row.version)});
   message.success('申请已取消，执行保持禁止');await loadOperations();
  }catch(e){error.value=(e as Error).message;}finally{saving.value=false;}
+}
+const approvalHistoryVisible=ref(false);
+const approvalHistoryId=ref('');
+const approvalHistoryRows=ref<{action:string;comment:string;reviewerId:string;actedAt:string}[]>([]);
+async function showApprovalHistory(id:string){
+ approvalHistoryId.value=id;approvalHistoryRows.value=[];error.value='';
+ try{
+  approvalHistoryRows.value=await getData<typeof approvalHistoryRows.value>(
+    '/api/v1/approvals/'+encodeURIComponent(id)+'/actions');
+  approvalHistoryVisible.value=true;
+ }catch(e){error.value='读取审批历史失败：'+(e as Error).message;}
 }
 const approvalDialog=ref(false);
 const approving=ref({id:'',version:0});
@@ -878,10 +901,13 @@ async function updatePassword(){
        :columns="[{title:'审批编号',dataIndex:'id'},{title:'审批状态',dataIndex:'approvalStatus'},
         {title:'执行状态',dataIndex:'executionStatus'},{title:'到期时间',dataIndex:'expiresAt'},{title:'操作',key:'actions'}]">
        <template #bodyCell="{column,record}">
-        <template v-if="column.key==='actions' && record.approvalStatus==='PENDING' && record.executionStatus==='NOT_SCHEDULED'">
+        <template v-if="column.key==='actions'">
+         <a-button type="link" size="small" @click="showApprovalHistory(String(record.id))">审批历史</a-button>
+         <template v-if="record.approvalStatus==='PENDING' && record.executionStatus==='NOT_SCHEDULED'">
          <a-button type="link" size="small" @click="approving={id:String(record.id),version:Number(record.version)};approvalDialog=true">审核通过</a-button>
          <a-button danger type="link" size="small" @click="rejectingApproval={id:String(record.id),version:Number(record.version)};rejectionDialog=true">拒绝</a-button>
          <a-popconfirm title="确认取消此待审批申请？操作会留存审计记录且无法恢复。" ok-text="确认取消" cancel-text="返回" @confirm="cancelPendingApproval(record)"><a-button type="link" size="small">取消申请</a-button></a-popconfirm>
+         </template>
         </template>
        </template>
       </a-table>
@@ -1179,6 +1205,17 @@ async function updatePassword(){
     <a-form-item label="策略名称"><a-input v-model:value="policyForm.name" placeholder="报表访问限制"/></a-form-item>
     
    </a-form>
+  </a-modal>
+  <a-modal v-model:open="approvalHistoryVisible" title="审批操作历史" :footer="null" width="760px">
+   <p class="muted-cell" style="margin-bottom:12px">工单编号：{{approvalHistoryId}}</p>
+   <a-table row-key="actedAt" size="small" :pagination="{pageSize:8}" :scroll="{x:600}" :data-source="approvalHistoryRows"
+    :columns="[{title:'操作',dataIndex:'action'},{title:'审批人',dataIndex:'reviewerId'},{title:'意见',dataIndex:'comment'},{title:'时间',dataIndex:'actedAt'}]">
+    <template #bodyCell="{column,record}">
+     <span v-if="column.dataIndex==='actedAt'">{{displayTime(record.actedAt)}}</span>
+     <span v-else-if="column.dataIndex==='reviewerId'" :title="record.reviewerId">{{shortenedIdentifier(record.reviewerId)}}</span>
+     <span v-else-if="column.dataIndex==='action'">{{localizedStatus(record.action)}}</span>
+    </template>
+   </a-table>
   </a-modal>
   <a-modal cancel-text="返回" v-model:open="userDialog" title="创建内置用户" ok-text="保存"
    :confirm-loading="saving" @ok="saveUser">
