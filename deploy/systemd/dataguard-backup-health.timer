@@ -1,0 +1,10 @@
+[Unit]
+Description=DataGuard local encrypted backup health inspection
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+Persistent=true
+Unit=dataguard-backup-health.service
+
+[Install]
+WantedBy=timers.target
