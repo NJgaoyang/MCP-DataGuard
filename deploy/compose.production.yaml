@@ -10,7 +10,7 @@ services:
     read_only: true
     user: "10001:10001"
     entrypoint: ["/bin/sh","/opt/dataguard/launch-with-secrets.sh","gateway"]
-    secrets: [platform_password]
+    secrets: [platform_password,postgres_ca]
     volumes:
       - ./launch-with-secrets.sh:/opt/dataguard/launch-with-secrets.sh:ro
     environment:
@@ -44,7 +44,7 @@ services:
     read_only: true
     user: "10001:10001"
     entrypoint: ["/bin/sh","/opt/dataguard/launch-with-secrets.sh","workflow"]
-    secrets: [platform_password,flowable_password]
+    secrets: [platform_password,flowable_password,postgres_ca]
     volumes:
       - ./launch-with-secrets.sh:/opt/dataguard/launch-with-secrets.sh:ro
     environment:
@@ -116,6 +116,8 @@ volumes:
   dg_production_caddy_config: {}
 secrets:
   platform_password:
-    file: ${DG_PROD_PLATFORM_PASSWORD_FILE:?absolute_0400_or_0440_secret_file_required}
+    file: ${DG_PROD_PLATFORM_PASSWORD_FILE:?absolute_root_group_10001_secret_file_required}
   flowable_password:
-    file: ${DG_PROD_FLOWABLE_PASSWORD_FILE:?absolute_0400_or_0440_secret_file_required}
+    file: ${DG_PROD_FLOWABLE_PASSWORD_FILE:?absolute_root_group_10001_secret_file_required}
+  postgres_ca:
+    file: ${DG_PROD_POSTGRES_CA_FILE:?absolute_ca_file_required}

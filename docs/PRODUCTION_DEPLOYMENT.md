@@ -4,13 +4,13 @@ Production is **NO-GO** while real proof of role-specific approvals, certified t
 
 ## Deployment architecture
 
-`deploy/compose.production.yaml` is a stand-alone production Compose file with no local PostgreSQL, no build steps and no published JVM or nginx host ports. Approved independent PostgreSQL platform and Flowable schemas must exist and be TLS `verify-full` with trusted CA inside the JVM. Images MUST use full `registry/...@sha256:...` immutable references for gateway, workflow, web and Caddy. Signed release manifest binds the first three images.
+`deploy/compose.production.yaml` is a stand-alone production Compose file with no local PostgreSQL, no build steps and no published JVM or nginx host ports. Approved independent PostgreSQL platform and Flowable schemas must exist and be TLS `verify-full` with an approved PEM CA mounted at `/run/secrets/postgres_ca` and explicit JDBC `sslrootcert=/run/secrets/postgres_ca`; verify-full must validate the hostname. Images MUST use full `registry/...@sha256:...` immutable references for gateway, workflow, web and Caddy. Signed release manifest binds the first three images.
 
 Do not combine it with `compose.dev.yaml`. Caddyfile.production requires a DNS name and uses normal ACME; confirm real certificate and expiry from an external network, do not assume that successful Compose parsing proves HTTPS.
 
 ## Host preparation (authorized operator only)
 
-Provide `DG_GATEWAY_IMAGE`, `DG_WORKFLOW_IMAGE`, `DG_WEB_IMAGE`, `DG_CADDY_IMAGE`, `DG_PUBLIC_HOST`, `DG_PLATFORM_JDBC_URL`, `DG_FLOWABLE_JDBC_URL`, `DG_PLATFORM_USER`, `DG_FLOWABLE_USER`, and full absolute paths `DG_PROD_PLATFORM_PASSWORD_FILE`, `DG_PROD_FLOWABLE_PASSWORD_FILE` to separately managed secrets (owner root, mode 0600, no symlinks). Never commit, print or stage secrets. Rootless JVM service reads mounted file secrets at process launch and passes credentials in its own JVM environment; host root and process readers therefore still require least privilege. Do not mistake Docker file secrets for a full Vault/KMS rotation design.
+Provide `DG_GATEWAY_IMAGE`, `DG_WORKFLOW_IMAGE`, `DG_WEB_IMAGE`, `DG_CADDY_IMAGE`, `DG_PUBLIC_HOST`, `DG_PLATFORM_JDBC_URL`, `DG_FLOWABLE_JDBC_URL`, `DG_PLATFORM_USER`, `DG_FLOWABLE_USER`, and full absolute paths `DG_PROD_PLATFORM_PASSWORD_FILE`, `DG_PROD_FLOWABLE_PASSWORD_FILE`, `DG_PROD_POSTGRES_CA_FILE` to separately managed secrets (owner root, group 10001, mode 0640 (required for non-root JVM in rootful Docker), no symlinks). Never commit, print or stage secrets. Rootless JVM service reads mounted file secrets at process launch and passes credentials in its own JVM environment; host root and process readers therefore still require least privilege. Do not mistake Docker file secrets for a full Vault/KMS rotation design.
 
 The platform DB must be fully migrated with audited backup/rollback before launching; Flowable `FLOWABLE_SCHEMA_UPDATE=false` to block automatic DDL. Runtime feature flags are false by default. Establish named production incident receiver and trusted approver keys. The Caddy state volumes are the only Docker volumes managed by this Compose.
 
