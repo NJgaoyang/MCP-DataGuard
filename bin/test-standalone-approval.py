@@ -122,6 +122,12 @@ print("MYSQL_INTERNAL_USER_FLOWABLE_ALLOWLIST_AUDIT_E2E_PASS")
 agent=admin.check("/api/agents","POST",{"label":"ci-agent","validDays":1})
 token=agent["token"]
 assert token.startswith("dg_") and len(token)>40
+# V2: owner's Flowable approval alone is insufficient. Token-scoped grants
+# must be separately issued by an internal admin before MCP discovery.
+grant=admin.check("/api/agent-grants","POST",{
+    "tokenId":agent["id"],"sourceId":source_id,
+    "tableName":"ci_allowlisted_table","enabled":True})
+assert grant["updated"] is True
 def mcp_request(bearer,method,params=None):
     request={"jsonrpc":"2.0","id":7,"method":method}
     if params is not None:request["params"]=params
