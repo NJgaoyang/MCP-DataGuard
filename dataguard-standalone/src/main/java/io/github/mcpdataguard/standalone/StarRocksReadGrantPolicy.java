@@ -42,6 +42,10 @@ final class StarRocksReadGrantPolicy {
   }
   return hasSelect;
  }
+ static boolean onlyPublicRole(String activeRoles){
+  return activeRoles!=null &&
+    "PUBLIC".equals(activeRoles.replaceAll("[`'\\\"\\s]","").toUpperCase(Locale.ROOT));
+ }
  static void requireDirectTableSelect(Connection connection,String database,String table) throws SQLException {
   List<String> grants=new ArrayList<>();
   try(var s=connection.createStatement();var rs=s.executeQuery("SHOW GRANTS FOR CURRENT_USER()")){
@@ -53,12 +57,13 @@ final class StarRocksReadGrantPolicy {
     grants.add(grant);
    }
   }
-  // StarRocks activates the built-in public role for every user. It can be
-  // modified by DBAs: do not trust it until its grants have also been checked.
-  if(grants.stream().anyMatch(g->g!=null && g.toUpperCase(Locale.ROOT).contains("PUBLIC"))){
-   try(var s=connection.createStatement();var rs=s.executeQuery("SHOW GRANTS FOR ROLE public")){
-    if(rs.next())throw new SQLException("StarRocks public role carries privileges");
-   }
+  // Only the current user's privileges are readable by a low-privilege
+  // account; inspecting SHOW GRANTS FOR ROLE public requires user_admin.
+  // Ensure no extra role is ACTIVE; DBA must independently certify that the
+  // mutable built-in public role has no grants (see V2_STARROCKS_DEPLOY.md).
+  try(var s=connection.createStatement();var rs=s.executeQuery("SELECT CURRENT_ROLE()")){
+   if(!rs.next()||!onlyPublicRole(rs.getString(1))||rs.next())
+    throw new SQLException("StarRocks session has unapproved active roles");
   }
   if(!onlyDirectTableSelect(grants,database,table))
    throw new SQLException("StarRocks account must have direct table SELECT only");
