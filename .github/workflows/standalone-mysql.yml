@@ -27,6 +27,23 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: dataguard-web/package-lock.json
+      - name: Build Vue + Ant Design standalone UI into the single JAR
+        env:
+          VITE_DATAGUARD_STANDALONE: 'true'
+        run: |
+          set -euo pipefail
+          cd dataguard-web
+          npm ci
+          npm run build
+          test -s dist/index.html
+          cd ..
+          cp dataguard-web/dist/index.html dataguard-standalone/src/main/resources/static/index.html
+          cp -r dataguard-web/dist/assets dataguard-standalone/src/main/resources/static/
       - name: Compile and test standalone (PostgreSQL modules excluded)
         run: mvn -B -ntp -pl dataguard-standalone -am clean verify
       - name: Run monolith directly as one JVM against isolated MySQL
