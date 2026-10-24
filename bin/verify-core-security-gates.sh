@@ -76,4 +76,4 @@ fi
 echo "FULL_ISOLATED_CORE_SECURITY_ACCEPTANCE_PASS"
 echo "Live read, write and workflow flags have NOT been enabled."
 echo "Additional gates required before production: external MCP client, browser E2E,"
-echo "independent signed release, offsite restore, load/penetration test and security review."
+echo "independent signed release, local GPG restore, load/penetration test and security review."
