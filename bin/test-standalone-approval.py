@@ -117,3 +117,32 @@ for wanted in ("USER_CREATED","TABLE_ALLOWED","APPROVAL_REQUESTED",
                "APPROVAL_APPROVED","PASSWORD_CHANGED"):
     assert wanted in actions,(wanted,actions)
 print("MYSQL_INTERNAL_USER_FLOWABLE_ALLOWLIST_AUDIT_E2E_PASS")
+
+# Real bearer MCP smoke: bypass browser cookies, CSRF applies only to browser.
+agent=admin.check("/api/agents","POST",{"label":"ci-agent","validDays":1})
+token=agent["token"]
+assert token.startswith("dg_") and len(token)>40
+def mcp_request(bearer,method,params=None):
+    request={"jsonrpc":"2.0","id":7,"method":method}
+    if params is not None:request["params"]=params
+    req=urllib.request.Request(URL+"/mcp",data=json.dumps(request).encode(),
+        headers={"Authorization":"Bearer "+bearer,"Content-Type":"application/json",
+                 "Accept":"application/json"},method="POST")
+    try:
+        with urllib.request.urlopen(req,timeout=10) as response:
+            return response.status,json.loads(response.read())
+    except urllib.error.HTTPError as error:
+        return error.code,json.loads(error.read())
+unauth,body=mcp_request("wrong","tools/list")
+assert unauth==401,(unauth,body)
+ok,initialized=mcp_request(token,"initialize",{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"CI","version":"1.0"}})
+assert ok==200 and "result" in initialized,(ok,initialized)
+ok,listed_tools=mcp_request(token,"tools/list")
+assert ok==200 and {x["name"] for x in listed_tools["result"]["tools"]}>=set(["list_datasources","get_schema","execute_readonly"]),(ok,listed_tools)
+ok,denied=mcp_request(token,"tools/call",{"name":"execute_readonly","arguments":{"sourceId":source_id,"tableName":"never_allowlisted","limit":1}})
+assert ok==200 and "error" in denied,(ok,denied)
+admin.check("/api/agents/"+agent["id"]+"/revoke","POST",{})
+revoked,_=mcp_request(token,"tools/list")
+assert revoked==401,revoked
+print("MYSQL_MCP_BEARER_AUTH_REVOCATION_DENIAL_E2E_PASS")
+
