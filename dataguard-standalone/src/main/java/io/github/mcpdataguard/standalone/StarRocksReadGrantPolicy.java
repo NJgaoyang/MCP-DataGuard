@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
 
 /**
  * Intentionally conservative StarRocks >=3 grant verification. A direct,
- * table-specific SELECT is required. Role inheritance, wildcard privileges,
+ * table-specific SELECT is required. Non-public role inheritance, wildcard privileges,
  * write/system privileges and unrecognized grants fail closed. DBAs must
  * provision an isolated StarRocks principal for each authorized target scope.
  * This does not replace an independent least-privilege account audit.
@@ -19,7 +19,7 @@ final class StarRocksReadGrantPolicy {
  static boolean onlyDirectTableSelect(List<String> grants,String database,String table) {
   if(grants==null||grants.isEmpty())return false;
   String object=Pattern.quote((Guard.identifier(database)+"."+Guard.identifier(table)).toUpperCase(Locale.ROOT));
-  Pattern select=Pattern.compile("^GRANT SELECT ON (?:TABLE|VIEW|MATERIALIZED VIEW) "+object+" TO (?:USER )?[^;]+;?$");
+  Pattern select=Pattern.compile("^GRANT SELECT ON TABLE "+object+" TO (?:USER )?[^;]+;?$");
   Pattern usage=Pattern.compile("^GRANT USAGE ON CATALOG DEFAULT_CATALOG TO (?:USER )?[^;]+;?$");
   boolean hasSelect=false;
   for(String raw:grants){
@@ -29,7 +29,9 @@ final class StarRocksReadGrantPolicy {
    // inheritance and any grant options rather than trying to expand a graph.
    if(normalized.contains(" WITH GRANT OPTION"))return false;
    if(select.matcher(normalized).matches())hasSelect=true;
-   else if(!usage.matcher(normalized).matches())return false;
+   else if(!usage.matcher(normalized).matches()
+     && !normalized.replace("'PUBLIC'","PUBLIC").matches("^GRANT PUBLIC TO [^;]+;?$"))
+     return false;
   }
   return hasSelect;
  }
@@ -42,6 +44,13 @@ final class StarRocksReadGrantPolicy {
     String grant=rs.getString(cols);
     if(grant==null)throw new SQLException("StarRocks role grants not supported");
     grants.add(grant);
+   }
+  }
+  // StarRocks activates the built-in public role for every user. It can be
+  // modified by DBAs: do not trust it until its grants have also been checked.
+  if(grants.stream().anyMatch(g->g!=null && g.toUpperCase(Locale.ROOT).contains("PUBLIC"))){
+   try(var s=connection.createStatement();var rs=s.executeQuery("SHOW GRANTS FOR ROLE public")){
+    if(rs.next())throw new SQLException("StarRocks public role carries privileges");
    }
   }
   if(!onlyDirectTableSelect(grants,database,table))
