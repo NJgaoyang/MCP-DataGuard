@@ -131,6 +131,113 @@ class ApprovedWritePipelineIntegrationTest {
   return f.queue().enqueue(f.org(),approval,
     (String)row.get("sql_fingerprint"),(String)row.get("canonical_payload_hmac"));
  }
+ /**
+  * An ACTUAL Java CertifiedWriteWorker runs in a separate JVM. Its test-only
+  * JdbcExecutor subclass pauses after super.execute has committed to the real
+  * PostgreSQL target, but before the platform can acknowledge success. Parent
+  * SIGKILLs JVM, expires its durable IN_FLIGHT lease, then attempts a restart.
+  * The transaction remains committed exactly once; task/attempt remain UNKNOWN.
+  */
+ @Test void javaWorkerSigkillAfterTargetCommitIsNeverReplayed() throws Exception {
+  Fixture f=create();
+  int row=100000+java.util.concurrent.ThreadLocalRandom.current().nextInt(500000);
+  f.db().update("INSERT INTO public.write_probe(id,amount) VALUES(?,100)",row);
+  UUID approved=approval(f,row);
+  var queued=release(f,approved);
+  assertTrue(queued.queued());
+  String javaBinary=java.nio.file.Path.of(System.getProperty("java.home"),"bin","java").toString();
+  String testClasspath=System.getProperty("java.class.path");
+  var command=new ProcessBuilder(javaBinary,"-cp",testClasspath,
+       CrashAfterRemoteCommit.class.getName());
+  command.redirectErrorStream(true);
+  var log=java.nio.file.Files.createTempFile("dg-isolated-real-worker-",".log");
+  command.redirectOutput(log.toFile());
+  Process workerProcess=null;
+  try {
+   workerProcess=command.start();
+   boolean committed=false;
+   for(int i=0;i<120;i++){
+    int amount=f.db().queryForObject(
+      "SELECT amount FROM public.write_probe WHERE id=?",Integer.class,row);
+    if(amount==625){committed=true;break;}
+    if(!workerProcess.isAlive())break;
+    Thread.sleep(100);
+   }
+   assertTrue(committed,"Java Worker must commit to PostgreSQL before SIGKILL; trace "+
+      java.nio.file.Files.readString(log).replaceAll("[\\r\\n]"," ").substring(0,
+       Math.min(200,java.nio.file.Files.readString(log).length())));
+   assertTrue(workerProcess.isAlive(),"Worker must still await platform ACK");
+   assertEquals("EXECUTING",f.db().queryForObject(
+      "SELECT task_state FROM dg_execution_task WHERE id=?",
+      String.class,queued.taskId()));
+   workerProcess.destroyForcibly();
+   assertTrue(workerProcess.waitFor(7,java.util.concurrent.TimeUnit.SECONDS),
+     "Killed Java Worker must terminate");
+   assertNotEquals(0,workerProcess.exitValue(),"Process must die without ACK");
+
+   f.db().update("""
+     UPDATE dg_execution_task SET lease_until=now()-interval '1 minute'
+     WHERE org_id=? AND id=? AND task_state='EXECUTING'
+     """,f.org(),queued.taskId());
+   new ExecutionRecoveryWatchdog(f.db(),true).quarantineExpiredLeases();
+   assertEquals("UNKNOWN",f.db().queryForObject(
+      "SELECT task_state FROM dg_execution_task WHERE id=?",
+      String.class,queued.taskId()));
+   assertEquals("UNKNOWN",f.db().queryForObject(
+      "SELECT execution_status FROM dg_sql_approval WHERE id=?",
+      String.class,approved));
+   assertEquals(1,f.db().queryForObject(
+      "SELECT attempt_no FROM dg_execution_task WHERE id=?",
+      Integer.class,queued.taskId()));
+   assertEquals("UNKNOWN",f.db().queryForObject(
+      "SELECT phase FROM dg_execution_attempt WHERE task_id=?",
+      String.class,queued.taskId()));
+   assertEquals(1L,f.db().queryForObject("""
+       SELECT count(*) FROM dg_alert_event e JOIN dg_alert_rule r
+         ON r.org_id=e.org_id AND r.id=e.rule_id
+       WHERE e.org_id=? AND r.code='WRITE_EXECUTION_UNKNOWN' AND e.event_state='OPEN'
+     """,Long.class,f.org()));
+   // Real Java Worker restart with valid credentials must NOT re-claim UNKNOWN.
+   f.worker().runOne();
+   assertEquals(1L,f.db().queryForObject(
+      "SELECT count(*) FROM dg_execution_attempt WHERE task_id=?",
+      Long.class,queued.taskId()));
+   assertEquals(625,f.db().queryForObject(
+      "SELECT amount FROM public.write_probe WHERE id=?",Integer.class,row));
+   assertEquals(0L,f.db().queryForObject("""
+     SELECT count(*) FROM dg_execution_task
+     WHERE org_id=? AND id=? AND task_state IN ('QUEUED','EXECUTING')
+     """,Long.class,f.org(),queued.taskId()));
+  } finally {
+   if(workerProcess!=null && workerProcess.isAlive())workerProcess.destroyForcibly();
+   java.nio.file.Files.deleteIfExists(log);
+  }
+ }
+
+ /** Executed ONLY as a separate, disposable Maven test subprocess. */
+ public static final class CrashAfterRemoteCommit {
+  public static void main(String[] ignored) throws Exception {
+   var url=System.getenv("DG_OUTBOX_E2E_URL");
+   if(url==null || !url.startsWith("jdbc:postgresql://127.0.0.1:5432/dataguard")
+       || !"true".equals(System.getenv("DG_WRITE_JDBC_E2E")))
+    throw new SecurityException("Isolated PostgreSQL acceptance environment required");
+   var source=new DriverManagerDataSource(url+"?currentSchema=platform","postgres","test-only");
+   var jdbc=new JdbcTemplate(source);
+   var tx=new TransactionTemplate(new DataSourceTransactionManager(source));
+   var crypto=new ApprovalPayloadCrypto(System.getenv("DG_APPROVAL_MASTER_KEY_BASE64"));
+   var signer=new ExecutionTicketSigner(System.getenv("DG_EXECUTION_SIGNING_KEY_BASE64"));
+   var executor=new CertifiedWriteJdbcExecutor("localhost"){
+    @Override public Result execute(Target target,String sql,List<Object> values)throws Exception{
+     Result committed=super.execute(target,sql,values);
+     System.out.println("SYNTHETIC_TARGET_COMMIT_DURABLE");
+     System.out.flush();
+     Thread.sleep(60_000); // Parent must SIGKILL before platform ACK.
+     return committed;
+    }
+   };
+   new CertifiedWriteWorker(jdbc,tx,signer,crypto,executor,true).runOne();
+  }
+ }
  @Test void singleUseQueueThenPhysicalCommitAndNoSecondWrite(){
   Fixture f=create();
   UUID approved=approval(f,1);
