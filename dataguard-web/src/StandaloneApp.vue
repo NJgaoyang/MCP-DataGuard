@@ -61,6 +61,7 @@ function logout(){
  const f=document.createElement('form');f.action='/auth/logout';f.method='post';
  const h=document.createElement('input');h.type='hidden';h.name='_csrf';h.value=csrf.value;f.append(h);document.body.append(f);f.submit();
 }
+function onMenuClick(event:{key:string|number}){void switchTab(String(event.key))}
 async function switchTab(name:string){if(me.value?.mustChangePassword)return;tab.value=name;await refresh()}
 onMounted(async()=>{
  try{
@@ -77,7 +78,7 @@ onMounted(async()=>{
  <aside class="side" v-if="!me?.mustChangePassword">
   <div class="brand"><span class="mark">D</span>DataGuard</div>
   <div class="sub">企业内部数据安全平台</div>
-  <a-menu v-model:selectedKeys="[tab]" mode="inline" class="nav" @click="e=>switchTab(String(e.key))">
+  <a-menu v-model:selectedKeys="[tab]" mode="inline" class="nav" @click="onMenuClick">
    <a-menu-item v-for="[id,name] in menu" :key="id">{{name}}</a-menu-item>
   </a-menu>
   <div class="side-note">MySQL · Flowable · MCP</div>
