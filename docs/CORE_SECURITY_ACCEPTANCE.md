@@ -84,3 +84,20 @@ DG_RUN_NATIVE_MCP_HTTP_E2E=true bash bin/verify-core-security-gates.sh
 ### 仍然禁止宣称完成的生产级项目
 
 必须由现场系统单独验收：MCP 真实只读 **ALLOW**（对指定 TLS PostgreSQL、完成脱敏和审计）；真实业务审批人的 Flowable 任务身份验证；受控写入远程 COMMIT 断链和故障注入；通知通道及不可篡改外部审计存证；生产规模的性能、安全、灾备演练。项目中已经存在的执行开关默认关闭，不得以隔离环境成功替代上线批准。
+
+## 6. 2026-10-24 追加：真实 MCP ALLOW、审批角色与模拟提交后失联
+
+- `bin/verify-mcp-authorized-read-http.sh`：仅用临时 PostgreSQL 17 与临时 Gateway，开启 **测试容器内** `DG_ENABLE_READ_EXECUTION=true`，同时强制 `DG_ENABLE_WRITE_EXECUTION=false`。以随机 Agent Token 调用真实 MCP Streamable HTTP `tools/call`，验证物理 TLS+只读 SELECT、两行完全脱敏、审计回执/P95、DML 拒绝、撤销列授权立即拒绝、撤销 Token 立即 401。
+- `ApprovalDecisionController`：已修复审批权限的两处漏洞。所有批准阶段（含旧两级流程）都要求对应当前审批角色；Agent 发起请求时，校验 Agent 归属用户不能审批自己的工单。安全角色需要配置为 `db-owner`（第一阶段）、`dba`（第二阶段），或在 `safeWorkflowV2` 中配置具体候选组。此变更遵循默认拒绝。
+- `ApprovalReviewerRoleIntegrationTest`：实际 PostgreSQL 校验独立审批人、阶段错配拒绝、Agent 归属用户自批拒绝、事件留存以及审批通过并不直接写 SQL。
+- `ExecutionRecoveryWatchdogIntegrationTest`：在隔离 PG 中物理提交合成目标表的事务，再模拟 Worker **已提交但未写确认回执**，验证 `UNKNOWN`、严重告警、无自动重试、数据库结果不被再次修改。**这是提交后确认丢失的故障模型，不是 TCP/网络分区实测。**
+- 真实 PostgreSQL 集成套件现为 **20 个用例，0 失败、0 错误、0 跳过**。两个真实 MCP HTTP 脚本亦成功，完整门禁返回 `FULL_ISOLATED_CORE_SECURITY_ACCEPTANCE_PASS`。
+
+### 仍需现场完成的认证项目
+
+1. 在指定预生产环境配置真实审查用户的 `db-owner` / `dba` 角色及权限，使用真实登录会话和 Flowable 异步消费者完成端到端批准/拒绝/超时/取消，并核实任务归属；本轮隔离测试使用合成身份和平台调用。
+2. 对远程 COMMIT 实际注入 TCP 断连、网络分区和进程崩溃，证明所有故障时序下 `UNKNOWN` 不被重复执行。
+3. 对拟开放的真实数据库/版本逐个认证 TLS、物理只读、SQL 范围、数据脱敏、凭据轮换与回滚，签字批准后才能在对应环境启用读取。
+4. 安全加固、远端不可篡改审计、备份加密、压测及正式发布审批继续保持阻断状态。
+
+> 开发环境运行开关仍保持关闭。测试环境内的一次性 READ=true 绝不能推广为全局生产配置。
