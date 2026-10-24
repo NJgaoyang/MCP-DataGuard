@@ -43,8 +43,8 @@ public class AgentMcpApi {
       if(!(args instanceof Map))throw new IllegalArgumentException("Invalid arguments");
       Map<?,?> a=(Map<?,?>)args;
       switch(name){
-       case "list_datasources" -> result=Map.of("content",List.of(Map.of("type","text","text",reader.mcpSources(user).toString())));
-       case "get_schema" -> result=Map.of("content",List.of(Map.of("type","text","text",reader.mcpSchema(user,String.valueOf(a.get("sourceId"))).toString())));
+       case "list_datasources" -> result=Map.of("content",List.of(Map.of("type","text","text",new tools.jackson.databind.json.JsonMapper().writeValueAsString(reader.mcpSources(user)))));
+       case "get_schema" -> result=Map.of("content",List.of(Map.of("type","text","text",new tools.jackson.databind.json.JsonMapper().writeValueAsString(reader.mcpSchema(user,String.valueOf(a.get("sourceId")))))));
        case "execute_readonly" -> {
         if(!a.keySet().stream().allMatch(k->List.of("sourceId","tableName","limit").contains(k)))
          throw new IllegalArgumentException("Only fixed bounded table reads supported");
