@@ -94,7 +94,7 @@ if [[ "${DG_RUN_FLOWABLE_OUTBOX_E2E:-false}" == "true" ]]; then
    -v "$ROOT:/workspace" -v "$CACHE:/root/.m2" -w /workspace \
    maven:3.9.11-eclipse-temurin-21 \
    mvn -B -o -ntp -pl dataguard-server -am \
-     -Dtest=AuditIntegrityIntegrationTest,DeniedSqlAlertIntegrationTest,ExecutionRecoveryWatchdogIntegrationTest,ApprovalReviewerRoleIntegrationTest,NativeMultiTenantLoginIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false test
+     -Dtest=AuditIntegrityIntegrationTest,DeniedSqlAlertIntegrationTest,ExecutionRecoveryWatchdogIntegrationTest,ApprovalReviewerRoleIntegrationTest,NativeMultiTenantLoginIntegrationTest,NativeLoginFlowableOutboxIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false test
  docker run --rm --network "container:$NAME" \
    -e DG_OUTBOX_E2E_URL=jdbc:postgresql://127.0.0.1:5432/dataguard \
    -v "$ROOT:/workspace" -v "$CACHE:/root/.m2" -w /workspace \
