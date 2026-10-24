@@ -1,0 +1,42 @@
+name: Browser acceptance
+on:
+  push:
+    branches: [dev20261022]
+    paths:
+      - 'dataguard-web/**'
+      - 'tests/browser/**'
+      - '.github/workflows/browser-acceptance.yml'
+  workflow_dispatch:
+
+jobs:
+  chromium:
+    name: Real Chromium responsive smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: dataguard-web/package-lock.json
+      - name: Install and build frontend
+        run: |
+          npm --prefix dataguard-web ci --no-audit --no-fund
+          npm --prefix dataguard-web run build
+      - name: Install isolated browser test tools
+        run: npm --prefix tests/browser install --no-audit --no-fund
+      - name: Install headless Chromium
+        run: cd tests/browser && npx playwright install --with-deps chromium
+      - name: Run login and all-page responsive smoke
+        run: npm --prefix tests/browser test
+      - name: Upload failed browser traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dataguard-browser-traces
+          path: tests/browser/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
