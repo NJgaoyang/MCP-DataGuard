@@ -46,6 +46,25 @@ public class ReadApi {
   UUID id=UUID.fromString(source);
   return jdbc.queryForList("SELECT w.table_name AS tableName FROM read_table_allowlist w JOIN data_sources s ON s.id=w.source_id WHERE w.source_id=? AND w.enabled=1 AND s.enabled=1 AND EXISTS(SELECT 1 FROM approval_requests a JOIN app_users u ON u.id=a.requester_user_id WHERE a.source_id=w.source_id AND a.table_name=w.table_name AND a.status='APPROVED' AND a.expires_at>NOW(3) AND u.username=?) ORDER BY w.table_name LIMIT 100",id.toString(),username);
  }
+ /** Only explicitly permitted columns are discoverable by the Agent. Never inspect target metadata here. */
+ public List<Map<String,Object>> mcpColumns(String username,String source,String tableName){
+  String table=Guard.identifier(tableName);
+  String id=UUID.fromString(source).toString();
+  return jdbc.queryForList("""
+    SELECT c.column_name AS columnName
+    FROM read_column_allowlist c
+    JOIN read_table_allowlist w ON w.source_id=c.source_id
+      AND w.table_name=c.table_name AND w.enabled=1
+    JOIN data_sources s ON s.id=w.source_id AND s.enabled=1
+    WHERE c.source_id=? AND c.table_name=? AND c.enabled=1
+      AND EXISTS(SELECT 1 FROM approval_requests a
+        JOIN app_users u ON u.id=a.requester_user_id
+        WHERE a.source_id=c.source_id AND a.table_name=c.table_name
+          AND a.status='APPROVED' AND a.expires_at>NOW(3)
+          AND u.username=? AND u.enabled=1 AND u.must_change_password=0)
+    ORDER BY c.column_name LIMIT 100
+    """,id,table,username);
+ }
  @PostMapping
  public Map<String,Object> read(Authentication auth,@RequestBody ReadQuery input){
   long started=System.nanoTime();
