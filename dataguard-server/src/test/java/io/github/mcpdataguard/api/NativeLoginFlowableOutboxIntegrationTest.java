@@ -62,9 +62,9 @@ class NativeLoginFlowableOutboxIntegrationTest {
   // and then re-read/validated by NativeSessionFilter against PostgreSQL.
   Jwt ownerToken=authenticate(owner),one=authenticate(first),
       two=authenticate(second),wrong=authenticate(outsider);
-  assertEquals(1L,db.queryForObject("""
+  assertEquals(4L,db.queryForObject("""
     SELECT count(*) FROM dg_native_session WHERE org_id=? AND revoked_at IS NULL
-    """,Long.class,org)*1L/4L == 1L ? 1L : 0L);
+    """,Long.class,org));
 
   var engine=ProcessEngineConfiguration.createStandaloneInMemProcessEngineConfiguration()
     .setDatabaseSchemaUpdate(ProcessEngineConfiguration.DB_SCHEMA_UPDATE_TRUE)
