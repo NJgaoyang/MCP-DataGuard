@@ -16,7 +16,7 @@ export DG_WEB_IMAGE="example.invalid/dataguard/web@sha256:$(printf 'c%.0s' {1..6
 export DG_CADDY_IMAGE="example.invalid/caddy@sha256:$(printf 'd%.0s' {1..64})"
 export DG_PUBLIC_HOST="dataguard.ci.example.org"
 export DG_PLATFORM_JDBC_URL="jdbc:postgresql://pg-platform.ci.example.org:5432/dataguard?currentSchema=platform&sslmode=verify-full&sslrootcert=/run/secrets/postgres_ca"
-export DG_FLOWABLE_JDBC_URL="jdbc:postgresql://pg-flowable.ci.example.org:5432/dataguard?currentSchema=flowable&sslmode=verify-full"
+export DG_FLOWABLE_JDBC_URL="jdbc:postgresql://pg-flowable.ci.example.org:5432/dataguard?currentSchema=flowable&sslmode=verify-full&sslrootcert=/run/secrets/postgres_ca"
 export DG_PLATFORM_USER="dg_platform"
 export DG_FLOWABLE_USER="dg_flowable"
 export DG_PROD_PLATFORM_PASSWORD_FILE="$tmp/p"
