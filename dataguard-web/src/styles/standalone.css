@@ -85,3 +85,57 @@
 .dg-kpi-grid .dg-kpi:nth-child(5){border-top:3px solid #f06a78}
 @media(max-width:1100px){.dg-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.dg-kpi-grid{grid-template-columns:1fr}}
+
+/* UI refinement: let hierarchy, layout and controls communicate intent. */
+.dg-app{--dg-bg:#f5f8fe;--dg-line:#e7edf7;--dg-text:#20304f;--dg-secondary:#637796;--dg-muted:#8495ad;background:var(--dg-bg)}
+.dg-sidebar{background:#fff;box-shadow:none;border-right:1px solid var(--dg-line)}
+.dg-brand{padding:21px 18px 17px}
+.dg-brand strong{font-size:18px;letter-spacing:-.6px}
+.dg-brand small{font-size:11px}
+.dg-navigation{padding:6px 12px 14px}
+.dg-navigation>button{height:43px;border-radius:10px;margin:3px 0;padding:0 13px;gap:11px;font-weight:550}
+.dg-navigation>button.active,.dg-navigation>button.dg-nav-child.active{background:#eaf2ff;color:#266be6;box-shadow:none;font-weight:750}
+.dg-navigation>button.dg-nav-child{height:39px;padding-left:44px}
+.dg-navigation>button.dg-nav-group{margin-top:10px}
+.dg-nav-chevron{opacity:.55}
+.dg-navigation>button.active .dg-nav-chevron{color:#266be6}
+.dg-sidebar-foot{padding:14px 22px;font-size:11px}
+.dg-topbar{height:62px;border-bottom:1px solid var(--dg-line);box-shadow:none}
+.dg-main{padding-top:83px}
+.dg-page-head{min-height:34px;margin-bottom:14px}
+.dg-page-head h1{font-size:21px;font-weight:750}
+.dg-visual-welcome{padding:17px 21px;margin-bottom:13px;border:1px solid #e1eafa;border-radius:12px;background:linear-gradient(105deg,#edf4ff,#f9fbff)}
+.dg-visual-welcome h2{font-size:19px;margin:0}
+.dg-visual-welcome:after{font-size:92px;right:28px;top:-23px}
+.dg-visual-welcome .welcome-mark{font-weight:650}
+.dg-quick-actions{gap:10px;margin-bottom:13px}
+.dg-quick-actions button{padding:11px 15px;border-radius:11px;box-shadow:none;font-size:13px}
+.dg-quick-actions button:hover{background:#f3f8ff}
+.dg-toolbar{min-height:50px;margin-bottom:13px;border-radius:11px;box-shadow:none}
+.dg-toolbar-tab{min-height:50px}
+.dg-kpi-grid{gap:12px}
+.dg-kpi{padding:17px 19px;min-height:128px;border-radius:12px;box-shadow:0 2px 10px #244c7e07;border-top:1px solid var(--dg-line)!important}
+.dg-kpi-title{font-size:12px;font-weight:650}
+.dg-kpi-body{margin-top:13px}
+.dg-kpi-body>div>strong{font-size:28px}
+.dg-kpi small:empty{display:none}
+.dg-panel,.dg-summary>div,.dg-summary>article{border-radius:12px;box-shadow:0 2px 12px #244c7e08}
+.dg-chart-panel{padding:19px 21px}
+.dg-section-head{margin-bottom:15px}
+.dg-section-head h2{font-size:14px}
+.dg-overview-main,.dg-overview-aside{gap:13px}
+.dg-overview-grid{gap:13px}
+.dg-resource-row{padding:11px 0}
+.dg-app .ant-table-thead>tr>th{font-weight:650;padding-top:13px;padding-bottom:13px}
+.dg-app .ant-table-tbody>tr>td{padding-top:13px;padding-bottom:13px}
+.dg-panel-head{padding:18px 21px 13px}
+.dg-filters{padding:0 21px 14px}
+.dg-summary{gap:12px;margin-bottom:14px}
+.dg-summary>div,.dg-summary>article{padding:15px 19px}
+.dg-summary strong{font-size:25px}
+.dg-form-grid{gap:0 17px}
+.dg-field-note{margin-bottom:14px!important}
+.dg-app .ant-btn-primary,.ant-modal .ant-btn-primary{background:#2f75ff;box-shadow:none}
+.dg-app .ant-btn-primary:hover,.ant-modal .ant-btn-primary:hover{background:#2368ed}
+@media(max-width:740px){.dg-main{padding:76px 13px 0}.dg-visual-welcome{padding:16px}.dg-quick-actions{grid-template-columns:1fr}.dg-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dg-kpi{padding:15px;min-height:115px}.dg-kpi-body>div>strong{font-size:24px}}
+@media(max-width:420px){.dg-kpi-grid{grid-template-columns:1fr 1fr}}
