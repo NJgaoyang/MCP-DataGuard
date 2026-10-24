@@ -88,6 +88,9 @@ assert code==401,code
 reviewer=Actor()
 second=reviewer.login("testreviewer","Changed_2026!Reviewed")
 assert second["mustChangePassword"] in (False,0)
+# Approval role must not inherit administrative datasource inventory access.
+status,body=reviewer.call("/api/sources")
+assert status==403,(status,body[:120])
 listed=admin.check("/api/users/approvers")
 assert any(x["id"]==reviewer_id for x in listed)
 
