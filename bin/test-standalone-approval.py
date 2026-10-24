@@ -188,7 +188,10 @@ ok,one_column=mcp_request(token,"tools/call",{"name":"describe_table",
     "arguments":{"sourceId":source_id,"tableName":"ci_allowlisted_table"}})
 shown=json.loads(one_column["result"]["content"][0]["text"])
 assert ok==200 and len(shown)==1 and shown[0]["columnName"]=="safe_total",shown
-admin.check("/api/sources/"+source_id+"/allowlist/ci_allowlisted_table/columns/safe_total","DELETE")
+deleted_status,deleted_body=admin.call(
+    "/api/sources/"+source_id+"/allowlist/ci_allowlisted_table/columns/safe_total",
+    "DELETE",None,{"X-CSRF-TOKEN":admin.csrf()})
+assert deleted_status==200,(deleted_status,deleted_body[:180])
 ok,revoked_column=mcp_request(token,"tools/call",{"name":"describe_table",
     "arguments":{"sourceId":source_id,"tableName":"ci_allowlisted_table"}})
 assert ok==200 and json.loads(revoked_column["result"]["content"][0]["text"])==[],revoked_column
