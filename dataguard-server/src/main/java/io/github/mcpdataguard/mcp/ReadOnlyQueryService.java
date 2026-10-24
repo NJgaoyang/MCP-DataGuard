@@ -151,6 +151,7 @@ public class ReadOnlyQueryService {
     return deny("MASK_HMAC_KEY_NOT_CONFIGURED");
    masks.put(column,selected);
   }
+  final long startedNanos=System.nanoTime();
   try{
    IsolatedReadOnlyExecutor.Result result=executor.execute(
      new IsolatedReadOnlyExecutor.Target(source.host(),source.port(),source.db(),username,password),
@@ -158,7 +159,9 @@ public class ReadOnlyQueryService {
        actor.orgId()+":"+id));
    // A failed control-plane receipt fails closed; never disclose unlogged results.
    receipts.record(actor.orgId(),actor.agentId(),id,database,sql,
-     result.rows().size(),result.returnedBytes());
+     result.rows().size(),result.returnedBytes(),
+     Math.max(0L,java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
+       System.nanoTime()-startedNanos)));
    return Map.of("decision","ALLOW","operation","SELECT",
       "columns",result.columns(),"rows",result.rows(),
       "rowCount",result.rows().size(),"returnedBytes",result.returnedBytes(),
