@@ -52,6 +52,8 @@ jobs:
           fi
           python3 bin/test-standalone-login.py
           python3 bin/test-standalone-approval.py
+      - name: Validate non-Docker standalone scripts
+        run: bash -n bin/build-standalone.sh bin/install-standalone-systemd.sh
       - name: Reject PostgreSQL in default reactor
         run: |
           ! grep -q '<module>dataguard-server</module>' pom.xml
