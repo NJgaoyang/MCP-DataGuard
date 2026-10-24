@@ -68,7 +68,7 @@ test('desktop management navigation retains compact banner, audit and identity c
  }
  await page.getByRole('button',{name:'新增用户'}).click();
  await expect(page.getByText('创建内置用户')).toBeVisible();
- await page.getByRole('button',{name:'返回'}).last().click();
+ await page.locator('.ant-modal:visible .ant-modal-close').click();
  await expect(page.getByText('创建内置用户')).not.toBeVisible();
 });
 test('mobile console has a compact sidebar and account entry',async({page})=>{
