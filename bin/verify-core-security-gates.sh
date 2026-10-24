@@ -68,6 +68,10 @@ if [[ "${DG_RUN_REAL_TCP_COMMIT_E2E:-false}" == "true" ]]; then
   # Disposable PostgreSQL plus a separate TCP client. It never touches live DBs.
   bash bin/verify-real-postgres-commit-disconnect.sh
 fi
+if [[ "${DG_RUN_WORKER_SIGKILL_E2E:-false}" == "true" ]]; then
+  # Disposable physical SQL client process; production Java Worker is NOT targeted.
+  bash bin/verify-isolated-worker-sigkill.sh
+fi
 echo "FULL_ISOLATED_CORE_SECURITY_ACCEPTANCE_PASS"
 echo "Live read, write and workflow flags have NOT been enabled."
 echo "Additional gates required before production: external MCP client, browser E2E,"
