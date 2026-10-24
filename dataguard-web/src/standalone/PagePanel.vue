@@ -1,0 +1,2 @@
+<script setup lang="ts">defineProps<{title:string}>();</script>
+<template><section class="dg-panel dg-list-panel"><header class="dg-panel-head"><h2>{{title}}</h2><div class="dg-panel-actions"><slot name="actions"/></div></header><div v-if="$slots.filters" class="dg-filters"><slot name="filters"/></div><slot/><footer v-if="$slots.footer" class="dg-table-footer"><slot name="footer"/></footer></section></template>

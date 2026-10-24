@@ -73,4 +73,24 @@ public class UsersApi {
   audit.log(auth.getName(),"USER_DISABLED","USER",id.toString(),"SUCCESS","revoked");
   return Map.of("disabled",true);
  }
+ @PostMapping("/users/{id}/enable")
+ public Map<String,Object> enable(Authentication auth,@PathVariable UUID id){
+  Guard.requireAdmin(auth);
+  int n=jdbc.update("UPDATE app_users SET enabled=1 WHERE id=?",id.toString());
+  if(n!=1)throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+  audit.log(auth.getName(),"USER_ENABLED","USER",id.toString(),"SUCCESS","");
+  return Map.of("enabled",true);
+ }
+ public record PasswordReset(String temporaryPassword){}
+ @PostMapping("/users/{id}/reset-password")
+ public Map<String,Object> resetPassword(Authentication auth,@PathVariable UUID id,@RequestBody PasswordReset input){
+  Guard.requireAdmin(auth);
+  if(input==null)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Temporary password required");
+  Guard.complex(input.temporaryPassword());
+  int n=jdbc.update("UPDATE app_users SET password_hash=?,must_change_password=1,failed_login_count=0,lock_until=NULL WHERE id=?",
+    encoder.encode(input.temporaryPassword()),id.toString());
+  if(n!=1)throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+  audit.log(auth.getName(),"PASSWORD_RESET","USER",id.toString(),"SUCCESS","force password change");
+  return Map.of("mustChangePassword",true);
+ }
 }

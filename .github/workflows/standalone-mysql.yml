@@ -59,6 +59,7 @@ jobs:
           DATAGUARD_MYSQL_PASSWORD: ci_test_app_only
           DATAGUARD_FLOWABLE_SCHEMA_UPDATE: 'true'
           DATAGUARD_BOOTSTRAP_ADMIN: 'true'
+          DATAGUARD_CREDENTIAL_KEY_FILE: /tmp/dg-standalone-ci-credentials.key
         run: |
           set -euo pipefail
           java -jar dataguard-standalone/target/dataguard-standalone-0.5.0-SNAPSHOT.jar > /tmp/dg-standalone.log 2>&1 &

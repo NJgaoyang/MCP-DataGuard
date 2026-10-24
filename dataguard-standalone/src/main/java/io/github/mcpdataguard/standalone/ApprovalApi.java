@@ -53,7 +53,13 @@ public class ApprovalApi {
   return jdbc.queryForList("SELECT a.id,a.table_name AS tableName,a.reason,a.status,a.created_at AS createdAt,u.username AS requester "+
       "FROM approval_requests a JOIN app_users u ON u.id=a.requester_user_id "+
       "JOIN app_users reviewer ON reviewer.id=a.approver_user_id "+
-      "WHERE reviewer.username=? AND a.status='PENDING' ORDER BY a.created_at DESC LIMIT 100",auth.getName());
+      "WHERE reviewer.username=? AND a.status='PENDING' AND a.expires_at>NOW(3) ORDER BY a.created_at DESC LIMIT 100",auth.getName());
+ }
+ @GetMapping("/history")
+ public List<Map<String,Object>> history(Authentication auth,@RequestParam(defaultValue="mine") String scope){
+  if(!List.of("mine","handled","pending").contains(scope))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"审批查询范围无效");
+  String condition=switch(scope){case "handled"->"reviewer.username=? AND (a.status<>'PENDING' OR a.expires_at<=NOW(3))";case "pending"->"reviewer.username=? AND a.status='PENDING' AND a.expires_at>NOW(3)";default->"requester.username=?";};
+  return jdbc.queryForList("SELECT a.id,a.table_name tableName,a.reason,CASE WHEN a.status='PENDING' AND a.expires_at<=NOW(3) THEN 'EXPIRED' ELSE a.status END status,a.created_at createdAt,a.expires_at expiresAt,a.decided_at decidedAt,s.display_name sourceName,requester.username requester,requester.display_name requesterName,reviewer.display_name approverName FROM approval_requests a JOIN app_users requester ON requester.id=a.requester_user_id JOIN app_users reviewer ON reviewer.id=a.approver_user_id JOIN data_sources s ON s.id=a.source_id WHERE "+condition+" ORDER BY a.created_at DESC LIMIT 200",auth.getName());
  }
  public record Decision(String reason){}
  @PostMapping("/{id}/approve")

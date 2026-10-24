@@ -43,7 +43,9 @@ systemctl enable --now dataguard-standalone.service
 
 ### 3. 只读认证
 
-新增数据源的密码仅通过 `DATAGUARD_TARGET_..._PASSWORD` 在进程环境变量中提供，运行数据库账户只能 SELECT 被允许的数据表，数据库侧必须单独限制。已获准的表默认返回 REDACTED，若需要真实字段读取，必须经过专门字段授权/脱敏测试后才能开启；本版本不提供明文查询放行。
+新增数据源可在管理页面直接填写数据库密码，服务端以 AES-256-GCM 加密后保存；列表和创建响应不返回密码。已有 API 客户端仍可通过 `passwordEnv` 指定 `DATAGUARD_TARGET_..._PASSWORD` 环境变量，不能同时提供 `password` 和 `passwordEnv`。运行数据库账户只能 SELECT 被允许的数据表，数据库侧必须单独限制。已获准的表默认返回 REDACTED，只有逐一授权的字段可以展示。
+
+页面密码使用数据库外的 `/var/lib/dataguard/credentials.key` 密钥文件，可通过 `DATAGUARD_CREDENTIAL_KEY_FILE` 指定路径。首次保存密码时生成 32 字节随机密钥，文件权限为 0600；后续重启使用同一文件。部署升级须保留该文件，丢失后无法解密已有数据源密码。连接测试和实际读取使用同一凭据解析逻辑。
 
 ### 4. 旧数据迁移
 

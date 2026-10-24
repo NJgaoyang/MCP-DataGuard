@@ -170,3 +170,46 @@ revoked,_=mcp_request(token,"tools/list")
 assert revoked==401,revoked
 print("MYSQL_MCP_BEARER_AUTH_REVOCATION_DENIAL_E2E_PASS")
 
+# Password entered in the web form is accepted and never returned by list/create.
+payload={"code":"ci_password_source","displayName":"CI Password Source",
+    "host":"127.0.0.1","port":3306,"databaseName":"dataguard",
+    "readUsername":"root","password":"ci_test_credential_only"}
+saved=admin.check("/api/sources","POST",payload)
+assert saved["enabled"] in (False,0)
+for row in [saved]+admin.check("/api/sources"):
+    assert not any("password" in key.lower() for key in row),list(row.keys())
+code,body=admin.post("/api/sources",payload)
+assert code==409 and json.loads(body).get("message"),(code,body[:150])
+legacy=dict(payload);legacy.pop("password");legacy["passwordEnv"]="123456"
+code,body=admin.post("/api/sources",legacy)
+assert code==400 and "message" in json.loads(body),(code,body[:150])
+print("MYSQL_DATASOURCE_PASSWORD_AND_VALIDATION_E2E_PASS")
+
+# Console detail/edit and scoped analytics use the same real persisted records.
+source_path='/api/sources/'+saved['id']
+detail=admin.check(source_path)
+assert detail['readUsername']=='root' and not any('password' in k.lower() for k in detail),detail
+edit=dict(payload);edit['displayName']='CI Edited Source';edit.pop('password')
+code,body=admin.call(source_path,'PUT',edit,{'X-CSRF-TOKEN':admin.csrf()})
+assert code==200,(code,body[:150])
+assert admin.check(source_path)['displayName']=='CI Edited Source'
+admin.check(source_path+'/enable','POST',{})
+code,body=admin.call(source_path,'PUT',edit,{'X-CSRF-TOKEN':admin.csrf()})
+assert code==409,(code,body[:150])
+admin.check(source_path+'/disable','POST',{})
+for days in (7,14,30):
+    overview=admin.check('/api/overview?days='+str(days))
+    assert overview['scope']=='PLATFORM' and len(overview['trends'])==days,overview
+    assert sum(r['requests'] for r in overview['trends'])==overview['requests']['requests'],overview
+    assert sum(r['approvals'] for r in overview['trends'])==overview['approvals']['total'],overview
+admin.check('/api/overview?days=9',expected=400)
+review=reviewer.check('/api/overview?days=7')
+assert review['scope']=='SELF' and review['openAlerts']==0,review
+mine=admin.check('/api/approvals/history?scope=mine')
+assert len(mine)>0 and all(r['requester']=='admin' for r in mine),mine
+handled=reviewer.check('/api/approvals/history?scope=handled')
+assert any(r['status']=='APPROVED' for r in handled),handled
+assert all(r['requester']=='admin' for r in handled),handled
+reviewer.check(source_path,expected=403)
+reviewer.check('/api/operations/live',expected=403)
+print('MYSQL_CONSOLE_DETAIL_EDIT_ANALYTICS_SCOPE_E2E_PASS')

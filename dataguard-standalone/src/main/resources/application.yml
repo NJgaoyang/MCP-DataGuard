@@ -32,6 +32,8 @@ flowable:
   database-schema-update: ${DATAGUARD_FLOWABLE_SCHEMA_UPDATE:false}
   async-executor-activate: false
 dataguard:
+  credentials:
+    key-file: ${DATAGUARD_CREDENTIAL_KEY_FILE:/var/lib/dataguard/credentials.key}
   read:
     allowed-hosts: ${DATAGUARD_READ_HOSTS:127.0.0.1,localhost}
     max-rows: 100

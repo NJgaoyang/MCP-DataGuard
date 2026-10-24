@@ -1,139 +1,71 @@
 <script setup lang="ts">
-import {ref,onMounted} from 'vue';
-import {message,Modal} from 'ant-design-vue';
-type Obj=Record<string,any>;
-type User={username:string;displayName:string;roleCode:string;mustChangePassword:boolean};
-const me=ref<User|null>(null),csrf=ref(''),busy=ref(false),tab=ref('dashboard');
-const users=ref<Obj[]>([]),sources=ref<Obj[]>([]),approvers=ref<Obj[]>([]),tasks=ref<Obj[]>([]),agents=ref<Obj[]>([]),audits=ref<Obj[]>([]);
-const newUser=ref({username:'',displayName:'',roleCode:'READER',temporaryPassword:''});
-const newSource=ref({code:'',displayName:'',host:'127.0.0.1',port:3306,databaseName:'',readUsername:'',passwordEnv:''});
-const newApproval=ref({sourceId:'',tableName:'',approverId:'',reason:''});
-const password=ref({currentPassword:'',newPassword:''});
-const tokenForm=ref({label:'',validDays:7});
-const once=ref('');
-const menu=[['dashboard','概览'],['users','用户管理'],['sources','数据源与白名单'],['request','申请读取'],['approvals','我的待审批'],['agents','Agent 令牌'],['audit','审计日志']];
-async function call(path:string,method='GET',body?:Obj){
- const res=await fetch(path,{method,credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':csrf.value},body:body?JSON.stringify(body):undefined});
- if(res.status===401){location.href='/login.html';throw Error('会话已失效')}
- if(!res.ok)throw Error('HTTP '+res.status);
- return res.json();
-}
-async function refresh(){
- try{
-  if(tab.value==='users')users.value=await call('/api/users');
-  if(tab.value==='sources')sources.value=await call('/api/sources');
-  if(tab.value==='request'){
-   sources.value=(await call('/api/sources')).filter((s:Obj)=>s.enabled);
-   approvers.value=(await call('/api/users/approvers')).filter((u:Obj)=>u.username!==me.value?.username);
-  }
-  if(tab.value==='approvals')tasks.value=await call('/api/approvals/my');
-  if(tab.value==='agents')agents.value=await call('/api/agents');
-  if(tab.value==='audit')audits.value=await call('/api/audit');
- }catch(e){message.error((e as Error).message)}
-}
-async function submit(path:string,body:Obj,after=true){
- if(busy.value)return null;
- busy.value=true;
- try{const result=await call(path,'POST',body);message.success('操作成功');if(after)await refresh();return result}
- catch(e){message.error((e as Error).message);return null}
- finally{busy.value=false}
-}
-async function createUser(){if(await submit('/api/users',newUser.value))newUser.value={username:'',displayName:'',roleCode:'READER',temporaryPassword:''}}
-async function createSource(){if(await submit('/api/sources',newSource.value))newSource.value={code:'',displayName:'',host:'127.0.0.1',port:3306,databaseName:'',readUsername:'',passwordEnv:''}}
-async function allow(sourceId:string,kind:'table'|'column'){
- const table=window.prompt('输入白名单表名');if(!table)return;
- if(kind==='table'){await submit('/api/sources/'+sourceId+'/allowlist',{tableName:table});return}
- const column=window.prompt('请输入已审核可展示的非敏感字段名');if(column)await submit('/api/sources/'+sourceId+'/allowlist/'+encodeURIComponent(table)+'/columns',{columnName:column});
-}
-async function decision(task:Obj,action:string){
- const reason=window.prompt('请输入审批意见（必填）');
- if(reason)await submit('/api/approvals/'+task.id+'/'+action,{reason});
-}
-async function token(){
- const result=await submit('/api/agents',{label:tokenForm.value.label,validDays:Number(tokenForm.value.validDays)});
- if(result){once.value=result.token;tokenForm.value={label:'',validDays:7}}
-}
-async function changePassword(){
- const result=await submit('/api/me/password',password.value,false);
- if(result?.reauthenticate)location.href='/login.html';
-}
-function logout(){
- const f=document.createElement('form');f.action='/auth/logout';f.method='post';
- const h=document.createElement('input');h.type='hidden';h.name='_csrf';h.value=csrf.value;f.append(h);document.body.append(f);f.submit();
-}
-function onMenuClick(event:{key:string|number}){void switchTab(String(event.key))}
-async function switchTab(name:string){if(me.value?.mustChangePassword)return;tab.value=name;await refresh()}
-onMounted(async()=>{
- try{
-  csrf.value=(await (await fetch('/api/csrf',{credentials:'same-origin'})).json()).token;
-  me.value=await call('/api/me');
-  if(me.value?.mustChangePassword)tab.value='password';
-  else await refresh();
- }catch(e){message.error('身份验证失败：'+(e as Error).message)}
-});
+import {computed,onBeforeUnmount,onMounted,ref,watch} from 'vue';
+import type {FormInstance} from 'ant-design-vue';
+import {api,initializeSession,logout,roleLabel,strongPasswordRule,useActions,type CurrentUser} from './standalone/api';
+import AppIcon from './standalone/AppIcon.vue';
+import OverviewView from './standalone/OverviewView.vue';
+import SourcesView from './standalone/SourcesView.vue';
+import ApprovalsView from './standalone/ApprovalsView.vue';
+import AgentsView from './standalone/AgentsView.vue';
+import UsersView from './standalone/UsersView.vue';
+import PoliciesView from './standalone/PoliciesView.vue';
+import WorkflowsView from './standalone/WorkflowsView.vue';
+import AuditView from './standalone/AuditView.vue';
+import PagePanel from './standalone/PagePanel.vue';
+import './styles/standalone.css';
+const theme={token:{colorPrimary:'#12a594',colorPrimaryHover:'#0d9b8a',colorPrimaryActive:'#008573',colorPrimaryBg:'#e0f8f3',colorSuccess:'#12a594',colorWarning:'#ab6400',colorError:'#e5484d',colorInfo:'#0090ff',colorText:'#1c2024',colorTextSecondary:'#60646c',colorTextTertiary:'#8b8d98',colorBorder:'#e8e8ec',colorSplit:'#e8e8ec',colorBgContainer:'#ffffff',colorBgLayout:'#f0f0f3',borderRadius:6,fontSize:14,fontSizeSM:12,fontSizeLG:14,fontSizeXL:20,fontSizeHeading1:28,fontSizeHeading2:20,fontSizeHeading3:20,fontSizeHeading4:14,fontSizeHeading5:14,lineWidth:0.5,motion:false},components:{Table:{headerBg:'#f9f9fb',headerColor:'#60646c',rowHoverBg:'#f3fbf9',cellPaddingBlock:18,cellPaddingInline:20},Modal:{titleFontSize:20},Menu:{itemSelectedBg:'#e0f8f3',itemSelectedColor:'#008573'}}};
+const me=ref<CurrentUser|null>(null),starting=ref(true),startupError=ref(''),tab=ref('dashboard'),mobileOpen=ref(false),analyticsOpen=ref(true),activeView=ref<{refresh?:()=>Promise<void>}|null>(null),refreshing=ref(false),passwordOpen=ref(false),passwordRef=ref<FormInstance>(),password=ref({currentPassword:'',newPassword:''});
+const {busy,perform}=useActions();
+const admin=computed(()=>me.value?.roleCode==='ADMIN');
+const titles:Record<string,string>={dashboard:'数据概览',sources:'数据源管理',agents:'Agent 管理',policies:'SQL 安全规则',workflows:'审批流程',approvals:'审批中心',audit:'SQL 审计',alerts:'安全告警',users:'用户与权限',account:'账户设置'};
+const topMenus=computed(()=>[{id:'agents',title:'Agent 管理'},...(admin.value?[{id:'sources',title:'数据源管理'},{id:'policies',title:'SQL 安全规则'},{id:'workflows',title:'审批流程'}]:[]),{id:'approvals',title:'审批中心'}]);
+const title=computed(()=>me.value?.mustChangePassword?'首次登录安全设置':titles[tab.value]||'数据概览');
+const group=computed(()=>['dashboard','audit','alerts'].includes(tab.value)?'数据管理':'工作台');
+function navigate(page:string){if(!me.value||me.value.mustChangePassword)return;if(['sources','policies','workflows','users','audit','alerts'].includes(page)&&!admin.value)return;tab.value=page;mobileOpen.value=false;if(['dashboard','audit','alerts'].includes(page))analyticsOpen.value=true;window.scrollTo({top:0,behavior:'auto'})}
+async function start(){starting.value=true;startupError.value='';try{me.value=await initializeSession();passwordOpen.value=Boolean(me.value.mustChangePassword)}catch(e){startupError.value=(e as Error).message}finally{starting.value=false}}
+async function refresh(){if(refreshing.value)return;refreshing.value=true;try{if(tab.value==='account')me.value=await api('/api/me');else await activeView.value?.refresh?.()}finally{refreshing.value=false}}
+function openPassword(){password.value={currentPassword:'',newPassword:''};passwordOpen.value=true}
+async function changePassword(){const result=await perform('/api/me/password',password.value,'POST','密码已修改，请重新登录');if(result?.reauthenticate){password.value={currentPassword:'',newPassword:''};location.assign('/login.html')}}
+function passwordRequired(){if(me.value){me.value.mustChangePassword=true;openPassword()}}
+function accountAction(event:{key:string|number}){if(event.key==='password')openPassword();if(event.key==='account')navigate('account');if(event.key==='logout')logout()}
+function closeOnEscape(event:KeyboardEvent){if(event.key==='Escape')mobileOpen.value=false}
+watch(passwordOpen,open=>{if(!open){password.value={currentPassword:'',newPassword:''};passwordRef.value?.clearValidate()}});
+onMounted(()=>{void start();window.addEventListener('dataguard-password-required',passwordRequired);window.addEventListener('keydown',closeOnEscape)});
+onBeforeUnmount(()=>{window.removeEventListener('dataguard-password-required',passwordRequired);window.removeEventListener('keydown',closeOnEscape)});
 </script>
-
 <template>
-<div class="standalone">
- <aside class="side" v-if="!me?.mustChangePassword">
-  <div class="brand"><span class="mark">D</span>DataGuard</div>
-  <div class="sub">企业内部数据安全平台</div>
-  <a-menu :selectedKeys="[tab]" mode="inline" class="nav" @click="onMenuClick">
-   <a-menu-item v-for="[id,name] in menu" :key="id">{{name}}</a-menu-item>
-  </a-menu>
-  <div class="side-note">MySQL · Flowable · MCP</div>
+<a-config-provider :theme="theme"><div class="dg-app">
+ <button v-if="mobileOpen" class="dg-nav-mask" aria-label="关闭导航" @click="mobileOpen=false"/>
+ <aside class="dg-sidebar" :class="{'is-open':mobileOpen}" aria-label="主导航">
+  <button class="dg-brand" @click="navigate('dashboard')"><img src="/dataguard-mark.svg" alt=""/><span><strong>DataGuard</strong><small>数据守卫</small></span></button>
+  <div class="dg-nav-label">管理平台</div>
+  <nav class="dg-navigation">
+   <button :disabled="!me||me.mustChangePassword" @click="navigate('dashboard')"><AppIcon name="dashboard"/><span>工作台</span><AppIcon name="right" class="dg-nav-chevron"/></button>
+   <button v-for="item in topMenus" :key="item.id" :class="{active:tab===item.id}" :aria-current="tab===item.id?'page':undefined" :disabled="!me||me.mustChangePassword" @click="navigate(item.id)"><AppIcon :name="item.id"/><span>{{item.title}}</span><AppIcon name="right" class="dg-nav-chevron"/></button>
+   <button class="dg-nav-group" :aria-expanded="analyticsOpen" @click="analyticsOpen=!analyticsOpen"><AppIcon name="audit"/><span>数据管理</span><AppIcon name="down" class="dg-nav-chevron" :class="{rotated:analyticsOpen}"/></button>
+   <template v-if="analyticsOpen"><button class="dg-nav-child" :class="{active:tab==='dashboard'}" :aria-current="tab==='dashboard'?'page':undefined" :disabled="!me||me.mustChangePassword" @click="navigate('dashboard')">数据概览</button><button v-if="admin" class="dg-nav-child" :class="{active:tab==='audit'}" :aria-current="tab==='audit'?'page':undefined" :disabled="me?.mustChangePassword" @click="navigate('audit')">SQL 审计</button><button v-if="admin" class="dg-nav-child" :class="{active:tab==='alerts'}" :aria-current="tab==='alerts'?'page':undefined" :disabled="me?.mustChangePassword" @click="navigate('alerts')">安全告警</button></template>
+   <button v-if="admin" :class="{active:tab==='users'}" :aria-current="tab==='users'?'page':undefined" :disabled="me?.mustChangePassword" @click="navigate('users')"><AppIcon name="users"/><span>用户与权限</span><AppIcon name="right" class="dg-nav-chevron"/></button>
+   <button :class="{active:tab==='account'}" :disabled="!me||me.mustChangePassword" @click="navigate('account')"><AppIcon name="settings"/><span>账户设置</span><AppIcon name="right" class="dg-nav-chevron"/></button>
+  </nav>
+  <div class="dg-sidebar-foot"><span>MySQL 单体版</span><span>DataGuard</span></div>
  </aside>
- <main class="workspace">
-  <header class="top"><div><h1>{{tab==='password'?'首次登录安全设置':(menu.find(x=>x[0]===tab)?.[1]||'概览')}}</h1><p>统一身份 · 最小权限 · 全程审计</p></div><div class="account">{{me?.displayName}} <a-tag>{{me?.roleCode}}</a-tag><a-button @click="logout">退出登录</a-button></div></header>
-  <template v-if="tab==='password'">
-   <a-card class="panel" title="首次登录必须修改密码" style="max-width:600px">
-    <p>新密码至少 12 位，包含大写、小写、数字和特殊符号；完成后重新登录。</p>
-    <a-form layout="vertical"><a-form-item label="原始密码"><a-input-password v-model:value="password.currentPassword"/></a-form-item>
-    <a-form-item label="新密码"><a-input-password v-model:value="password.newPassword"/></a-form-item>
-    <a-button type="primary" :loading="busy" @click="changePassword">修改密码并重新登录</a-button></a-form>
-   </a-card>
+ <header class="dg-topbar"><div class="dg-breadcrumb"><button class="dg-icon-button dg-mobile-toggle" aria-label="打开导航" :aria-expanded="mobileOpen" @click="mobileOpen=!mobileOpen"><AppIcon name="menu"/></button><span>{{group}}</span><span>/</span><strong>{{title}}</strong></div><div class="dg-top-actions"><a-tooltip :title="admin?'安全告警':'审批中心'"><button class="dg-icon-button" :disabled="!me||me.mustChangePassword" :aria-label="admin?'查看安全告警':'查看审批中心'" @click="navigate(admin?'alerts':'approvals')"><AppIcon name="alerts"/></button></a-tooltip><span class="dg-top-divider"/><a-dropdown :trigger="['click']"><button class="dg-account-button" aria-label="账户菜单"><span class="dg-user-avatar">{{String(me?.displayName||me?.username||'管').slice(0,1)}}</span><span>{{me?.displayName||me?.username||'账户'}}</span><AppIcon name="down"/></button><template #overlay><a-menu @click="accountAction"><a-menu-item key="role" disabled>{{roleLabel(me?.roleCode||'')}}</a-menu-item><a-menu-divider/><a-menu-item key="account" :disabled="me?.mustChangePassword"><AppIcon name="settings"/> 账户设置</a-menu-item><a-menu-item key="password"><AppIcon name="password"/> 修改密码</a-menu-item><a-menu-item key="logout"><AppIcon name="logout"/> 退出登录</a-menu-item></a-menu></template></a-dropdown></div></header>
+ <main class="dg-main"><div class="dg-page-head"><h1>{{title}}</h1><a-button v-if="me&&!me.mustChangePassword" :loading="refreshing" @click="refresh"><AppIcon name="refresh"/>刷新</a-button></div>
+  <div v-if="starting" class="dg-startup"><a-spin tip="正在加载"/></div>
+  <a-alert v-else-if="startupError" :message="startupError" type="error" show-icon><template #action><a-button @click="start">重试</a-button></template></a-alert>
+  <template v-else-if="me&&!me.mustChangePassword">
+   <OverviewView v-if="tab==='dashboard'" ref="activeView" @navigate="navigate"/>
+   <SourcesView v-else-if="tab==='sources'&&admin" ref="activeView"/>
+   <ApprovalsView v-else-if="tab==='approvals'" ref="activeView" :user="me"/>
+   <AgentsView v-else-if="tab==='agents'" ref="activeView"/>
+   <UsersView v-else-if="tab==='users'&&admin" ref="activeView" :user="me"/>
+   <PoliciesView v-else-if="tab==='policies'&&admin" ref="activeView"/>
+   <WorkflowsView v-else-if="tab==='workflows'&&admin" ref="activeView"/>
+   <AuditView v-else-if="(tab==='audit'||tab==='alerts')&&admin" ref="activeView" :mode="tab==='alerts'?'alerts':'audit'"/>
+   <PagePanel v-else-if="tab==='account'" title="账户信息"><template #actions><a-button type="primary" @click="openPassword">修改密码</a-button></template><div class="dg-account-details"><a-descriptions :column="1" layout="vertical"><a-descriptions-item label="姓名">{{me.displayName}}</a-descriptions-item><a-descriptions-item label="账号">{{me.username}}</a-descriptions-item><a-descriptions-item label="角色">{{roleLabel(me.roleCode)}}</a-descriptions-item></a-descriptions></div></PagePanel>
   </template>
-  <template v-else-if="tab==='dashboard'">
-   <a-row :gutter="16"><a-col :span="8" v-for="x in [{n:'访问控制',d:'表级与字段级正向白名单'},{n:'业务审批',d:'仅系统内部真实用户参与'},{n:'安全审计',d:'登录、变更及读取全链路留痕'}]" :key="x.n"><a-card class="panel"><h3>{{x.n}}</h3><p>{{x.d}}</p></a-card></a-col></a-row>
-   <a-alert class="notice" type="info" show-icon message="默认拒绝访问" description="只有被明确允许的 MySQL 表及字段，并且经过本人有效审批，才可通过 MCP 或控制台执行受限读取。"/>
-  </template>
-  <template v-else-if="tab==='users'">
-   <a-card class="panel" title="创建内部用户"><a-form layout="inline">
-    <a-form-item><a-input v-model:value="newUser.username" placeholder="用户名"/></a-form-item><a-form-item><a-input v-model:value="newUser.displayName" placeholder="姓名"/></a-form-item>
-    <a-form-item><a-select v-model:value="newUser.roleCode" style="width:125px"><a-select-option value="READER">读取人员</a-select-option><a-select-option value="APPROVER">审批人员</a-select-option><a-select-option value="ADMIN">管理员</a-select-option></a-select></a-form-item>
-    <a-form-item><a-input-password v-model:value="newUser.temporaryPassword" placeholder="临时复杂密码"/></a-form-item><a-button type="primary" :loading="busy" @click="createUser">创建</a-button></a-form></a-card>
-   <a-card class="panel" title="系统用户"><a-table :data-source="users" :pagination="{pageSize:10}" row-key="id"><a-table-column key="username" title="用户名" data-index="username"/><a-table-column key="displayName" title="姓名" data-index="displayName"/><a-table-column key="roleCode" title="角色" data-index="roleCode"/><a-table-column key="enabled" title="状态"><template #default="{record}"><a-tag :color="record.enabled?'green':'default'">{{record.enabled?'启用':'禁用'}}</a-tag></template></a-table-column></a-table></a-card>
-  </template>
-  <template v-else-if="tab==='sources'">
-   <a-card class="panel" title="新建 MySQL 数据源"><a-form layout="inline">
-    <a-form-item><a-input v-model:value="newSource.code" placeholder="编码"/></a-form-item><a-form-item><a-input v-model:value="newSource.displayName" placeholder="名称"/></a-form-item><a-form-item><a-input v-model:value="newSource.host" placeholder="主机名"/></a-form-item>
-    <a-form-item><a-input-number v-model:value="newSource.port" :min="1" :max="65535"/></a-form-item>
-    <a-form-item><a-input v-model:value="newSource.databaseName" placeholder="数据库"/></a-form-item><a-form-item><a-input v-model:value="newSource.readUsername" placeholder="物理只读账号"/></a-form-item><a-form-item><a-input v-model:value="newSource.passwordEnv" placeholder="密钥环境变量名"/></a-form-item>
-    <a-button type="primary" :loading="busy" @click="createSource">创建（默认关闭）</a-button></a-form></a-card>
-   <a-card class="panel" title="数据源与读取白名单"><a-table :data-source="sources" row-key="id" :pagination="{pageSize:10}">
-     <a-table-column title="名称" data-index="displayName"/><a-table-column title="地址" data-index="host"/><a-table-column title="库" data-index="databaseName"/>
-     <a-table-column title="启用状态"><template #default="{record}"><a-tag :color="record.enabled?'green':'default'">{{record.enabled?'已启用':'未启用'}}</a-tag></template></a-table-column>
-     <a-table-column title="操作"><template #default="{record}"><a-space><a-button size="small" @click="allow(record.id,'table')">添加表白名单</a-button><a-button size="small" @click="allow(record.id,'column')">批准字段</a-button><a-button v-if="!record.enabled" size="small" type="primary" @click="submit('/api/sources/'+record.id+'/enable',{})">启用</a-button></a-space></template></a-table-column>
-   </a-table></a-card>
-  </template>
-  <template v-else-if="tab==='request'">
-   <a-card class="panel" title="申请读取权限"><a-form layout="vertical" style="max-width:520px">
-    <a-form-item label="MySQL 数据源"><a-select v-model:value="newApproval.sourceId" placeholder="选择已启用的数据源"><a-select-option v-for="s in sources" :key="s.id" :value="s.id">{{s.displayName}}</a-select-option></a-select></a-form-item>
-    <a-form-item label="白名单表"><a-input v-model:value="newApproval.tableName" placeholder="输入已授权表名"/></a-form-item>
-    <a-form-item label="指定系统内审批人"><a-select v-model:value="newApproval.approverId" placeholder="只能选择已启用的审批用户"><a-select-option v-for="u in approvers" :key="u.id" :value="u.id">{{u.displayName}} ({{u.username}})</a-select-option></a-select></a-form-item>
-    <a-form-item label="业务原因"><a-textarea v-model:value="newApproval.reason" :rows="3"/></a-form-item><a-button type="primary" :loading="busy" @click="submit('/api/approvals',newApproval)">提交审批</a-button></a-form>
-   </a-card>
-  </template>
-  <template v-else-if="tab==='approvals'"><a-card class="panel" title="我的待审批"><a-table :data-source="tasks" row-key="id"><a-table-column title="申请人" data-index="requester"/><a-table-column title="读取表" data-index="tableName"/><a-table-column title="原因" data-index="reason"/><a-table-column title="审批操作"><template #default="{record}"><a-space><a-button type="primary" size="small" @click="decision(record,'approve')">通过</a-button><a-button danger size="small" @click="decision(record,'reject')">拒绝</a-button></a-space></template></a-table-column></a-table></a-card></template>
-  <template v-else-if="tab==='agents'">
-   <a-card class="panel" title="创建 MCP Agent 凭据"><a-space><a-input v-model:value="tokenForm.label" placeholder="Agent 名称"/><a-input-number v-model:value="tokenForm.validDays" :min="1" :max="90" addon-after="天"/><a-button type="primary" :loading="busy" @click="token">创建</a-button></a-space><a-alert v-if="once" style="margin-top:16px" type="warning" message="令牌只展示一次，请安全保存"><template #description><code style="overflow-wrap:anywhere">{{once}}</code> <a-button size="small" @click="once=''">清除</a-button></template></a-alert></a-card>
-   <a-card class="panel" title="我的 Agent"><a-table :data-source="agents" row-key="id"><a-table-column title="名称" data-index="label"/><a-table-column title="到期时间" data-index="expiresAt"/><a-table-column title="状态"><template #default="{record}">{{record.revokedAt?'已撤销':'有效'}}</template></a-table-column><a-table-column title="操作"><template #default="{record}"><a-button v-if="!record.revokedAt" danger @click="submit('/api/agents/'+record.id+'/revoke',{})">撤销</a-button></template></a-table-column></a-table></a-card>
-  </template>
-  <template v-else-if="tab==='audit'"><a-card class="panel" title="操作审计（最近 200 条）"><a-table :data-source="audits" row-key="id" :pagination="{pageSize:15}"><a-table-column title="时间" data-index="event_time"/><a-table-column title="操作人" data-index="actor_username"/><a-table-column title="动作" data-index="action"/><a-table-column title="资源" data-index="resource_id"/><a-table-column title="结果" data-index="outcome"/></a-table></a-card></template>
+  <footer class="dg-footer"><span>DataGuard 数据守卫</span><span>数据安全访问管理平台</span></footer>
  </main>
-</div>
+ <a-modal v-model:open="passwordOpen" :title="me?.mustChangePassword?'首次登录修改密码':'修改密码'" centered :width="520" :closable="!me?.mustChangePassword&&!busy" :mask-closable="!me?.mustChangePassword&&!busy" :keyboard="!me?.mustChangePassword" :footer="null"><p class="dg-field-note">密码为 12–72 位，包含大写、小写字母、数字和特殊字符。</p><a-form ref="passwordRef" :model="password" layout="vertical" @finish="changePassword"><a-form-item label="当前密码" name="currentPassword" :rules="[{required:true,message:'请输入当前密码'}]"><a-input-password v-model:value="password.currentPassword" autocomplete="current-password"/></a-form-item><a-form-item label="新密码" name="newPassword" :rules="[strongPasswordRule]"><a-input-password v-model:value="password.newPassword" autocomplete="new-password"/></a-form-item><div class="dg-modal-footer"><a-button v-if="!me?.mustChangePassword" :disabled="busy" @click="passwordOpen=false">取消</a-button><a-button v-else :disabled="busy" @click="logout">退出登录</a-button><a-button type="primary" html-type="submit" :loading="busy">修改并重新登录</a-button></div></a-form></a-modal>
+</div></a-config-provider>
 </template>
-
-<style scoped>
-.standalone{display:flex;min-height:100vh;background:#f5f7fa;color:#202939}.side{width:228px;flex-shrink:0;background:#fff;border-right:1px solid #e5e9ef;display:flex;flex-direction:column;padding:28px 12px}.brand{font-size:21px;font-weight:750;letter-spacing:-.6px;padding:0 15px;display:flex;align-items:center;gap:9px}.mark{background:#1677ff;color:#fff;border-radius:9px;width:30px;height:30px;display:grid;place-items:center;font-size:17px}.sub{color:#93a0b4;font-size:11px;margin:10px 15px 25px}.nav{border:0;background:transparent}.side-note{margin-top:auto;padding:12px;text-align:center;color:#9aa6b5;font-size:11px}.workspace{min-width:0;flex:1;padding:28px 36px;max-width:1600px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:23px}.top h1{font-size:22px;margin:0;font-weight:650}.top p{font-size:12px;color:#9aa6b5;margin-top:6px}.account{display:flex;align-items:center;gap:12px;color:#64748b;font-size:13px}.panel{border-radius:13px;border:1px solid #e9edf3;margin-bottom:17px;box-shadow:0 2px 10px rgba(27,49,79,.025)}.notice{margin-top:15px;border-radius:9px}@media(max-width:850px){.side{width:170px}.workspace{padding:18px}.top{align-items:flex-start;gap:10px}.account{flex-wrap:wrap}}
-</style>

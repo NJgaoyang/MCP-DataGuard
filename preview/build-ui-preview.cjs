@@ -1,0 +1,22 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const iconRoot=path.resolve(__dirname,'../dataguard-web/node_modules/@ant-design/icons-svg/lib/asn');
+const escape=s=>String(s).replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;');
+function element(node,root=false){const attrs={...node.attrs};if(root)Object.assign(attrs,{class:'icon',width:'18',height:'18',fill:'currentColor','aria-hidden':'true'});return '<'+node.tag+' '+Object.entries(attrs).map(([k,v])=>k+'="'+escape(v)+'"').join(' ')+'>'+(node.children||[]).map(n=>element(n)).join('')+'</'+node.tag+'>'}
+const resolveIcons=s=>s.replace(/@@ICON_(\w+)@@/g,(_,name)=>element(require(path.join(iconRoot,name+'.js')).default.icon,true));
+let html=fs.readFileSync(path.join(__dirname,'dataguard-dashboard.html'),'utf8');
+const pages=resolveIcons(fs.readFileSync(path.join(__dirname,'ui-pages.html'),'utf8'));
+const css=fs.readFileSync(path.join(__dirname,'ui-pages.css'),'utf8');
+let js=resolveIcons(fs.readFileSync(path.join(__dirname,'ui-pages.js'),'utf8'));
+html=html.replace('<title>DataGuard 数据概览</title>','<title>DataGuard 界面确认稿</title>');
+html=html.replace('</style>',css+'\n</style>');
+html=html.replace('<section class="toolbar" aria-label="数据筛选">','<div class="screen" id="screen-overview"><section class="toolbar" aria-label="数据筛选">');
+html=html.replace('<footer class="footer">','</div>'+pages+'<footer class="footer">');
+html=html.replace('</body>','<script>\n'+js+'\n</script>\n</body>');
+html=html.replaceAll('{prod:24,test:8,dev:4}','{prod:6,test:2,dev:1}');
+const scripts=Array.from(html.matchAll(/<script>([\s\S]*?)<\/script>/g),m=>m[1]);
+scripts.forEach((script,i)=>new vm.Script(script,{filename:'preview-script-'+i+'.js'}));
+if(/@@\w+@@/.test(html))throw new Error('Unresolved placeholder');
+fs.writeFileSync(path.join(__dirname,'dataguard-ui.html'),html);
+console.log('Generated self-contained UI preview: '+Buffer.byteLength(html)+' bytes, '+scripts.length+' scripts syntax checked');

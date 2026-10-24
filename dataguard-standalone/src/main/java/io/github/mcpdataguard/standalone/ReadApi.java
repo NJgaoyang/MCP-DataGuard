@@ -21,7 +21,8 @@ import org.springframework.web.server.ResponseStatusException;
 public class ReadApi {
  private final JdbcTemplate jdbc;
  private final AuditService audit;
- public ReadApi(JdbcTemplate jdbc,AuditService audit){this.jdbc=jdbc;this.audit=audit;}
+ private final DatasourceSecrets secrets;
+ public ReadApi(JdbcTemplate jdbc,AuditService audit,DatasourceSecrets secrets){this.jdbc=jdbc;this.audit=audit;this.secrets=secrets;}
  public record ReadQuery(String sourceId,String tableName,int limit){}
  static Object mask(Object value,boolean permitted){
   if(!permitted||value==null||value instanceof byte[])return "[REDACTED]";
@@ -47,6 +48,7 @@ public class ReadApi {
  }
  @PostMapping
  public Map<String,Object> read(Authentication auth,@RequestBody ReadQuery input){
+  long started=System.nanoTime();
   if(input==null||input.limit()<1||input.limit()>100)
    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Read limit must be 1..100");
   String table=Guard.identifier(input.tableName());
@@ -54,7 +56,7 @@ public class ReadApi {
   String actor=jdbc.queryForObject("SELECT id FROM app_users WHERE username=? AND enabled=1",String.class,auth.getName());
   // A table must be BOTH explicitly allowlisted AND individually approved for this requester.
   List<Map<String,Object>> ds=jdbc.queryForList("""
-    SELECT s.host,s.port,s.database_name,s.read_username,s.password_env
+    SELECT s.host,s.port,s.database_name,s.read_username,s.password_env,s.encrypted_password
     FROM data_sources s JOIN read_table_allowlist w
       ON w.source_id=s.id AND w.table_name=? AND w.enabled=1
     WHERE s.id=? AND s.enabled=1 AND EXISTS(
@@ -62,18 +64,21 @@ public class ReadApi {
         a.table_name=? AND a.requester_user_id=? AND a.status='APPROVED' AND a.expires_at>NOW(3))
     """,table,id,table,actor);
   if(ds.size()!=1){
-   audit.log(auth.getName(),"SQL_READ","TABLE",id+"/"+table,"DENIED","not allowlisted or approved");
+   audit.log(auth.getName(),"SQL_READ","TABLE",id+"/"+table,"DENIED","not allowlisted or approved",elapsedMs(started));
    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Table is not allowlisted and approved");
   }
   Map<String,Object> source=ds.get(0);
-  String envName=(String)source.get("password_env");
-  String password=System.getenv(envName);
-  if(password==null||password.isBlank())
-   throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Read-only credential not configured");
+  String password;
+  try{password=secrets.resolve(id,source);}catch(ResponseStatusException ex){
+   audit.log(auth.getName(),"SQL_READ","TABLE",id+"/"+table,"ERROR","read credential not configured",elapsedMs(started));
+   throw ex;
+  }
   String host=(String)source.get("host");
   String allowed=System.getenv().getOrDefault("DATAGUARD_READ_HOSTS","127.0.0.1,localhost");
-  if(!Set.of(allowed.split(",")).contains(host))
+  if(!Set.of(allowed.split(",")).contains(host)){
+   audit.log(auth.getName(),"SQL_READ","TABLE",id+"/"+table,"DENIED","source host not approved",elapsedMs(started));
    throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Datasource host is not approved");
+  }
   String database=Guard.identifier((String)source.get("database_name"));
   String username=(String)source.get("read_username");
   int port=((Number)source.get("port")).intValue();
@@ -111,11 +116,12 @@ public class ReadApi {
    }
    connection.rollback();
   }catch(java.sql.SQLException ex){
-   audit.log(auth.getName(),"SQL_READ","TABLE",id+"/"+table,"ERROR","read failed");
+   audit.log(auth.getName(),"SQL_READ","TABLE",id+"/"+table,"ERROR","read failed",elapsedMs(started));
    throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"Datasource read failed");
   }
-  audit.log(auth.getName(),"SQL_READ","TABLE",id+"/"+table,"SUCCESS","rows="+rows.size());
+  audit.log(auth.getName(),"SQL_READ","TABLE",id+"/"+table,"SUCCESS","rows="+rows.size(),elapsedMs(started));
   return Map.of("decision","ALLOW","table",table,"rows",rows,"rowCount",rows.size(),
     "masking",exposed.isEmpty()?"REDACT_ALL_DEFAULT":"EXPLICIT_COLUMN_ALLOWLIST");
  }
+ private static long elapsedMs(long started){return Math.max(0,(System.nanoTime()-started)/1_000_000);}
 }

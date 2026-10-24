@@ -1,2 +1,96 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DataGuard · 登录</title>
-<style>body{margin:0;font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif;background:#f6f8fb;color:#172b4d;display:grid;min-height:100vh;place-items:center}.panel{width:min(390px,calc(100vw - 54px));background:white;padding:38px;border:1px solid #e6eaf0;border-radius:20px;box-shadow:0 20px 70px #102e4d12}.logo{font-size:24px;font-weight:750;letter-spacing:-.7px;color:#1869d8}.sub{color:#8490a6;font-size:13px;margin:10px 0 30px}label{display:block;margin:20px 0 6px;font-size:13px}input{width:100%;padding:13px;border-radius:9px;border:1px solid #dce3ef;font-size:15px;box-sizing:border-box}button{width:100%;border:0;background:#1677ff;color:white;padding:13px;border-radius:10px;margin-top:25px;font-weight:650;font-size:15px;cursor:pointer}.error{color:#c21e33;font-size:13px;margin-top:10px}</style></head><body><main class="panel"><div class="logo">DataGuard</div><div class="sub">企业内部数据安全控制平台</div><form action="/auth/login" method="post"><input type="hidden" name="_csrf" id="csrf"><label>用户名</label><input name="username" autocomplete="username" required placeholder="请输入用户名"><label>密码</label><input type="password" name="password" autocomplete="current-password" required placeholder="请输入密码"><button>登录</button></form><div class="error" id="error"></div></main><script>fetch('/api/csrf',{credentials:'same-origin'}).then(r=>r.json()).then(x=>{document.getElementById('csrf').value=x.token});if(location.search.includes('error'))document.getElementById('error').textContent='用户名或密码错误，或账户暂时锁定';</script></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width,initial-scale=1">
+ <title>DataGuard 登录管理平台</title>
+ <style>
+  :root{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:#1c2024;background:#fcfcfd}
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%;background:#fcfcfd}
+  body{min-height:100vh}
+  .auth-layout{min-height:100vh;display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr)}
+  .auth-brand-panel{padding:42px clamp(36px,5vw,68px) 28px;background:#e0f8f3;display:flex;flex-direction:column;overflow:hidden}
+  .auth-brand-top{display:flex;align-items:center;gap:11px;min-height:60px}
+  .auth-brand-mark{width:54px;height:59px;flex:none;object-fit:contain}
+  .auth-brand-copy{display:flex;flex-direction:column;min-width:0;gap:2px}
+  .brand-wordmark{display:block;font-size:20px;line-height:1.2;font-weight:760;letter-spacing:-.5px;color:#1c2024}
+  .brand-wordmark span{color:#008573}
+  .auth-brand-copy small{display:block;font-size:12px;line-height:1.4;color:#60646c;font-weight:500}
+  .auth-brand-body{max-width:500px;margin:auto 0;padding:36px 0}
+  .auth-eyebrow{font-size:12px;letter-spacing:2px;font-weight:700;color:#008573;margin-bottom:22px}
+  .auth-brand-body h1{font-size:28px;line-height:1.42;font-weight:700;letter-spacing:-.8px;margin:0;color:#1c2024}
+  .auth-brand-body>p{font-size:14px;line-height:1.8;color:#60646c;margin:17px 0 42px}
+  .auth-capabilities{display:flex;flex-direction:column;gap:25px}
+  .auth-capability{display:flex;align-items:flex-start;gap:15px}
+  .capability-icon{width:34px;height:34px;flex:none;display:grid;place-items:center;background:#fff;border:.5px solid #b8eae0;border-radius:6px;color:#12a594;font-size:12px;font-weight:700}
+  .auth-capability strong{display:block;font-size:14px;color:#1c2024;font-weight:650}
+  .auth-capability small{display:block;margin-top:4px;font-size:12px;color:#60646c}
+  .auth-brand-foot{font-size:12px;color:#8b8d98}
+  .auth-form-panel{min-width:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 32px 24px;background:#fcfcfd}
+  .auth-login-card{width:min(100%,396px);margin:auto 0}
+  .auth-login-heading{margin-bottom:36px}
+  .auth-login-heading h2{font-size:20px;font-weight:700;letter-spacing:-.5px;color:#1c2024;margin:0 0 9px}
+  .auth-login-heading p{color:#60646c;font-size:12px;line-height:1.7;margin:0}
+  .auth-form label{display:block;color:#60646c;font-weight:550;font-size:12px;margin:0 0 8px}
+  .auth-form .field{margin-bottom:22px}
+  .auth-form input{display:block;width:100%;height:44px;padding:0 13px;background:#fff;border:.5px solid #e8e8ec;border-radius:6px;box-shadow:none;color:#1c2024;font:14px inherit;outline:none}
+  .auth-form input:focus{border-color:#12a594;box-shadow:0 0 0 3px #12a5941a}
+  .auth-submit{display:block;width:100%;height:44px;margin-top:8px;border:0;border-radius:6px;background:#12a594;color:#fff;font:600 14px inherit;cursor:pointer}
+  .auth-submit:hover{background:#0d9b8a}
+  .auth-submit:focus-visible{outline:3px solid #a1ded2;outline-offset:2px}
+  .auth-support{font-size:12px;color:#8b8d98;text-align:center;margin:25px 0 0}
+  .auth-error{min-height:20px;margin:12px 0 0;color:#ce2c31;font-size:12px;line-height:1.5}
+  .auth-copyright{font-size:12px;color:#8b8d98;padding-top:24px;text-align:center}
+  @media(max-width:860px){
+   .auth-layout{display:block}
+   .auth-brand-panel{display:none}
+   .auth-form-panel{padding:32px 24px;min-height:100vh}
+   .auth-login-card{width:min(100%,396px)}
+   .auth-login-heading h2{font-size:20px}
+  }
+ </style>
+</head>
+<body>
+ <main class="auth-layout">
+  <section class="auth-brand-panel" aria-label="DataGuard 产品介绍">
+   <div class="auth-brand-top">
+    <img class="auth-brand-mark" src="/dataguard-mark.svg" alt="DataGuard" width="54" height="59">
+    <span class="auth-brand-copy"><strong class="brand-wordmark">Data<span>Guard</span></strong><small>数据守卫</small></span>
+   </div>
+   <div class="auth-brand-body">
+    <div class="auth-eyebrow">DATA ACCESS GOVERNANCE</div>
+    <h1>让每一次数据访问<br>安全、可控、可追溯</h1>
+    <p>面向 Agent 与企业数据源的统一安全访问管理平台</p>
+    <div class="auth-capabilities">
+     <div class="auth-capability"><span class="capability-icon">01</span><div><strong>访问权限治理</strong><small>Agent 身份与数据源访问控制</small></div></div>
+     <div class="auth-capability"><span class="capability-icon">02</span><div><strong>SQL 安全防护</strong><small>读取权限校验与执行审计</small></div></div>
+     <div class="auth-capability"><span class="capability-icon">03</span><div><strong>读取授权审批</strong><small>数据表读取申请与审批记录</small></div></div>
+    </div>
+   </div>
+   <div class="auth-brand-foot">DataGuard 数据守卫</div>
+  </section>
+  <section class="auth-form-panel">
+   <div class="auth-login-card">
+    <div class="auth-login-heading"><h2>登录管理平台</h2><p>请输入管理员分配的账号和密码</p></div>
+    <form class="auth-form" action="/auth/login" method="post">
+     <input type="hidden" name="_csrf" id="csrf">
+     <div class="field"><label for="username">账号</label><input id="username" name="username" autocomplete="username" placeholder="请输入账号" required></div>
+     <div class="field"><label for="password">密码</label><input id="password" name="password" type="password" autocomplete="current-password" placeholder="请输入密码" required></div>
+     <button class="auth-submit" type="submit">登录</button>
+     <div class="auth-error" id="error" role="alert" aria-live="polite"></div>
+    </form>
+    <p class="auth-support">如需开通账号或重置密码，请联系系统管理员</p>
+   </div>
+   <div class="auth-copyright">© 2026 DataGuard</div>
+  </section>
+ </main>
+ <script>
+  fetch('/api/csrf',{credentials:'same-origin'})
+   .then(function(response){return response.json()})
+   .then(function(data){document.getElementById('csrf').value=data.token})
+   .catch(function(){document.getElementById('error').textContent='无法获取登录凭证，请刷新页面重试'})
+  if(location.search.indexOf('error')!==-1)document.getElementById('error').textContent='用户名或密码错误，或账户暂时锁定'
+ </script>
+</body>
+</html>
