@@ -138,8 +138,7 @@ class ApprovedWritePipelineIntegrationTest {
   * SIGKILLs JVM, expires its durable IN_FLIGHT lease, then attempts a restart.
   * The transaction remains committed exactly once; task/attempt remain UNKNOWN.
   */
- @Test void javaWorkerSigkillAfterTargetCommitIsNeverReplayed() throws Exception {
-  Fixture f=create();
+ private void javaWorkerSigkillAfterTargetCommitIsNeverReplayed(Fixture f) throws Exception {
   int row=100000+java.util.concurrent.ThreadLocalRandom.current().nextInt(500000);
   f.db().update("INSERT INTO public.write_probe(id,amount) VALUES(?,100)",row);
   UUID approved=approval(f,row);
@@ -236,7 +235,7 @@ class ApprovedWritePipelineIntegrationTest {
    new CertifiedWriteWorker(jdbc,tx,signer,crypto,executor,true).runOne();
   }
  }
- @Test void singleUseQueueThenPhysicalCommitAndNoSecondWrite(){
+ @Test void singleUseQueueThenPhysicalCommitAndNoSecondWrite() throws Exception {
   Fixture f=create();
   UUID approved=approval(f,1);
   var task=release(f,approved);
@@ -263,5 +262,6 @@ class ApprovedWritePipelineIntegrationTest {
   f.worker().runOne();
   assertEquals(1,f.db().queryForObject(
     "SELECT count(*) FROM dg_execution_attempt WHERE task_id=?",Integer.class,unsuccessfulTask.taskId()));
+  javaWorkerSigkillAfterTargetCommitIsNeverReplayed(f);
  }
 }
