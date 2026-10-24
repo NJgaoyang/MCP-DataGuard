@@ -36,6 +36,6 @@ print("HARDENED_COMPOSE_STATIC_GATE_PASS")
 '
 bash -n bin/backup-postgres-encrypted.sh bin/verify-encrypted-backup-restore.sh
 # Confirm critical fail-closed settings in the codebase without a privileged DB.
-grep -q "DG_ENABLE_READ_EXECUTION: \\"false\\"" deploy/compose.dev.yaml
-grep -q "FLOWABLE_OUTBOX_ENABLED: ${FLOWABLE_OUTBOX_ENABLED:-false}" deploy/compose.dev.yaml
+grep -Fq 'DG_ENABLE_READ_EXECUTION: "false"' deploy/compose.dev.yaml
+grep -Fq 'FLOWABLE_OUTBOX_ENABLED: ${FLOWABLE_OUTBOX_ENABLED:-false}' deploy/compose.dev.yaml
 echo "PRODUCTION_SECURITY_CONFIGURATION_PRECHECK_PASS"
