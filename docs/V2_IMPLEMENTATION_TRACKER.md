@@ -18,10 +18,11 @@
 | 2 | Flowable 审批闭环 | 复用 standalone 申请/真实系统审批人/有效期；V2 未改动流程 | 浏览器与 MCP + MySQL + StarRocks 全链路联调 |
 | 2 | 审计闭环 | 复用 standalone MySQL 审计/SQL_READ 记录 | 真实拒绝/超时/崩溃/审批检查、外部存证 |
 | 3 | 前端数据源类型 | 代码已提交 MySQL/StarRocks 新增、列表、详情、筛选 | 整体按新原型做 UI 信息架构和交互回归 |
-| 3 | 其它前端页面 | 沿用旧 Vue 3/Ant Design Vue | Agent、审批、SQL、审计、监控完整重设计 |
-| 4 | 构建/安全 CI | 已将 standalone-mysql 工作流覆盖 V2 分支并增加检查 | 读取 Actions 实际执行结论，修复失败 |
+| 3 | SQL 安全查询 | 已实现 Vue 安全查询控制台：选择 MySQL/StarRocks、表、已授权列、限定行数；真实请求 `/api/read` | 高级 SQL 编辑器暂不开放；真数据源读取与审批联调尚缺 |
+| 3 | 其它前端页面 | 已统一侧栏、工作台密度及蓝/灰视觉规范；沿用旧 Vue 3/Ant Design Vue | Agent、审批、审计、监控继续按原型完善 |
+| 4 | 构建/安全 CI | V2 分支已开启 MySQL8.4 CI，验证 Maven 单元测试、Vue、单 JAR、登录/改密/Flowable/MCP/列授权撤权；`68150d2` 运行成功，见 [GitHub Actions](https://github.com/NJgaoyang/MCP-DataGuard/actions/runs/40106342577) | 后续新提交的 CI 必须重新成功；仍缺真实 StarRocks FE 测试 |
 | 4 | StarRocks 真实集成测试 | 未完成 | 必须接入隔离 FE，证书验真、只读/越权、取消执行 |
-| 4 | 并发/失败恢复 | 未完成 | JVM SIGKILL、网络中断、超时、并发资源上限与恢复演练 |
+| 4 | 并发/失败恢复 | 新增 16 个并发 MCP 受控元数据请求（8 个恶意标识符）、审计断言；已纳入 MySQL CI | JVM SIGKILL、目标库网络断开、真实 SQL 超时、资源上限与恢复演练 |
 | 4 | 正式上线签署 | 未完成 | DBA/安全/业务负责人验收证据与正式批准 |
 
 ## 当前有限 SQL 协议能力
@@ -52,3 +53,10 @@ bash -n bin/build-standalone.sh bin/install-standalone-systemd.sh
 - 发布版本与实际验收证据双人独立审查。
 
 > 未经上述验收，V2 不得标记为生产 Ready。
+
+## V2 变更追加说明
+
+- 新增 `ReadSourceHostPolicy`：数据源测试与实际 JDBC 读取均检查相同的精确出站主机白名单，拒绝意外内网访问。
+- `GET /api/sources` 仅允许 ADMIN：防止审批人或普通用户枚举内部主机信息；已有 HTTP RBAC 测试。
+- StarRocks 普通读取账号使用 `SHOW GRANTS FOR CURRENT_USER()` 与 `SELECT CURRENT_ROLE()`，禁止额外激活角色。系统内置 `public` 的完整授权只能由 DBA 另行核实，普通只读账户不能查询此管理员权限视图。
+- 当前未经已授权 MySQL/StarRocks 业务库证书、只读账户、真实 SQL 端到端验证及故障恢复演练，**生产状态仍 NO-GO**。
