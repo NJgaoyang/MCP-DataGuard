@@ -3,7 +3,7 @@
  <modelVersion>4.0.0</modelVersion>
  <groupId>io.github.mcpdataguard</groupId><artifactId>mcp-dataguard</artifactId><version>0.5.0-SNAPSHOT</version><packaging>pom</packaging>
  <name>MCP DataGuard</name>
- <modules><module>dataguard-sql-core</module><module>dataguard-server</module><module>dataguard-workflow</module></modules>
+ <modules><module>dataguard-standalone</module></modules>
  <properties><java.version>21</java.version><maven.compiler.release>21</maven.compiler.release><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding><spring-boot.version>4.0.8</spring-boot.version><spring-ai.version>2.0.1</spring-ai.version><flowable.version>8.0.0</flowable.version><shardingsphere.version>5.5.3</shardingsphere.version></properties>
  <dependencyManagement><dependencies>
   <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-dependencies</artifactId><version>${spring-boot.version}</version><type>pom</type><scope>import</scope></dependency>
