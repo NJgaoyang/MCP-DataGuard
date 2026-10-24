@@ -76,6 +76,48 @@ public class ApprovalDecisionController {
   return Map.of("approvalId",approvalId.toString(),"approvalStatus","REJECTED",
      "executionStatus","CANCELLED","sqlExecutionEnabled",false);
  }
+ /**
+  * Administrative cancellation is independent of task approval. It may only
+  * cancel a still-pending, never-scheduled request and is audit/outbox backed.
+  * The consumer terminates the tenant-scoped Flowable instance asynchronously.
+  */
+ @PostMapping("/{approvalId}/cancel")
+ @Transactional
+ public Map<String,Object> cancel(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID approvalId,
+                                   @RequestBody DecisionInput input){
+  UserPrincipal u=actor(jwt);
+  if(input==null || input.expectedVersion()<0 || input.reason()==null ||
+     input.reason().isBlank() || input.reason().length()>1000)
+   throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Cancellation reason required");
+  List<UUID> pending=jdbc.query("""
+    SELECT id FROM dg_sql_approval
+    WHERE org_id=? AND id=? AND approval_status='PENDING'
+      AND execution_status='NOT_SCHEDULED' AND version=?
+    FOR UPDATE
+    """,(rs,i)->rs.getObject(1,UUID.class),u.orgId(),approvalId,input.expectedVersion());
+  if(pending.size()!=1)
+   throw new ResponseStatusException(HttpStatus.CONFLICT,"Approval unavailable or already scheduled");
+  int updated=jdbc.update("""
+    UPDATE dg_sql_approval SET approval_status='CANCELLED',
+      execution_status='CANCELLED',decided_at=now(),updated_at=now(),version=version+1
+    WHERE org_id=? AND id=? AND approval_status='PENDING'
+      AND execution_status='NOT_SCHEDULED' AND version=?
+    """,u.orgId(),approvalId,input.expectedVersion());
+  if(updated!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Concurrent cancellation");
+  jdbc.update("""
+    INSERT INTO dg_sql_approval_action
+      (id,org_id,approval_id,reviewer_user_id,flowable_task_id,action,comment_text)
+    VALUES (?,?,?,?,?,'CANCEL',?)
+    """,UUID.randomUUID(),u.orgId(),approvalId,u.userId(),
+      "platform:admin-cancel",input.reason().strip());
+  auditDecision(u,"SQL_APPROVAL_CANCELLED",approvalId);
+  jdbc.update("""
+    INSERT INTO dg_outbox_event(id,org_id,aggregate_type,aggregate_id,event_type,payload)
+    VALUES (?,?,'SQL_APPROVAL',?,'APPROVAL_CANCELLED','{}'::jsonb)
+    """,UUID.randomUUID(),u.orgId(),approvalId);
+  return Map.of("approvalId",approvalId.toString(),"approvalStatus","CANCELLED",
+    "executionStatus","CANCELLED","sqlExecutionEnabled",false);
+ }
  @PostMapping("/{approvalId}/approve")
  @Transactional
  public Map<String,Object> approve(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID approvalId,
