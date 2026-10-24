@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 bash bin/check-dev-deploy.sh
 docker compose --env-file deploy/.env.dev \
-  -f deploy/compose.yaml -f deploy/compose.dev.yaml \
+  -f deploy/compose.yaml -f deploy/compose.dev.yaml -f deploy/compose.hardened.yaml \
   up -d --build postgres gateway web
 docker compose --env-file deploy/.env.dev \
   -f deploy/compose.yaml -f deploy/compose.dev.yaml ps
