@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Tenant-aggregate incident notification, disabled unless explicitly configured.
 
-HTTPS-only, exact hostname allowlist, globally routable destination,
-HMAC-SHA256 signed JSON, retry-on-next-run and deduplicated recovery event.
+HTTPS-only, exact hostname allowlist, DNS-pinned globally routable IP,
+no proxies or redirects, CA-verified TLS, HMAC-SHA256 signed JSON,
+retry-on-next-run and deduplicated recovery event.
 Never sends SQL text, user identities, table names, row values or secrets.
 """
 import datetime as dt
@@ -11,10 +12,12 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import http.client
 import os
 from pathlib import Path
 import re
 import socket
+import ssl
 import stat
 import subprocess
 import sys
@@ -51,10 +54,34 @@ def safe_url():
         parsed.fragment or not re.fullmatch(r"[a-zA-Z0-9.-]{4,253}",host) or
         host.startswith(".") or host.endswith(".")):
         raise ValueError("HTTPS endpoint must match configured external hostname")
-    for result in socket.getaddrinfo(host,443,type=socket.SOCK_STREAM):
-        if not ipaddress.ip_address(result[4][0]).is_global:
-            raise ValueError("Webhook DNS resolved to non-public network")
-    return url
+
+    ips = [record[4][0] for record in
+           socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)]
+    if not ips or any(not ipaddress.ip_address(value).is_global for value in ips):
+        raise ValueError("Webhook DNS resolved to non-public network")
+    # Resolve only ONCE and pin the checked remote IP at TCP connect time.
+    # This prevents DNS rebinding between security checks and the TLS request.
+    return url, ips[0]
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self,req,fp,code,msg,headers,newurl):
+        return None
+
+class PinnedHTTPS(urllib.request.HTTPSHandler):
+    def __init__(self,remote_ip):
+        super().__init__()
+        self.remote_ip=remote_ip
+
+    def https_open(self,request):
+        checked_ip=self.remote_ip
+        class Connection(http.client.HTTPSConnection):
+            def connect(self):
+                raw=socket.create_connection((checked_ip,self.port),
+                    self.timeout,self.source_address)
+                # Keep the original hostname for SNI and CA hostname checks.
+                self.sock=self._context.wrap_socket(raw,server_hostname=self.host)
+        return self.do_open(Connection,request)
+
 
 def read_counts():
     container=os.environ.get("DG_ALERT_DB_CONTAINER","deploy-postgres-1")
@@ -75,7 +102,7 @@ def read_counts():
 def main():
     try:
         # Validate the webhook before reading database data.
-        target=safe_url()
+        target, remote_ip=safe_url()
         key=require_file("DG_ALERT_WEBHOOK_HMAC_FILE")
         state=Path(os.environ["DG_ALERT_STATE_DIRECTORY"])
         if not state.is_absolute() or state.is_symlink() or not state.is_dir() or stat.S_IMODE(state.stat().st_mode)!=0o700:
@@ -112,7 +139,9 @@ def main():
                 headers={"Content-Type":"application/json",
                   "X-DataGuard-Signature-SHA256":"sha256="+signature,
                   "X-DataGuard-Event-Id":fingerprint})
-            with urllib.request.urlopen(request,timeout=8) as response:
+            opener=urllib.request.build_opener(
+                urllib.request.ProxyHandler({}),NoRedirect(),PinnedHTTPS(remote_ip))
+            with opener.open(request,timeout=8) as response:
                 if not 200<=response.status<300:
                     raise ValueError("Webhook rejected notification")
             # State advances only after a confirmed 2xx response.
