@@ -91,5 +91,3 @@ for file,request_id in zip(sys.argv[1:],[1,2,3]):
 print('PASSED: complete JSON-RPC result envelopes for initialize/tools/list/tools/call')
 CHECK
 echo REAL_NATIVE_MCP_HTTP_ACCEPTANCE_PASS
-
-[executed on device: VM-0-4-tencentos (c1c2e3d4-a7e7-41e3-b2ed-dbf6a4613fad)]
