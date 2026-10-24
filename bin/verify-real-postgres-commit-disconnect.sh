@@ -63,7 +63,7 @@ sql(){
 launch(){
  local label="$1" routine="$2"
  docker exec -d "$CLIENT" sh -c \
-  "PGAPPNAME=dg_$label psql -h $DB -U postgres -d chaos -v ON_ERROR_STOP=1 -c 'CALL public.$routine()' > /tmp/$label.log 2>&1; echo \\$? > /tmp/$label.exit"
+  "PGAPPNAME=dg_$label psql -h $DB -U postgres -d chaos -v ON_ERROR_STOP=1 -c 'CALL public.$routine()' > /tmp/$label.log 2>&1; echo \$? > /tmp/$label.exit"
 }
 wait_active(){
  local label="$1" active=""
