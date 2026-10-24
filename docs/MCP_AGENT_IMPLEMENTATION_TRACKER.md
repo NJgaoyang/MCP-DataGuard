@@ -8,15 +8,15 @@
 
 | 项目 | 状态 | 实际提交 / 说明 |
 |---|---|---|
-| MySQL V8 Agent 表级显式授权迁移 | 已编码、未数据库执行验证 | `agent_read_permissions`，默认无授权即拒绝 |
+| MySQL V9 Agent 列级披露授权迁移 | 已编码、未数据库执行验证 | `agent_column_permissions` 默认不披露任意字段 |\n| Agent 列级授权管理和读取过滤 | 已编码、未执行验证 | `POST /api/agent-grants/columns`；字段发现与 MCP 返回内容均按 Agent 权限再次过滤 |\n| MySQL V8 Agent 表级显式授权迁移 | 已编码、未数据库执行验证 | `agent_read_permissions`，默认无授权即拒绝 |
 | 管理员 Agent 授权 API | 已编码、未接口联调 | `POST /api/agent-grants`、`GET /api/agent-grants/{tokenId}`；仅 ADMIN |
 | MCP 授权收敛 | 已编码、未执行验证 | `list_datasources` / `get_schema` / `describe_table` / `execute_readonly` 均检查 Token 的表授权，且仍保留属主审批与原有白名单 |
 | Agent 访问审计补充 | 已编码、未执行验证 | MCP 拒绝与读取记录 Token ID / 数据源 / 表，但尚未实现结构化 SQL 指纹和完整审计关联 |
 | Token 无授权不可发现数据源测试 | 已编写、未运行 | `bin/verify-standalone-mcp-agent.py` 可选 `DATAGUARD_UNGRANTED_AGENT_TOKEN` |
 
-**升级影响：** V8 采用安全默认拒绝；原有 Agent Token 不会自动拥有表权限。管理员需要对每个 Token、数据源和表单独授权，否则 MCP 数据源发现结果为空。该变更不撤销属主用户本人的 Flowable 表审批。
+**升级影响：** V8 采用安全默认拒绝；原有 Agent Token 不会自动拥有表权限。管理员需要对每个 Token、数据源、表和需要显示的列单独授权，否则 MCP 数据源发现结果为空或字段值保持 `[REDACTED]`。该变更不撤销属主用户本人的 Flowable 表审批。
 
-**调用示例（登录管理后台获取 CSRF 令牌后发送）：** `POST /api/agent-grants`，JSON `{ "tokenId": "<uuid>", "sourceId": "<uuid>", "tableName": "approved_table", "enabled": true }`。撤销传 `enabled:false`，下一次工具调用立即失效。仅接受精确表名，不支持 `*`。
+**调用示例（登录管理后台获取 CSRF 令牌后发送）：** `POST /api/agent-grants`，JSON `{ "tokenId": "<uuid>", "sourceId": "<uuid>", "tableName": "approved_table", "enabled": true }`。撤销传 `enabled:false`，下一次工具调用立即失效。仅接受精确表名，不支持 `*`。字段授权调用 `POST /api/agent-grants/columns`，JSON `{ "tokenId":"<uuid>", "sourceId":"<uuid>", "tableName":"approved_table", "columnName":"allowed_column", "enabled":true }`。字段最终可见必须同时通过用户级列白名单和 Agent 列授权。
 
 ## 本轮实际提交
 
@@ -34,7 +34,7 @@
 | 等级 | 能力 | 缺口与完成标准 | 状态 |
 |---|---|---|---|
 | P0 | 安全自定义 SELECT | 现有 `execute_readonly` 仅以服务端固定的 `SELECT * FROM table LIMIT n` 读取；需要先选定可维护的 SQL AST 解析器，按 MySQL 方言校验引用表、列、子查询、JOIN、函数和参数，执行时强制只读数据库账户、时限、行数与字节限制；完成穿透/越权/拒绝测试 | 未实现 |
-| P0 | Agent 独立授权 | Token-to-source/table 授权已编码且默认拒绝；仍缺独立列级 Agent ACL、可配置配额、并发撤销原子性验证、MCP 管理页面与真实环境测试 | 部分实现，未验证 |
+| P0 | Agent 独立授权 | Token-to-source/table/column 授权均已编码且默认拒绝；仍缺可配置配额、并发撤销原子性验证、MCP 管理页面与真实环境测试 | 部分实现，未验证 |
 | P0 | SQL 审批闭环 | 当前 Flowable 审批绑定表而非 SQL 指纹和不可变执行上下文；需审批后重验、一次性授权/到期、拒绝及撤销场景测试 | 未实现 |
 | P0 | SQL 审计 | 需记录 agent ID、request ID、SQL 指纹、数据源、审批 ID、查询成本、脱敏结果数量、失败原因，且不存敏感明文 | 未实现 |
 | P0 | 跨客户端 MCP 合规 | 新服务为自建 HTTP JSON-RPC，尚无 Claude/Cursor 等客户端真实验证；补齐协议测试、HTTP 安全头、Origin 防护和初始化/通知/版本兼容性 | 未验收 |
