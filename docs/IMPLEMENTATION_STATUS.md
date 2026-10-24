@@ -1,32 +1,29 @@
-# MCP DataGuard 实施状态（2026-10-22）
+# MCP DataGuard implementation status
 
-分支：`dev20261022` · 开源 v0.5 开发版 · **非生产就绪**。
+更新：2026-10-24。基础分支 `dev20261022`，生产加固候选见 PR #2。
+**代码完备性、隔离验证通过、预生产真人验收、正式生产批准是四种不同的状态**；目前生产为 **NO-GO**。
 
-## 已完成
+## 已实现且具备隔离验证证据
 
-- PostgreSQL 17 `platform`（44 业务表）和 `flowable` Schema；Flyway V1/V2/V3。
-- Java 21 / Spring Boot 4 统一网关，Spring AI MCP Server 注册 6 个工具。
-- Vue3 / Ant Design Vue 管理台；Caddy 公网 HTTPS。
-- **内置认证取代 Keycloak/OIDC**：用户密码 BCrypt、随机不透明会话 token 的服务端摘要、登出撤销。
-- 首次登录强制复杂密码修改；后端禁止改密前访问业务接口。
-- 连续失败账号锁定、用户/组织状态校验、RBAC 权限验证。
-- Agent 独立不透明 Token 签发与撤销；权限在 DataGuard 内管理。
-- Agent 与数据源管理、数据源连接测试与环境凭据引用、基础审计事件。
-- MySQL/PostgreSQL SQL 方言解析、严格受限的单表 SELECT 结构预检与字段授权检查；**仅用于拒绝，不允许直接执行 SQL**。
-- CI 后端、前端、PG 迁移、Compose 与接口契约检查。
+- Java 21 / Spring Boot 网关，Spring AI Streamable HTTP MCP；PostgreSQL 17 `platform` 与 Flowable schema；Flyway V1/V2/V3。
+- Vue 3 / Ant Design Vue 后台，内置原生 BCrypt 登录、服务端摘要 Session、首次强制改密、账号锁定、跨组织身份隔离和 RBAC；**默认运行不依赖 Keycloak**。
+- Agent 独立令牌、MCP SQL 预检、工具/字段 ACL、受限 PostgreSQL 物理 SELECT、TLS verify-full、默认字段脱敏、行数和时间预算、SQL 读取审计回执、令牌和授权实时撤销。
+- 两级 Flowable 业务审批、本人待办、防自审、Outbox 幂等消费、到期/拒绝/取消；独立 JVM CertifiedWriteWorker、UNKNOWN 告警和双人对账后禁止自动重放。
+- 经一次性 PostgreSQL 17 验证的 TLS 最小权限只读账号认证、Java Worker COMMIT 后 SIGKILL、真实 TCP 断连、MCP HTTP READ ALLOW/DENY；隔离环境 CI 执行关键套件时不得跳过。
+- HMAC HTTPS 告警发送端，TLS/重定向/DNS 固定连接安全测试；开发测试机的 GPG 加密本地备份/离线恢复和定时器。
+- 生产化候选 PR #2 包括正式专用 Compose（按 digest 指定镜像、外部可信 CA PostgreSQL、非 root 文件密钥）、分阶段签署门禁、运行态镜像验证、漏洞扫描与 SBOM、原生登录限流、外部审计锚定发送端、批准目标专属 MCP 只读负载测试工具。
 
-## 当前待验收问题
+## 仍须现场验收与实际配置（阻断生产上线）
 
-- 用户曾报告首次改密 `POST /api/v1/auth/password` 返回 401。最新分支已包含区分当前密码错误与无效会话的修复，但仍须核对服务器网关镜像和完成真实端到端验证。
-- 测试机历史上使用源码文件同步方式部署，Git HEAD 与实际文件可能不一致。
-- 多次截图包含测试凭据，所有已曝光密码须更换。
-- 旧 Keycloak 运行资产的最终清理需待备份和新认证验收完成后进行。
+1. PR #2 独立审查、合并，GitHub 受保护分支与 required CI checks 生效。
+2. 真实业务人员用浏览器/HTTP 与正在运行的 Flowable、Outbox 完整审批联调。
+3. 逐个正式 PostgreSQL 目标的数据源证书、物理账号、表列权限和脱敏认证；生产只读需独立批准。
+4. 部署级 Java Worker 断连/重启/未知结果及两名不同值班人的人工对账。
+5. 真实外部告警收件人、不可篡改审计接收端、正式密钥托管轮换、可信生产 DNS/TLS 和网络隔离。
+6. PostgreSQL 容器安全启动限制在 DBA 维护窗口应用；真实备份 RPO/RTO、本地离线恢复与单机全损风险签收。
+7. 实际镜像 CVE 修复、SBOM/镜像签名、真实认证负载长稳/渗透测试和发布数据库回滚可行性。
+8. DBA、安全与业务三名独立批准人员对实物证据和不可变 digest 的正式签署。
 
-## 仍未完成
+当前测试服务器没有正式发布证据包和外部告警接收端；真实 SQL 读写及 Flowable Outbox 不得因通过合成测试而开启。
 
-- 完整安全登录审计、外部限流、成熟账户恢复机制。
-- 浏览器 HttpOnly Cookie 与 CSRF 防御（当前前端令牌仅保存在内存）。
-- 物理只读 SQL 执行器、字段脱敏、限时限量、结果审计、真实数据库端到端测试。
-- Flowable 审批业务闭环、写入执行器、UNKNOWN 对账和安全监控。
-
-**SQL 真实执行开关必须继续保持关闭。**
+参见 `docs/PRODUCTION_ACCEPTANCE_EXECUTION.md`、`docs/PRODUCTION_DEPLOYMENT.md`、`docs/PRODUCTION_RELEASE_GATE.md` 与 Issue #3。

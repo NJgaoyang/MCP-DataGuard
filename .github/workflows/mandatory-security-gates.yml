@@ -1,0 +1,174 @@
+name: Mandatory release security gates
+
+on:
+  push:
+    branches:
+      - dev20261022
+  pull_request:
+    branches:
+      - dev20261022
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-gates-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  isolated-security:
+    name: isolated-security
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - name: Explicitly cache Maven dependencies
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Pull disposable PostgreSQL 17
+        run: docker pull postgres:17
+      - name: Build the exact checkout gateway for real MCP protocol tests
+        run: |
+          docker build --file deploy/Dockerfile.backend --build-arg SERVICE=dataguard-server \
+            --tag deploy-gateway:release-e2e .
+      - name: Complete PostgreSQL, Flowable, MCP and JVM crash acceptance
+        env:
+          DG_MCP_GATEWAY_IMAGE: deploy-gateway:release-e2e
+          DG_E2E_PREFETCH_MAVEN: 'true'
+          DG_RUN_NATIVE_MCP_HTTP_E2E: 'true'
+          DG_RUN_MCP_READ_ALLOW_HTTP_E2E: 'true'
+          DG_RUN_REAL_TCP_COMMIT_E2E: 'true'
+          DG_RUN_WORKER_SIGKILL_E2E: 'true'
+        run: bash bin/verify-core-security-gates.sh
+      - name: Preserve failure evidence (not a release approval)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isolated-test-failures
+          path: |
+            dataguard-server/target/surefire-reports/
+            dataguard-workflow/target/surefire-reports/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  release-hardening:
+    name: release-hardening
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate hardened Compose and production notification safety
+        run: |
+          set -euo pipefail
+          bash bin/verify-hardened-compose.sh
+          python3 bin/verify-operational-alert-policy.py
+          python3 bin/verify-local-backup-health-policy.py
+          python3 bin/verify-local-backup-retention-policy.py
+          bash bin/verify-signed-release-policy.sh
+          bash bin/verify-staged-rollout-policy.sh
+          python3 -m unittest discover -s tests -p 'test_production_runtime_policy.py'
+          python3 -m unittest discover -s tests -p 'test_production_public_https.py'
+          python3 -m unittest discover -s tests -p 'test_github_release_governance.py'
+          python3 -m unittest discover -s tests -p 'test_stage_rollback_policy.py'
+          python3 -m py_compile bin/plan-production-stage-rollback.py
+          python3 -m py_compile bin/check-github-release-governance.py
+          python3 -m py_compile bin/verify-production-public-https.py
+          python3 -m py_compile bin/verify-production-runtime.py
+          python3 -m unittest discover -s tests -p 'test_audit_checkpoint.py'
+          python3 -m py_compile bin/export-audit-anchor.py bin/run-certified-mcp-read-load.py
+          python3 -m unittest discover -s tests -p 'test_read_load_policy.py'
+      - name: Missing production evidence must fail closed
+        run: |
+          set -euo pipefail
+          dir="$(mktemp -d)"
+          chmod 700 "$dir"
+          trap 'rm -rf "$dir"' EXIT
+          if DG_READINESS_EVIDENCE_DIR="$dir" bash bin/check-production-readiness.sh; then
+            echo 'FAIL: no evidence wrongly permitted production release' >&2
+            exit 1
+          fi
+          echo 'PASS: no real production evidence means NO-GO'
+
+  production-packaging:
+    name: production-packaging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate production-only Compose with synthetic restricted secrets
+        run: |
+          set -euo pipefail
+          bash bin/verify-production-compose-policy.sh
+      - name: Validate production Caddyfile with the real Caddy parser
+        run: |
+          set -euo pipefail
+          docker run --rm -e DG_PUBLIC_HOST=dataguard.ci.example.org \
+            -v "$PWD/deploy/Caddyfile.production:/etc/caddy/Caddyfile:ro" \
+            caddy:2 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Check protected credential entrypoint
+        run: |
+          set -euo pipefail
+          sh -n deploy/launch-with-secrets.sh
+          bash -n bin/verify-production-compose.sh bin/verify-production-compose-policy.sh
+
+  supply-chain:
+    name: supply-chain-${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: gateway
+            dockerfile: deploy/Dockerfile.backend
+            buildarg: dataguard-server
+          - name: workflow
+            dockerfile: deploy/Dockerfile.backend
+            buildarg: dataguard-workflow
+          - name: web
+            dockerfile: deploy/Dockerfile.web
+            buildarg: dataguard-web
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build source-commit image for vulnerability inspection
+        run: |
+          set -euo pipefail
+          docker build -f "${{ matrix.dockerfile }}" \
+            --build-arg "SERVICE=${{ matrix.buildarg }}" \
+            -t "dataguard-ci-${{ matrix.name }}:${{ github.sha }}" .
+      - name: Fetch version-locked scanner container
+        run: docker pull aquasec/trivy:0.76.1
+      - name: Generate CycloneDX image SBOM
+        run: |
+          set -euo pipefail
+          timeout 900 docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock:ro \
+            -v "$RUNNER_TEMP/trivy-cache:/root/.cache/" \
+            -v "$PWD:/sbom" \
+            aquasec/trivy:0.76.1 image \
+            --format cyclonedx \
+            --output "/sbom/sbom-${{ matrix.name }}.cyclonedx.json" \
+            "dataguard-ci-${{ matrix.name }}:${{ github.sha }}"
+          test -s "sbom-${{ matrix.name }}.cyclonedx.json"
+      - name: Preserve CycloneDX SBOM evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.name }}
+          path: sbom-${{ matrix.name }}.cyclonedx.json
+          retention-days: 30
+          if-no-files-found: error
+      - name: Scan fixed HIGH/CRITICAL package vulnerabilities (fail closed)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/trivy-cache"
+          timeout 900 docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock:ro \
+            -v "$RUNNER_TEMP/trivy-cache:/root/.cache/" \
+            aquasec/trivy:0.76.1 image \
+            --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+            --exit-code 1 --timeout 10m \
+            "dataguard-ci-${{ matrix.name }}:${{ github.sha }}"

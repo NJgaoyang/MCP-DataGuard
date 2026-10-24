@@ -1,0 +1,123 @@
+# Production-only stack. PostgreSQL MUST be a separately administered TLS datasource.
+# Never include compose.dev.yaml, compose.yaml or floating image tags.
+# Mandatory preflight: bin/verify-production-compose.sh with real release env file.
+name: dataguard-production
+services:
+  gateway:
+    image: ${DG_GATEWAY_IMAGE:?signed_gateway_immutable_digest_required}
+    init: true
+    restart: unless-stopped
+    read_only: true
+    user: "10001:10001"
+    entrypoint: ["/bin/sh","/opt/dataguard/launch-with-secrets.sh","gateway"]
+    secrets: [platform_password,postgres_ca]
+    volumes:
+      - ./launch-with-secrets.sh:/opt/dataguard/launch-with-secrets.sh:ro
+    environment:
+      GATEWAY_BIND_ADDRESS: "0.0.0.0"
+      GATEWAY_PORT: "8080"
+      PLATFORM_JDBC_URL: ${DG_PLATFORM_JDBC_URL:?verify_full_platform_url_required}
+      PG_PLATFORM_USER: ${DG_PLATFORM_USER:?platform_user_required}
+      DG_ENABLE_READ_EXECUTION: ${DG_ENABLE_READ_EXECUTION:-false}
+      DG_ENABLE_WRITE_EXECUTION: ${DG_ENABLE_WRITE_EXECUTION:-false}
+      DG_WRITE_QUEUE_ENABLED: ${DG_WRITE_QUEUE_ENABLED:-false}
+      DG_WRITE_RECOVERY_ENABLED: ${DG_WRITE_RECOVERY_ENABLED:-false}
+      DG_CONNECT_TEST_ALLOW_HOSTS: ${DG_CONNECT_TEST_ALLOW_HOSTS:-}
+      DG_WRITE_ALLOWED_HOSTS: ${DG_WRITE_ALLOWED_HOSTS:-}
+    expose: ["8080"]
+    networks: [application]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    tmpfs: [/tmp:rw,nosuid,nodev,size=96m,mode=1777]
+    pids_limit: 256
+    mem_limit: ${DG_GATEWAY_MEMORY_LIMIT:-1024m}
+    cpus: ${DG_GATEWAY_CPU_LIMIT:-1.5}
+    stop_grace_period: 45s
+    logging: &bounded_logs
+      driver: json-file
+      options: {max-size: "10m", max-file: "5"}
+  workflow:
+    profiles: ["workflow"]
+    image: ${DG_WORKFLOW_IMAGE:?signed_workflow_immutable_digest_required}
+    init: true
+    restart: unless-stopped
+    read_only: true
+    user: "10001:10001"
+    entrypoint: ["/bin/sh","/opt/dataguard/launch-with-secrets.sh","workflow"]
+    secrets: [platform_password,flowable_password,postgres_ca]
+    volumes:
+      - ./launch-with-secrets.sh:/opt/dataguard/launch-with-secrets.sh:ro
+    environment:
+      FLOWABLE_BIND_ADDRESS: "0.0.0.0"
+      FLOWABLE_PORT: "8083"
+      FLOWABLE_JDBC_URL: ${DG_FLOWABLE_JDBC_URL:?verify_full_flowable_url_required}
+      PG_FLOWABLE_USER: ${DG_FLOWABLE_USER:?flowable_user_required}
+      PLATFORM_JDBC_URL: ${DG_PLATFORM_JDBC_URL:?verify_full_platform_url_required}
+      PG_PLATFORM_USER: ${DG_PLATFORM_USER:?platform_user_required}
+      FLOWABLE_SCHEMA_UPDATE: "false"
+      FLOWABLE_OUTBOX_ENABLED: ${FLOWABLE_OUTBOX_ENABLED:-false}
+      FLOWABLE_DYNAMIC_DEPLOYMENT_ENABLED: "false"
+    expose: ["8083"]
+    networks: [application]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    tmpfs: [/tmp:rw,nosuid,nodev,size=96m,mode=1777]
+    pids_limit: 256
+    mem_limit: ${DG_WORKFLOW_MEMORY_LIMIT:-1024m}
+    cpus: ${DG_WORKFLOW_CPU_LIMIT:-1.5}
+    stop_grace_period: 60s
+    logging: *bounded_logs
+  web:
+    image: ${DG_WEB_IMAGE:?signed_web_immutable_digest_required}
+    restart: unless-stopped
+    read_only: true
+    depends_on:
+      gateway: {condition: service_started}
+    expose: ["8080"]
+    networks: [application]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=32m,mode=1777
+      - /var/cache/nginx:rw,nosuid,nodev,size=32m
+      - /var/run:rw,nosuid,nodev,size=4m
+    pids_limit: 96
+    mem_limit: ${DG_WEB_MEMORY_LIMIT:-256m}
+    cpus: ${DG_WEB_CPU_LIMIT:-0.75}
+    logging: *bounded_logs
+  public:
+    image: ${DG_CADDY_IMAGE:?caddy_immutable_digest_required}
+    restart: unless-stopped
+    read_only: true
+    depends_on:
+      web: {condition: service_started}
+    environment:
+      DG_PUBLIC_HOST: ${DG_PUBLIC_HOST:?approved_production_domain_required}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.production:/etc/caddy/Caddyfile:ro
+      - dg_production_caddy_data:/data
+      - dg_production_caddy_config:/config
+    tmpfs: [/tmp:rw,nosuid,nodev,size=32m,mode=1777]
+    networks: [application]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    pids_limit: 128
+    mem_limit: ${DG_PUBLIC_MEMORY_LIMIT:-256m}
+    cpus: ${DG_PUBLIC_CPU_LIMIT:-0.75}
+    logging: *bounded_logs
+networks:
+  application:
+    internal: false
+volumes:
+  dg_production_caddy_data: {}
+  dg_production_caddy_config: {}
+secrets:
+  platform_password:
+    file: ${DG_PROD_PLATFORM_PASSWORD_FILE:?absolute_root_group_10001_secret_file_required}
+  flowable_password:
+    file: ${DG_PROD_FLOWABLE_PASSWORD_FILE:?absolute_root_group_10001_secret_file_required}
+  postgres_ca:
+    file: ${DG_PROD_POSTGRES_CA_FILE:?absolute_ca_file_required}

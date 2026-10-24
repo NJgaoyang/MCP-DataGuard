@@ -53,3 +53,13 @@ bash bin/start-public-test.sh
 请勿直接连接生产数据库进行真实 SQL 操作。
 
 项目坚持完整开源，无商业 License。数据库驱动许可证需独立审查。
+
+## 生产发布资格与分阶段启用
+
+常规构建 CI 可能条件跳过需要真实数据库的用例；完整安全验收以 `.github/workflows/mandatory-security-gates.yml` 的 `isolated-security` 为准，必须无跳过。所有生产执行功能继续默认关闭。参见 [上线执行与证据手册](docs/PRODUCTION_ACCEPTANCE_EXECUTION.md) 和 [阶段策略检查](bin/verify-staged-rollout.sh)。
+
+**仓库代码通过 CI 不代表正式生产已获授权**；真实业务身份、正式数据库、告警、密钥、恢复演练、压测、安全签署和 GitHub 分支保护仍需独立现场验收。
+
+### 最新上线工程状态（2026-10-24）
+
+生产安全候选在 [PR #2](https://github.com/NJgaoyang/MCP-DataGuard/pull/2) 中，包含隔离安全强制 CI、独立不可变镜像的生产 Compose、受信 PostgreSQL CA、文件密钥、签名发布和运行态检查、CVEs/SBOM、只读负载测试、审计外部摘要发送。**代码已提交不等于生产已验收**。详见 [实施状态](docs/IMPLEMENTATION_STATUS.md)、[生产部署](docs/PRODUCTION_DEPLOYMENT.md) 和 [上线验收](docs/PRODUCTION_ACCEPTANCE_EXECUTION.md)。
