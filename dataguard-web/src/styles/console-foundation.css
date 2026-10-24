@@ -189,3 +189,123 @@
  .shell:not(.auth-shell) .shortcut strong{font-size:15px}
  .shell:not(.auth-shell) .metric .metric-copy strong{font-size:22px}
 }
+
+/*
+ * Non-dashboard compact banner standard
+ * Shared heights: global application bar 46px, local page heading 48px.
+ * Dashboard retains its own top bar and welcome banner without changes.
+ */
+.shell.compact-page:not(.auth-shell){
+ --console-topbar-height:46px;
+ --console-page-heading-height:48px;
+}
+.shell.compact-page:not(.auth-shell) .bar{
+ height:var(--console-topbar-height)!important;
+ min-height:var(--console-topbar-height)!important;
+ padding:0 18px!important;
+ align-items:center;
+}
+.shell.compact-page:not(.auth-shell) .bar .breadcrumb{
+ font-size:13px;
+ line-height:20px;
+}
+.shell.compact-page:not(.auth-shell) .bar .account-trigger{
+ height:32px;
+}
+.shell.compact-page:not(.auth-shell) .content>.b2b-workspace{
+ padding:0 12px 20px!important;
+ gap:9px;
+}
+.shell.compact-page:not(.auth-shell) .b2b-workspace>.workspace-heading{
+ box-sizing:border-box;
+ height:var(--console-page-heading-height);
+ min-height:var(--console-page-heading-height);
+ margin:0!important;
+ padding:0 5px!important;
+ gap:12px;
+ display:flex;
+ flex-direction:row;
+ flex-wrap:nowrap;
+ align-items:center!important;
+ border-bottom:1px solid #e7edf5;
+}
+.shell.compact-page:not(.auth-shell) .b2b-workspace>.workspace-heading h2{
+ font-size:16px!important;
+ line-height:22px;
+ margin:0;
+ font-weight:680;
+}
+.shell.compact-page:not(.auth-shell) .b2b-workspace>.workspace-heading p{
+ display:none;
+}
+.shell.compact-page:not(.auth-shell) .b2b-workspace>.workspace-heading-actions{
+ align-items:center;
+ gap:7px;
+ margin-left:auto;
+}
+.shell.compact-page:not(.auth-shell) .b2b-workspace>.workspace-heading .ant-btn{
+ height:30px;
+ font-size:12px;
+ padding:4px 11px;
+}
+.shell.compact-page:not(.auth-shell) .content>.data-panel,
+.shell.compact-page:not(.auth-shell) .content>.flowable-panel{
+ padding:0 14px 16px!important;
+}
+.shell.compact-page:not(.auth-shell) .content>.data-panel>.panel-heading:first-child,
+.shell.compact-page:not(.auth-shell) .content>.flowable-panel>.panel-heading:first-child{
+ box-sizing:border-box;
+ height:var(--console-page-heading-height);
+ min-height:var(--console-page-heading-height);
+ display:flex;
+ align-items:center;
+ justify-content:space-between;
+ gap:10px;
+ margin:0 0 10px!important;
+ padding:0 5px!important;
+ border-bottom:1px solid #e7edf5;
+}
+.shell.compact-page:not(.auth-shell) .content>.data-panel>.panel-heading:first-child h3,
+.shell.compact-page:not(.auth-shell) .content>.flowable-panel>.panel-heading:first-child h3{
+ margin:0;
+ font-size:16px!important;
+ line-height:22px;
+ font-weight:680;
+}
+.shell.compact-page:not(.auth-shell) .content>.data-panel>.panel-heading:first-child .ant-btn,
+.shell.compact-page:not(.auth-shell) .content>.flowable-panel>.panel-heading:first-child .ant-btn{
+ height:30px;
+ padding:4px 11px;
+ font-size:12px;
+}
+.shell.compact-page:not(.auth-shell) .content>.data-panel>.panel-heading:first-child .table-count{
+ font-size:12px;
+}
+@media(max-width:760px){
+ .shell.compact-page:not(.auth-shell) .bar{
+  height:46px!important;
+  min-height:46px!important;
+  padding:0 9px!important;
+ }
+ .shell.compact-page:not(.auth-shell) .content>.b2b-workspace{
+  padding:0 6px 16px!important;
+ }
+ .shell.compact-page:not(.auth-shell) .content>.data-panel,
+ .shell.compact-page:not(.auth-shell) .content>.flowable-panel{
+  padding:0 9px 13px!important;
+ }
+ .shell.compact-page:not(.auth-shell) .b2b-workspace>.workspace-heading,
+ .shell.compact-page:not(.auth-shell) .content>.data-panel>.panel-heading:first-child,
+ .shell.compact-page:not(.auth-shell) .content>.flowable-panel>.panel-heading:first-child{
+  height:auto;
+  min-height:48px;
+  padding:7px 3px!important;
+  flex-wrap:wrap;
+  row-gap:7px;
+ }
+ .shell.compact-page:not(.auth-shell) .b2b-workspace>.workspace-heading h2,
+ .shell.compact-page:not(.auth-shell) .content>.data-panel>.panel-heading:first-child h3,
+ .shell.compact-page:not(.auth-shell) .content>.flowable-panel>.panel-heading:first-child h3{
+  font-size:15px!important;
+ }
+}
