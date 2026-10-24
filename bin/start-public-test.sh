@@ -16,9 +16,9 @@ set +a
   echo "Set ACME email." >&2; exit 1;
 }
 docker compose --env-file deploy/.env.dev --env-file deploy/.env.public \
-  -f deploy/compose.yaml -f deploy/compose.dev.yaml -f deploy/compose.public.yaml \
+  -f deploy/compose.yaml -f deploy/compose.dev.yaml -f deploy/compose.public.yaml -f deploy/compose.hardened.yaml \
   config --quiet
 docker compose --env-file deploy/.env.dev --env-file deploy/.env.public \
-  -f deploy/compose.yaml -f deploy/compose.dev.yaml -f deploy/compose.public.yaml \
+  -f deploy/compose.yaml -f deploy/compose.dev.yaml -f deploy/compose.public.yaml -f deploy/compose.hardened.yaml \
   up -d --build postgres gateway web public
 echo "Public test URL: https://${DG_PUBLIC_HOST}"
