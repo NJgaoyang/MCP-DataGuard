@@ -78,7 +78,10 @@ public class ExecutionReconciliationController {
     ) OR EXISTS(
       SELECT 1 FROM dg_sql_approval a JOIN dg_sql_request r
         ON r.org_id=a.org_id AND r.id=a.request_id
-      WHERE a.org_id=? AND a.id=? AND r.requester_user_id=?
+      WHERE a.org_id=? AND a.id=?
+        AND COALESCE(r.requester_user_id,
+          (SELECT agent.owner_user_id FROM dg_agent agent
+            WHERE agent.org_id=r.org_id AND agent.id=r.agent_id))=?
     )
     """,Boolean.class,u.orgId(),task.approval(),u.userId(),
       u.orgId(),task.approval(),u.userId());
