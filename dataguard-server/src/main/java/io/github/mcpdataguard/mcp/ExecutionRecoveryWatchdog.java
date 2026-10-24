@@ -50,29 +50,7 @@ public class ExecutionRecoveryWatchdog {
      INSERT INTO dg_system_event(id,org_id,actor,operation,resource_type,resource_id)
      VALUES (?,?,'EXECUTION_WATCHDOG','WRITE_RESULT_UNKNOWN','EXECUTION_TASK',?)
      """,UUID.randomUUID(),org,id.toString());
-   // Escalate uncertain remote commits, do not retry or disclose SQL text.
-   jdbc.update("""
-     INSERT INTO dg_alert_rule(id,org_id,code,rule,enabled,severity)
-     VALUES(?,?,'WRITE_EXECUTION_UNKNOWN',
-       '{"kind":"UNCERTAIN_REMOTE_COMMIT"}'::jsonb,true,'CRITICAL')
-     ON CONFLICT(org_id,code) DO NOTHING
-     """,UUID.randomUUID(),org);
-   String fingerprint;
-   try{
-    fingerprint=java.util.HexFormat.of().formatHex(
-      java.security.MessageDigest.getInstance("SHA-256").digest(
-        (org.toString()+":"+id).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-   }catch(java.security.NoSuchAlgorithmException e){
-    throw new IllegalStateException(e);
-   }
-   jdbc.update("""
-     INSERT INTO dg_alert_event(id,org_id,rule_id,fingerprint,event_state,details)
-     SELECT ?,r.org_id,r.id,?,'OPEN',
-       jsonb_build_object('taskId',?,'cause','LEASE_EXPIRED')
-     FROM dg_alert_rule r WHERE r.org_id=? AND r.code='WRITE_EXECUTION_UNKNOWN'
-     ON CONFLICT(org_id,rule_id,fingerprint) WHERE event_state='OPEN'
-     DO UPDATE SET observed_at=now()
-     """,UUID.randomUUID(),fingerprint,id.toString(),org);
+   UnknownWriteIncidentService.record(jdbc,org,id,"LEASE_EXPIRED");
   }
  }
 }
