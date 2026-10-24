@@ -106,6 +106,7 @@ public class CertifiedWriteWorker {
         error_code='WRITE_OUTCOME_UNCERTAIN',error_category='REQUIRES_RECONCILIATION'
       WHERE org_id=? AND task_id=? AND phase='IN_FLIGHT'
       """,task.org(),task.task());
+    UnknownWriteIncidentService.record(jdbc,task.org(),task.task(),"WORKER_FAILURE");
     event(task,"WRITE_RESULT_UNKNOWN");
    });}catch(Exception ignored){
     System.err.println("Execution reconciliation marker failed (redacted)");
