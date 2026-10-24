@@ -38,12 +38,12 @@ def main():
     assert expected.issubset(tools.keys()), sorted(tools)
     status, result = call("tools/call", {"name": "list_datasources", "arguments": {}})
     assert status == 200 and "result" in result, (status, result)
-    status, _ = call("tools/list", token=None)
+    # An ungranted Agent must not discover owner-approved tables.\n    # To test grant isolation, provide a freshly minted token without permissions.\n    ungranted = os.environ.get("DATAGUARD_UNGRANTED_AGENT_TOKEN")\n    if ungranted:\n        code, blank = call("tools/call", {"name": "list_datasources", "arguments": {}}, token=ungranted)\n        assert code == 200 and blank.get("result", {}).get("content"), (code, blank)\n        sources = json.loads(blank["result"]["content"][0]["text"])\n        assert sources == [], "Ungranted token must see no sources"\n    status, _ = call("tools/list", token=None)
     assert status == 401, f"Unauthenticated MCP returned HTTP {status}, expected 401"
     status, result = call("tools/call", {"name": "describe_table", "arguments": {}})
     assert status == 200 and "error" in result, (status, result)
     print("PASS: initialize, tools/list, sources, authorization, invalid arguments")
-    print("NOTE: SQL execution, real MySQL, field grants and third-party clients are NOT certified")
+    print("NOTE: live MySQL, approved grant execution and third-party clients are NOT certified")
 
 
 if __name__ == "__main__":
