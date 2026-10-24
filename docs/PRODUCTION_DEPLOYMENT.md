@@ -43,3 +43,7 @@ No offsite backup is requested; loss of entire production host remains an accept
 ### GitHub 分支治理硬门禁
 
 生产变更前脚本将只读请求 GitHub API 核验 `dev20261022` 与 `main` 分支保护、独立 PR 审批、拒绝过期批准、对话解决、管理员同样遵守规则、禁止强推，以及所有指定的后端/前端/隔离安全/供应链 required checks。提供 `DG_GITHUB_RELEASE_TOKEN_FILE` 指向受限只读 GitHub Token 文件（绝对路径、0600），**不会输出 Token**。API 不可达、没有权限或分支未保护都将拒绝发布。当前仓库分支 `protected=false`，因此在管理员配置之前必须保持 NO-GO。
+
+### 阶段回退预案生成（只读）
+
+执行 `python3 bin/plan-production-stage-rollback.py --from-stage write --to-stage approval --change-id CHANGE12345` 生成机器可读的安全降级开关和见证操作清单。只允许逐级降级，紧急情况允许直接返回 `closed`；禁止把降级工具作为升级入口。**本工具不会直接改环境、重启服务、清理 Outbox 或重新执行 UNKNOWN**。正式回滚由授权变更操作员完成、审计并在原部署上复核，已 COMMIT 的业务 SQL 不会被自动撤销。
