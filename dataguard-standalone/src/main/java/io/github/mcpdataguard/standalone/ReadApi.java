@@ -30,6 +30,13 @@ public class ReadApi {
    return text.length()>256?text.subSequence(0,256).toString():text.toString();
   return "[REDACTED]";
  }
+ public List<Map<String,Object>> mcpSources(String username){
+  return jdbc.queryForList("SELECT id,code,display_name AS displayName FROM data_sources WHERE enabled=1 ORDER BY code LIMIT 100");
+ }
+ public List<Map<String,Object>> mcpSchema(String username,String source){
+  UUID id=UUID.fromString(source);
+  return jdbc.queryForList("SELECT w.table_name AS tableName FROM read_table_allowlist w JOIN data_sources s ON s.id=w.source_id WHERE w.source_id=? AND w.enabled=1 AND s.enabled=1 AND EXISTS(SELECT 1 FROM approval_requests a JOIN app_users u ON u.id=a.requester_user_id WHERE a.source_id=w.source_id AND a.table_name=w.table_name AND a.status='APPROVED' AND a.expires_at>NOW(3) AND u.username=?) ORDER BY w.table_name LIMIT 100",id.toString(),username);
+ }
  @PostMapping
  public Map<String,Object> read(Authentication auth,@RequestBody ReadQuery input){
   if(input==null||input.limit()<1||input.limit()>100)
