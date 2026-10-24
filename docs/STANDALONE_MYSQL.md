@@ -55,3 +55,17 @@ systemctl enable --now dataguard-standalone.service
 ### 字段最小授权与审批到期
 
 即使表在正向白名单里，读取也必须持有该**申请人自己**的未到期 Flowable 已批准记录。查询值默认全字段 `REDACTED`；只有 `read_column_allowlist` 中管理员明确批准的字段可显示（文本最多 256 字符，二进制和非安全类型仍保持脱敏）。撤销列授权、撤销表白名单后下一次读取即时生效。管理员不可直接通过变更请求者的用户名获得他人的审批权限。
+
+### 无 Docker 的主机安装
+
+已提供 `bin/install-standalone-systemd.sh`。在具有 Java 21 的授权 Linux 主机上，用受控 root 账号执行，它将创建低权限 `dataguard` 系统用户、复制独立 JAR 和 systemd unit，并生成仅 root 可读的配置模板（已存在的配置不会覆盖）。**不会自动启动或启用服务**，必须先由 DBA 配置数据库并检查环境文件。
+
+```bash
+bash bin/build-standalone.sh
+sudo bash bin/install-standalone-systemd.sh
+sudo chmod 600 /etc/dataguard/standalone.env
+sudo systemctl enable --now dataguard-standalone
+sudo systemctl status dataguard-standalone --no-pager
+```
+
+首次 Flowable 数据表初始化请由 DBA 在数据库变更窗口临时设置 `DATAGUARD_FLOWABLE_SCHEMA_UPDATE=true`，启动完成后立即恢复 false，后续不得让日常账户持有任意 DDL 权限。
